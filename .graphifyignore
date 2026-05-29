@@ -1,0 +1,10 @@
+.agent/
+.agents/
+outputs/
+node_modules/
+.next/
+__pycache__/
+.lancedb/
+*.blend
+*.blend1
+*.glb

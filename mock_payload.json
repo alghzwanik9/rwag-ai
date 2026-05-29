@@ -1,0 +1,107 @@
+{
+  "stage": 1,
+  "objects": [
+    {
+      "id": "floor_1",
+      "type": "floor",
+      "dimensions": {
+        "length": 5.0,
+        "width": 5.0,
+        "height": 0.1
+      },
+      "transform": {
+        "t_x": 0.0,
+        "t_y": 0.0,
+        "t_z": 0.0,
+        "yaw_y": 0.0,
+        "scale": 1.0
+      },
+      "hex_color": "#EEEEEE"
+    },
+    {
+      "id": "wall_north",
+      "type": "wall",
+      "dimensions": {
+        "length": 5.0,
+        "width": 0.2,
+        "height": 3.0
+      },
+      "transform": {
+        "t_x": 0.0,
+        "t_y": 0.0,
+        "t_z": -2.5,
+        "yaw_y": 0.0,
+        "scale": 1.0
+      },
+      "hex_color": "#FFFFFF"
+    },
+    {
+      "id": "wall_west",
+      "type": "wall",
+      "dimensions": {
+        "length": 0.2,
+        "width": 5.0,
+        "height": 3.0
+      },
+      "transform": {
+        "t_x": -2.5,
+        "t_y": 0.0,
+        "t_z": 0.0,
+        "yaw_y": 0.0,
+        "scale": 1.0
+      },
+      "hex_color": "#F5F5F5"
+    },
+    {
+      "id": "tv_unit_main",
+      "type": "furniture",
+      "dimensions": {
+        "length": 1.5,
+        "width": 0.4,
+        "height": 0.6
+      },
+      "transform": {
+        "t_x": 0.0,
+        "t_y": 0.0,
+        "t_z": -2.2,
+        "yaw_y": 0.0,
+        "scale": 1.0
+      },
+      "hex_color": "#1A1A1A"
+    },
+    {
+      "id": "sofa_main",
+      "type": "furniture",
+      "dimensions": {
+        "length": 2.2,
+        "width": 0.9,
+        "height": 0.8
+      },
+      "transform": {
+        "t_x": 0.0,
+        "t_y": 0.0,
+        "t_z": 1.0,
+        "yaw_y": 180.0,
+        "scale": 1.0
+      },
+      "hex_color": "#0060ac"
+    },
+    {
+      "id": "coffee_table",
+      "type": "furniture",
+      "dimensions": {
+        "length": 1.0,
+        "width": 0.6,
+        "height": 0.4
+      },
+      "transform": {
+        "t_x": 0.0,
+        "t_y": 0.0,
+        "t_z": 0.0,
+        "yaw_y": 0.0,
+        "scale": 1.0
+      },
+      "hex_color": "#8B4513"
+    }
+  ]
+}

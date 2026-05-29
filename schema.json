@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "3D Scene Specification Schema",
+  "type": "object",
+  "properties": {
+    "stage": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "wall_color": {
+      "type": "string",
+      "description": "Hex color code for the walls (e.g. #F5F5F5)"
+    },
+    "floor_color": {
+      "type": "string",
+      "description": "Hex color code for the floor (e.g. #EEEEEE)"
+    },
+    "room_dimensions": {
+      "type": "object",
+      "description": "Estimated width and depth of the room based on the image provided.",
+      "properties": {
+        "width": { "type": "number", "minimum": 2, "maximum": 15 },
+        "depth": { "type": "number", "minimum": 2, "maximum": 15 }
+      },
+      "required": ["width", "depth"]
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "enum": ["wall", "floor", "furniture", "window"] },
+          "asset_id": { "type": "string", "description": "Required for furniture. Must be an exact match from the provided asset registry." },
+          "hex_color": { "type": "string", "description": "Hex color code (e.g. #FF0000)" },
+          "dimensions": {
+            "type": "object",
+            "properties": {
+              "length": { "type": "number", "exclusiveMinimum": 0 },
+              "width": { "type": "number", "exclusiveMinimum": 0 },
+              "height": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "required": ["length", "width", "height"]
+          },
+          "transform": {
+            "type": "object",
+            "properties": {
+              "t_x": { "type": "number" },
+              "t_y": {
+                "type": "number",
+                "const": 0,
+                "description": "ABSOLUTE STRICTNESS: t_y MUST be 0."
+              },
+              "t_z": { "type": "number" },
+              "yaw_y": { "type": "number" },
+              "scale": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "required": ["t_x", "t_y", "t_z", "yaw_y", "scale"]
+          },
+          "economy": {
+            "type": "object",
+            "description": "Smart Economy metadata — required for all furniture objects.",
+            "properties": {
+              "price": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Real-world retail price of this furniture piece."
+              },
+              "currency": {
+                "type": "string",
+                "enum": ["SAR", "USD", "AED", "EGP", "KWD"],
+                "description": "ISO 4217 currency code for the price."
+              },
+              "store_url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Direct product URL where the user can purchase this item."
+              },
+              "brand": {
+                "type": "string",
+                "description": "Brand / manufacturer name (e.g. IKEA, Pottery Barn)."
+              },
+              "sku": {
+                "type": "string",
+                "description": "Optional SKU or product reference code."
+              }
+            },
+            "required": ["price", "currency"]
+          }
+        },
+        "required": ["id", "type", "hex_color", "dimensions", "transform"]
+      }
+    }
+  },
+  "required": ["stage", "wall_color", "floor_color", "objects"]
+}
+

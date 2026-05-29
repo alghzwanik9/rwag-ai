@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#1a1c1c",
+                    "tertiary": "#030607",
+                    "tertiary-fixed-dim": "#c4c7ca",
+                    "surface-container-high": "#e8e8e8",
+                    "inverse-on-surface": "#f1f1f1",
+                    "on-secondary-fixed-variant": "#004883",
+                    "on-tertiary": "#ffffff",
+                    "surface-variant": "#e2e2e2",
+                    "secondary-fixed-dim": "#a4c9ff",
+                    "inverse-surface": "#2f3131",
+                    "background": "#f9f9f9",
+                    "surface-tint": "#5f5e5e",
+                    "primary-fixed-dim": "#c8c6c5",
+                    "outline": "#747878",
+                    "on-primary": "#ffffff",
+                    "error": "#ba1a1a",
+                    "secondary-container": "#68abff",
+                    "on-secondary-fixed": "#001c39",
+                    "outline-variant": "#c4c7c7",
+                    "on-secondary-container": "#003e73",
+                    "on-surface-variant": "#444748",
+                    "inverse-primary": "#c8c6c5",
+                    "surface-container-low": "#f4f3f3",
+                    "on-tertiary-fixed": "#191c1e",
+                    "tertiary-fixed": "#e0e3e6",
+                    "primary-container": "#1e1e1e",
+                    "on-background": "#1a1c1c",
+                    "secondary-fixed": "#d4e3ff",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container": "#eeeeee",
+                    "primary-fixed": "#e5e2e1",
+                    "on-tertiary-fixed-variant": "#44474a",
+                    "on-primary-fixed-variant": "#474746",
+                    "on-primary-container": "#878585",
+                    "on-primary-fixed": "#1b1b1c",
+                    "on-error": "#ffffff",
+                    "surface-bright": "#f9f9f9",
+                    "primary": "#040505",
+                    "error-container": "#ffdad6",
+                    "surface": "#f9f9f9",
+                    "surface-container-highest": "#e2e2e2",
+                    "tertiary-container": "#1b1f21",
+                    "surface-dim": "#dadada",
+                    "on-tertiary-container": "#838689",
+                    "on-secondary": "#ffffff",
+                    "secondary": "#0060ac",
+                    "on-error-container": "#93000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "stack-md": "16px",
+                    "stack-lg": "24px",
+                    "stack-sm": "8px",
+                    "sidebar-width": "280px",
+                    "toolbar-width": "64px",
+                    "gutter": "24px",
+                    "container-padding": "32px"
+            },
+            "fontFamily": {
+                    "label-sm": ["IBM Plex Sans"],
+                    "label-md": ["IBM Plex Sans"],
+                    "body-md": ["IBM Plex Sans"],
+                    "headline-lg": ["IBM Plex Sans"],
+                    "headline-md": ["IBM Plex Sans"],
+                    "body-lg": ["IBM Plex Sans"],
+                    "display-lg": ["IBM Plex Sans"]
+            },
+            "fontSize": {
+                    "label-sm": ["12px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                    "label-md": ["14px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'IBM Plex Sans', sans-serif;
+            background-color: #f9f9f9;
+        }
+        .canvas-area {
+            margin-right: 280px;
+            padding-top: 64px;
+        }
+        .settings-card {
+            border: 1px solid #E0E0E0;
+            background: #FFFFFF;
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- Sidebar (Shared Component: SideNavBar) -->
+<aside class="fixed right-0 top-0 h-full w-[280px] bg-primary-container dark:bg-tertiary-container border-l border-outline-variant dark:border-outline flex flex-col p-stack-md z-50">
+<div class="mb-10 px-4">
+<h1 class="font-headline-md text-headline-md text-on-tertiary dark:text-tertiary-fixed leading-tight">Atelier Digital</h1>
+<p class="font-body-md text-body-md text-on-primary-container opacity-80">أستوديو التصميم</p>
+</div>
+<nav class="flex-grow space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span class="font-body-md text-body-md">Projects</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="category">category</span>
+<span class="font-body-md text-body-md">Assets</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-primary-container hover:bg-surface-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-body-md text-body-md">Team</span>
+</a>
+<!-- Active State: Settings -->
+<a class="flex items-center gap-3 px-4 py-3 text-on-tertiary bg-secondary-container rounded-lg border-r-2 border-secondary transition-all duration-200 scale-[0.98]" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-stack-md border-t border-on-primary-container/20">
+<button class="w-full flex items-center justify-center gap-2 bg-secondary text-on-secondary py-3 rounded-lg font-label-md text-label-md hover:opacity-90 transition-all">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                New Project
+            </button>
+</div>
+</aside>
+<!-- TopNavBar (Shared Component) -->
+<header class="fixed top-0 left-0 right-[280px] h-toolbar-width bg-surface-bright dark:bg-surface-dim border-b border-outline-variant flex justify-between items-center px-container-padding z-40">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-on-surface">إعدادات النظام</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+</div>
+<div class="h-8 w-8 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden">
+<img alt="User profile" class="h-full w-full object-cover" data-alt="A professional headshot of a middle-aged male architect with a clean-shaven face and modern glasses. He is wearing a dark grey linen shirt against a soft, out-of-focus interior studio background with warm sunlight. The image is captured in a high-resolution, professional portrait style with natural lighting that emphasizes a modern corporate minimalist aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5E6FDN3uA3PiU0_xNyPl_fGwAo_wZjdmCclcqgbv_3kpvYFu2vhlLwVTY8PZVI0TDi6dbDtVEXIhfGWUFYfG3NV2-AWAqLTZTe2HMx5WRvkfvy7ncfnwUPhtFk8Zdr4RiOUEvOPl1ZnufukvU4RGIwxhkx2MngWBy5SK_dIKwAvDaScZWOXWd43Dx1qh_EhX_cPsCdBa8NYdwLG9JY1NV01lxsds4niL9p2_x4uAYlAu_-X4G_-2D71BfdImokG5p_O7UescQSLo"/>
+</div>
+</div>
+</header>
+<!-- Main Canvas Area -->
+<main class="canvas-area min-h-screen">
+<div class="max-w-5xl mx-auto py-stack-lg px-container-padding">
+<!-- Bento Grid Settings Layout -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- Navigation Tabs (Vertical/Asymmetric) -->
+<div class="col-span-3 flex flex-col gap-2">
+<button class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-container-highest border-r-2 border-primary text-primary font-label-md text-label-md" id="btn-profile" onclick="switchTab('profile')">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+                        الملف الشخصي
+                    </button>
+<button class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-container text-on-surface-variant font-label-md text-label-md transition-colors" id="btn-preferences" onclick="switchTab('preferences')">
+<span class="material-symbols-outlined" data-icon="palette">palette</span>
+                        تفضيلات التصميم
+                    </button>
+<button class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-container text-on-surface-variant font-label-md text-label-md transition-colors" id="btn-notifications" onclick="switchTab('notifications')">
+<span class="material-symbols-outlined" data-icon="notifications_active">notifications_active</span>
+                        الإشعارات
+                    </button>
+<button class="tab-btn flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-container text-on-surface-variant font-label-md text-label-md transition-colors" id="btn-security" onclick="switchTab('security')">
+<span class="material-symbols-outlined" data-icon="shield">shield</span>
+                        الأمان والخصوصية
+                    </button>
+</div>
+<!-- Settings Content Canvas -->
+<div class="col-span-9">
+<!-- Profile Section -->
+<section class="settings-content space-y-stack-lg" id="section-profile">
+<div class="settings-card p-stack-lg rounded-xl">
+<h3 class="font-headline-md text-headline-md mb-6">المعلومات الشخصية</h3>
+<div class="flex items-center gap-8 mb-8">
+<div class="relative group">
+<div class="w-24 h-24 rounded-full overflow-hidden border-2 border-outline-variant">
+<img alt="Avatar" class="w-full h-full object-cover" data-alt="A professional close-up of a designer in their studio, showing a well-lit face with clear skin and focused eyes. The lighting is soft and directional, typical of a modern office environment. The color palette is clean, predominantly whites and greys, reflecting a high-end architectural studio vibe with sophisticated, professional depth." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxmK9oZPwzQobAWvDQ24FPhWbYvaLmRR53nBlNLvVhS3vbV2qnh4-E9WADosP7dwD34MspQrC6xPIsfQOJ-gqCv2lL8fUJCgeECAN02CuofB55eKUCIxmzjzBEj9N04Vd7yBojvzI4nPFBmw1kkPyQd_fc1dSZkf3tV4C_60utPMJU9-JmDxrsa65z_Kq37ojVaCmsZTMjZp8Ccuy-HgR7hvSZy3429pIREdHoqRMzFz3OvJJ3o6g8XPhn8q8VaGaCL1C5jgBFLgI"/>
+</div>
+<button class="absolute bottom-0 right-0 bg-primary text-on-primary p-2 rounded-full shadow-lg hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span>
+</button>
+</div>
+<div>
+<h4 class="font-body-lg text-body-lg font-semibold">أحمد العلي</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">مصمم داخلي رئيسي</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-stack-lg">
+<div class="space-y-2">
+<label class="font-label-md text-label-md text-on-surface-variant block">الاسم الكامل</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 focus:outline-none focus:border-primary transition-colors" type="text" value="أحمد العلي"/>
+</div>
+<div class="space-y-2">
+<label class="font-label-md text-label-md text-on-surface-variant block">البريد الإلكتروني</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 focus:outline-none focus:border-primary transition-colors" type="email" value="ahmed@atelier.digital"/>
+</div>
+<div class="col-span-2 space-y-2">
+<label class="font-label-md text-label-md text-on-surface-variant block">نبذة تعريفية</label>
+<textarea class="w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-3 focus:outline-none focus:border-primary transition-colors" rows="3">مصمم متخصص في المساحات السكنية العصرية مع التركيز على الاستدامة والمواد الطبيعية.</textarea>
+</div>
+</div>
+</div>
+<div class="flex justify-end gap-4">
+<button class="px-8 py-3 rounded-lg border border-outline-variant text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors">إلغاء</button>
+<button class="px-8 py-3 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:opacity-90 transition-colors">حفظ التغييرات</button>
+</div>
+</section>
+<!-- Preferences Section (Hidden by default) -->
+<section class="settings-content hidden space-y-stack-lg" id="section-preferences">
+<div class="settings-card p-stack-lg rounded-xl">
+<h3 class="font-headline-md text-headline-md mb-6">تفضيلات التصميم</h3>
+<div class="space-y-stack-lg">
+<div>
+<label class="font-label-md text-label-md text-on-surface-variant block mb-3">وحدات القياس الافتراضية</label>
+<div class="flex gap-4">
+<label class="flex-1 cursor-pointer">
+<input checked="" class="hidden peer" name="unit" type="radio"/>
+<div class="p-4 border border-outline-variant rounded-lg peer-checked:border-secondary peer-checked:bg-secondary-fixed/20 flex justify-between items-center">
+<span class="font-body-md text-body-md">نظام متري (م، سم)</span>
+<span class="material-symbols-outlined text-secondary opacity-0 peer-checked:opacity-100" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input class="hidden peer" name="unit" type="radio"/>
+<div class="p-4 border border-outline-variant rounded-lg peer-checked:border-secondary peer-checked:bg-secondary-fixed/20 flex justify-between items-center">
+<span class="font-body-md text-body-md">نظام إمبراطوري (قدم، بوصة)</span>
+<span class="material-symbols-outlined text-secondary opacity-0 peer-checked:opacity-100" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</label>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant">
+<label class="font-label-md text-label-md text-on-surface-variant block mb-3">الألوان الافتراضية للوحات القياس</label>
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-full bg-[#1E1E1E] ring-2 ring-offset-2 ring-primary cursor-pointer"></div>
+<div class="w-10 h-10 rounded-full bg-[#4A90E2] cursor-pointer"></div>
+<div class="w-10 h-10 rounded-full bg-[#E67E22] cursor-pointer"></div>
+<div class="w-10 h-10 rounded-full bg-[#27AE60] cursor-pointer"></div>
+<button class="w-10 h-10 rounded-full border border-dashed border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="add">add</span>
+</button>
+</div>
+</div>
+<div class="pt-6 border-t border-outline-variant flex justify-between items-center">
+<div>
+<h4 class="font-body-lg text-body-lg font-semibold">المظهر الداكن التلقائي</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">تغيير الثيم بناءً على إعدادات النظام</p>
+</div>
+<button class="w-12 h-6 rounded-full bg-secondary-container relative flex items-center px-1">
+<div class="w-4 h-4 rounded-full bg-white shadow-sm mr-auto translate-x-0"></div>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Notifications Section (Hidden by default) -->
+<section class="settings-content hidden space-y-stack-lg" id="section-notifications">
+<div class="settings-card p-stack-lg rounded-xl">
+<h3 class="font-headline-md text-headline-md mb-6">إشعارات النظام</h3>
+<div class="divide-y divide-outline-variant">
+<div class="py-4 flex justify-between items-center">
+<div>
+<h4 class="font-body-md text-body-md font-semibold">تحديثات المشروع</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">عندما يقوم أحد أعضاء الفريق بإجراء تعديل</p>
+</div>
+<div class="flex gap-6">
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="font-label-sm text-label-sm">تطبيق</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="font-label-sm text-label-sm">إيميل</span>
+</label>
+</div>
+</div>
+<div class="py-4 flex justify-between items-center">
+<div>
+<h4 class="font-body-md text-body-md font-semibold">تعليقات العملاء</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">تنبيهات فورية عند وصول ملاحظة جديدة</p>
+</div>
+<div class="flex gap-6">
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="font-label-sm text-label-sm">تطبيق</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="font-label-sm text-label-sm">إيميل</span>
+</label>
+</div>
+</div>
+<div class="py-4 flex justify-between items-center">
+<div>
+<h4 class="font-body-md text-body-md font-semibold">الذكاء الاصطناعي</h4>
+<p class="font-label-sm text-label-sm text-on-surface-variant">عند اكتمال معالجة الصور أو التصاميم ثلاثية الأبعاد</p>
+</div>
+<div class="flex gap-6">
+<label class="flex items-center gap-2 cursor-pointer">
+<input checked="" class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="font-label-sm text-label-sm">تطبيق</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer">
+<input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="font-label-sm text-label-sm">إيميل</span>
+</label>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+<!-- Contextual Tooltip/Footer -->
+<footer class="mt-20 pt-stack-lg border-t border-outline-variant flex justify-between items-center">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]" data-icon="verified_user">verified_user</span>
+<span class="font-label-sm text-label-sm">بياناتك محمية بتشفير من طرف إلى طرف.</span>
+</div>
+<div class="flex gap-6">
+<a class="font-label-sm text-label-sm hover:underline" href="#">شروط الخدمة</a>
+<a class="font-label-sm text-label-sm hover:underline" href="#">سياسة الخصوصية</a>
+</div>
+</footer>
+</div>
+</main>
+<!-- UI State Control Script -->
+<script>
+        function switchTab(tabId) {
+            // Hide all sections
+            document.querySelectorAll('.settings-content').forEach(section => {
+                section.classList.add('hidden');
+            });
+            
+            // Remove active styles from all buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-surface-container-highest', 'border-primary', 'text-primary');
+                btn.classList.add('text-on-surface-variant', 'hover:bg-surface-container');
+                btn.style.borderRight = 'none';
+            });
+
+            // Show current section
+            document.getElementById('section-' + tabId).classList.remove('hidden');
+            
+            // Add active styles to current button
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.classList.add('bg-surface-container-highest', 'text-primary');
+            activeBtn.classList.remove('text-on-surface-variant', 'hover:bg-surface-container');
+            activeBtn.style.borderRight = '2px solid var(--primary, #040505)';
+
+            // Subtle animation feedback
+            activeBtn.classList.add('scale-[0.98]');
+            setTimeout(() => activeBtn.classList.remove('scale-[0.98]'), 150);
+        }
+
+        // Initialize view
+        document.addEventListener('DOMContentLoaded', () => {
+            switchTab('profile');
+        });
+    </script>
+</body></html>
