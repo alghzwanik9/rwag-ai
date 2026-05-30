@@ -25,14 +25,18 @@ from ai_agent import generate_layout
 
 app = FastAPI(title="Atelier AI Orchestrator")
 
-# Ensure outputs directory exists
+# Ensure outputs and assets directories exist
 os.makedirs(os.path.join("frontend", "public", "outputs"), exist_ok=True)
+os.makedirs(os.path.join("frontend", "public", "assets"), exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=os.path.join("frontend", "public", "outputs")), name="outputs")
 
 # CORS setup
+# Use CORS_ORIGINS from env if available, else allow all (useful for local dev)
+cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For Next.js frontend
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,6 +77,40 @@ async def get_assets():
     """Return the furniture asset catalog from LanceDB."""
     records = ingestion_pipeline.get_all()
     return {"assets": records, "total": len(records)}
+
+@app.get("/api/v1/ikea-catalog")
+async def get_ikea_catalog(limit: int = 200):
+    """Return the IKEA catalog from LanceDB 'ikea_catalog' table."""
+    try:
+        import lancedb
+        db = lancedb.connect(".lancedb")
+        if "ikea_catalog" not in db.table_names():
+            return {"items": [], "total": 0}
+            
+        table = db.open_table("ikea_catalog")
+        # Use pyarrow or pandas to get records. Limit the query to prevent massive payloads.
+        records = table.search().limit(limit).to_arrow().to_pylist()
+        
+        results = []
+        for r in records:
+            results.append({
+                "id": str(r.get("item_id", "")),
+                "name": str(r.get("name", "Unknown")),
+                "category": str(r.get("category", "")),
+                "price": float(r.get("price", 0.0)),
+                "dimensions": {
+                    "width": float(r.get("dim_width", 0.0)),
+                    "height": float(r.get("dim_height", 0.0)),
+                    "depth": float(r.get("dim_depth", 0.0))
+                },
+                "link": str(r.get("link", "")),
+                "short_description": str(r.get("short_description", ""))
+            })
+        return {"items": results, "total": len(results)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ── Legacy / existing endpoints ────────────────────────────────────────────────
 
@@ -133,7 +171,9 @@ def generate_room(request: RoomLayoutRequest, api_request: Request):
                         "instance_id": str(uuid.uuid4()),
                         "asset_id": obj.get("asset_id", ""),
                         "position": [t.get("t_x", 0), t.get("t_y", 0), t.get("t_z", 0)],
-                        "rotation": [0, yaw_rad, 0]
+                        "rotation": [0, yaw_rad, 0],
+                        "dimensions": obj.get("dimensions"),
+                        "economy": obj.get("economy")
                     }
                     frontend_items.append(item)
         
@@ -265,7 +305,7 @@ async def save_project_v1(project_id: str, request: ProjectStateV1):
         filepath = os.path.join(projects_dir, f"{project_id}.json")
         
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(request.dict(), f, ensure_ascii=False, indent=2)
+            json.dump(request.model_dump(), f, ensure_ascii=False, indent=2)
             
         return {"status": "success", "message": "تم الحفظ بنجاح", "project_id": project_id}
     except Exception as e:

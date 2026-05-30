@@ -18,7 +18,7 @@ def get_dynamic_asset_registry():
         print(f"Failed to load dynamic registry: {e}")
         return ["sofa", "coffee_table", "tv_unit", "plant", "armchair", "bookshelf", "rug"]
 # Initialize the modern google-genai client
-_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 def refine_prompt_with_groq(user_prompt: str) -> str:
     """Reads a user prompt (in Arabic or English), translates and expands it into a highly detailed English layout specification."""
@@ -38,7 +38,7 @@ def refine_prompt_with_groq(user_prompt: str) -> str:
         )
         
         response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-specdec",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -52,6 +52,20 @@ def refine_prompt_with_groq(user_prompt: str) -> str:
     except Exception as e:
         print(f"Failed to refine prompt with Groq: {e}. Using original user prompt.")
         return user_prompt
+
+# Global RagRetriever instance
+_retriever_instance = None
+
+def get_retriever():
+    global _retriever_instance
+    if _retriever_instance is None:
+        try:
+            from rag_retriever import RagRetriever
+            _retriever_instance = RagRetriever()
+        except Exception as e:
+            print(f"[RAG] Failed to initialize RagRetriever: {e}")
+            _retriever_instance = False # Use False to indicate failure and avoid retrying
+    return _retriever_instance
 
 def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str = "schema.json") -> dict:
     """Uses Gemini to generate a 3D scene payload adhering to the schema, with optional multimodal vision input."""
@@ -195,7 +209,7 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
             from groq import Groq
             groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
             groq_response = groq_client.chat.completions.create(
-                model="llama-3.3-70b-specdec",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_instruction},
                     {"role": "user", "content": refined_prompt}
@@ -217,7 +231,40 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        return json.loads(text.strip())
+        payload = json.loads(text.strip())
+        
+        # Enrich with real IKEA data using RAG
+        try:
+            retriever = get_retriever()
+            if retriever and "objects" in payload:
+                for obj in payload["objects"]:
+                    if obj.get("type") == "furniture":
+                        color = obj.get("hex_color", "")
+                        asset_id = obj.get("asset_id", "")
+                        query = f"IKEA {color} {asset_id}"
+                        results = retriever.search(query, limit=1)
+                        if results:
+                            best = results[0]
+                            obj["economy"] = {
+                                "price": float(best["price"]),
+                                "currency": "SAR",
+                                "store_url": best["link"],
+                                "brand": "IKEA",
+                                "sku": best["item_id"],
+                                "name": best["name"]
+                            }
+                            # The frontend expects dimensions in meters (X=length, Y=height, Z=width/depth)
+                            # CSV dimensions are in mm.
+                            if best["dim_width"] > 0 and best["dim_height"] > 0 and best["dim_depth"] > 0:
+                                obj["dimensions"] = {
+                                    "length": best["dim_width"] / 1000.0,
+                                    "height": best["dim_height"] / 1000.0,
+                                    "width": best["dim_depth"] / 1000.0
+                                }
+        except Exception as rag_e:
+            print(f"[RAG] Failed to enrich payload: {rag_e}")
+            
+        return payload
     except Exception as e:
         print(f"Failed to parse LLM response: {response_text}")
         raise e

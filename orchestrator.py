@@ -8,7 +8,7 @@ from blender_generator import BlenderCodeGenerator
 SCHEMA_PATH = "schema.json"
 GENERATED_SCRIPT_PATH = "generated_blender_script.py"
 MAX_RETRIES = 2
-BLENDER_EXECUTABLE = os.getenv("BLENDER_EXECUTABLE", r"D:\DEV\Blender Foundation\Blender 4.2\blender.exe")
+BLENDER_EXECUTABLE = os.getenv("BLENDER_EXECUTABLE", "blender")
 
 class BlenderOrchestrator:
     def __init__(self, payload: dict, output_blend: str = "output.blend", output_glb: str = "output.glb"):
