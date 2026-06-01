@@ -1,0 +1,98 @@
+{
+  "deck_chair": {
+    "category": "seating",
+    "w": 580,
+    "h": 900,
+    "d": 600
+  },
+  "dining_chair": {
+    "category": "seating",
+    "w": 450,
+    "h": 850,
+    "d": 500
+  },
+  "drawer_cabinet": {
+    "category": "storage",
+    "w": 600,
+    "h": 800,
+    "d": 400
+  },
+  "coffee_table_art": {
+    "category": "tables",
+    "w": 1000,
+    "h": 450,
+    "d": 600
+  },
+  "display_shelf": {
+    "category": "storage",
+    "w": 800,
+    "h": 1200,
+    "d": 300
+  },
+  "coffee_table_round": {
+    "category": "tables",
+    "w": 800,
+    "h": 450,
+    "d": 800
+  },
+  "armchair_wood": {
+    "category": "seating",
+    "w": 700,
+    "h": 950,
+    "d": 750
+  },
+  "outdoor_set": {
+    "category": "tables",
+    "w": 1500,
+    "h": 750,
+    "d": 1500
+  },
+  "sofa_khronos": {
+    "category": "seating",
+    "w": 820,
+    "h": 1010,
+    "d": 960
+  },
+  "toy_drum": {
+    "category": "decor",
+    "w": 600,
+    "h": 600,
+    "d": 600
+  },
+  "camera_antique": {
+    "category": "decor",
+    "w": 200,
+    "h": 300,
+    "d": 150
+  },
+  "vase_flowers": {
+    "category": "decor",
+    "w": 150,
+    "h": 350,
+    "d": 150
+  },
+  "materials_shoe": {
+    "category": "decor",
+    "w": 310,
+    "h": 120,
+    "d": 100
+  },
+  "water_bottle": {
+    "category": "decor",
+    "w": 80,
+    "h": 250,
+    "d": 80
+  },
+  "damaged_helmet": {
+    "category": "decor",
+    "w": 250,
+    "h": 250,
+    "d": 300
+  },
+  "metal_rough": {
+    "category": "decor",
+    "w": 200,
+    "h": 200,
+    "d": 200
+  }
+}
