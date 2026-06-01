@@ -1,6 +1,7 @@
 import lancedb
 from pathlib import Path
-from sentence_transformers import SentenceTransformer
+import os
+from google import genai
 
 DB_PATH = Path(".lancedb")
 TABLE_NAME = "ikea_catalog"
@@ -10,15 +11,19 @@ class RagRetriever:
         # We assume the table is already populated by rag_ingestor.py
         self.db = lancedb.connect(str(DB_PATH))
         self.table = self.db.open_table(TABLE_NAME)
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     def search(self, query: str, limit: int = 3):
         """
         Searches the LanceDB index for the closest IKEA items matching the query.
         """
         try:
-            # Embed the query
-            query_vector = self.model.encode(query).tolist()
+            # Embed the query using Gemini
+            response = self.client.models.embed_content(
+                model='text-embedding-004',
+                contents=query
+            )
+            query_vector = response.embeddings[0].values
             
             # Perform vector search
             results = self.table.search(query_vector).limit(limit).to_list()

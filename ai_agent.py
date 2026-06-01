@@ -268,3 +268,109 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
     except Exception as e:
         print(f"Failed to parse LLM response: {response_text}")
         raise e
+
+def handle_chat_request(user_message: str) -> dict:
+    """Uses Gemini to interpret chat and LanceDB RAG to find matching items."""
+    system_instruction = (
+        "You are an AI Interior Design Assistant. A user will talk to you. "
+        "If they are asking to add or find a specific furniture item (e.g. 'add a cheap sofa', 'find a blue chair', 'أضف كنبة'), "
+        "extract the keywords for a database search into 'search_query' (in English or Arabic), and set 'intent' to 'add'. "
+        "If they are just chatting, set 'intent' to 'chat' and 'search_query' to null. "
+        "Output JSON only: {\"intent\": \"add\"|\"chat\", \"search_query\": \"...\"|null}"
+    )
+    
+    try:
+        response = _client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[user_message],
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+            ),
+        )
+        data = json.loads(response.text.strip())
+    except Exception as e:
+        print(f"Chat intent parsing failed: {e}")
+        data = {"intent": "chat", "search_query": None}
+
+    response_payload = {
+        "text": "مرحباً! كيف يمكنني مساعدتك؟",
+        "items": []
+    }
+
+    if data.get("intent") == "add" and data.get("search_query"):
+        try:
+            retriever = get_retriever()
+            if retriever:
+                results = retriever.search(data["search_query"], limit=1)
+                if results:
+                    best = results[0]
+                    price = best.get("price", 0)
+                    name = best.get("name", "أثاث")
+                    
+                    response_payload["text"] = f"لقد وجدت {name} بسعر {price} ريال. سأقوم بإضافته إلى الغرفة الآن!"
+                    
+                    item_obj = {
+                        "name": name,
+                        "hex_color": "#ffffff",
+                        "economy": {
+                            "price": float(price),
+                            "currency": "SAR",
+                            "store_url": best.get("link", ""),
+                            "brand": "IKEA",
+                            "sku": best.get("item_id", ""),
+                            "name": name
+                        }
+                    }
+                    
+                    dim_w = best.get("dim_width", 0)
+                    dim_h = best.get("dim_height", 0)
+                    dim_d = best.get("dim_depth", 0)
+                    
+                    if dim_w > 0 and dim_h > 0 and dim_d > 0:
+                        item_obj["dimensions"] = {
+                            "length": dim_w / 1000.0,
+                            "height": dim_h / 1000.0,
+                            "width": dim_d / 1000.0
+                        }
+                    else:
+                        item_obj["dimensions"] = {"length": 1.0, "height": 1.0, "width": 1.0}
+                        
+                    item_obj["transform"] = {"t_x": 0, "t_y": 0, "t_z": 0, "yaw_y": 0, "scale": 1.0}
+                    
+                    cat_lower = str(best.get("category", "")).lower()
+                    if "sofa" in cat_lower or "seating" in cat_lower or "مقاعد" in cat_lower:
+                        item_obj["asset_id"] = "sofa"
+                    elif "table" in cat_lower or "طاولات" in cat_lower:
+                        item_obj["asset_id"] = "coffee_table"
+                    elif "tv" in cat_lower or "تلفزيون" in cat_lower:
+                        item_obj["asset_id"] = "tv_unit"
+                    elif "rug" in cat_lower or "سجاد" in cat_lower:
+                        item_obj["asset_id"] = "rug"
+                    elif "chair" in cat_lower or "كرسي" in cat_lower or "armchair" in cat_lower:
+                        item_obj["asset_id"] = "armchair"
+                    elif "bed" in cat_lower or "سرير" in cat_lower:
+                        item_obj["asset_id"] = "bed"
+                    else:
+                        item_obj["asset_id"] = "sofa"
+                        
+                    response_payload["items"].append(item_obj)
+                else:
+                    response_payload["text"] = "عذراً، لم أتمكن من العثور على أثاث يطابق طلبك."
+        except Exception as e:
+            print(f"RAG search failed in chat: {e}")
+            response_payload["text"] = "حدث خطأ أثناء البحث في الكتالوج."
+    else:
+        try:
+            chat_response = _client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[user_message],
+                config=types.GenerateContentConfig(
+                    system_instruction="You are a helpful Interior Design AI. Answer in Arabic briefly.",
+                ),
+            )
+            response_payload["text"] = chat_response.text.strip()
+        except Exception as e:
+            pass
+
+    return response_payload

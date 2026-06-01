@@ -21,7 +21,7 @@ def get_local_ip():
     return IP
 
 from orchestrator import BlenderOrchestrator
-from ai_agent import generate_layout
+from ai_agent import generate_layout, handle_chat_request
 
 app = FastAPI(title="Atelier AI Orchestrator")
 
@@ -41,6 +41,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from ai_agent import get_retriever
+
+@app.on_event("startup")
+def startup_event():
+    print("Initializing global RAG Retriever...")
+    get_retriever()
+    print("RAG Retriever initialized successfully.")
 
 # ── Asset Catalog ──────────────────────────────────────────────────────────────
 
@@ -76,7 +84,40 @@ async def ingest_assets(req: IngestRequest, background_tasks: BackgroundTasks):
 async def get_assets():
     """Return the furniture asset catalog from LanceDB."""
     records = ingestion_pipeline.get_all()
-    return {"assets": records, "total": len(records)}
+    return {"items": records, "total": len(records)}
+
+FALLBACK_GLB_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb"
+
+
+def _resolve_ikea_model_url(name: str, category: str) -> str:
+    text = f"{name or ''} {category or ''}".strip().lower()
+    if not text:
+        return FALLBACK_GLB_URL
+
+    if "sofa" in text or "كنب" in text or "أريكة" in text:
+        return "/assets/sofa.glb"
+    elif "chair" in text or "كرسي" in text or "armchair" in text or "seating" in text:
+        return "/assets/armchair.glb"
+    elif "tv" in text or "تلفاز" in text or "تلفزيون" in text or "media" in text:
+        return "/assets/tv_unit.glb"
+    elif "table" in text or "طاول" in text or "desk" in text or "مكتب" in text:
+        return "/assets/table.glb"
+    elif "rug" in text or "سجاد" in text:
+        return "/assets/rug.glb"
+    elif "plant" in text or "نبات" in text or "decor" in text or "ديكور" in text:
+        return "/assets/plant.glb"
+
+    # If the catalog metadata does not provide a real 3D model URL,
+    # use a generic fallback GLB so the studio renders a real object
+    # instead of a plain procedural cube.
+    return FALLBACK_GLB_URL
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 @app.get("/api/v1/ikea-catalog")
 async def get_ikea_catalog(limit: int = 200):
@@ -93,24 +134,39 @@ async def get_ikea_catalog(limit: int = 200):
         
         results = []
         for r in records:
+            name = str(r.get("name", "Unknown"))
+            category = str(r.get("category", ""))
+            model_url = str(r.get("model_url", "") or r.get("model_3d_url", "") or _resolve_ikea_model_url(name, category))
+            model_3d_url = str(r.get("model_3d_url", "") or r.get("model_url", "") or model_url or FALLBACK_GLB_URL)
             results.append({
                 "id": str(r.get("item_id", "")),
-                "name": str(r.get("name", "Unknown")),
-                "category": str(r.get("category", "")),
-                "price": float(r.get("price", 0.0)),
+                "name": name,
+                "category": category,
+                "price": _safe_float(r.get("price", 0.0)),
                 "dimensions": {
-                    "width": float(r.get("dim_width", 0.0)),
-                    "height": float(r.get("dim_height", 0.0)),
-                    "depth": float(r.get("dim_depth", 0.0))
+                    "width": _safe_float(r.get("dim_width_mm", r.get("dim_width", 0.0))),
+                    "height": _safe_float(r.get("dim_height_mm", r.get("dim_height", 0.0))),
+                    "depth": _safe_float(r.get("dim_depth_mm", r.get("dim_depth", 0.0)))
                 },
                 "link": str(r.get("link", "")),
-                "short_description": str(r.get("short_description", ""))
+                "short_description": str(r.get("short_description", "")),
+                "model_url": model_url,
+                "model_3d_url": model_3d_url,
+                "thumbnail_url": str(r.get("thumbnail_url", "") or r.get("image_url", "")),
+                "default_scale_x": _safe_float(r.get("default_scale_x", 1.0), 1.0),
+                "default_scale_y": _safe_float(r.get("default_scale_y", 1.0), 1.0),
+                "default_scale_z": _safe_float(r.get("default_scale_z", 1.0), 1.0),
             })
         return {"items": results, "total": len(results)}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/furniture")
+async def get_furniture(limit: int = 200):
+    """Alias for /api/v1/ikea-catalog required by the frontend"""
+    return await get_ikea_catalog(limit=limit)
 
 # ── Legacy / existing endpoints ────────────────────────────────────────────────
 
@@ -148,6 +204,46 @@ MOCK_INVENTORY = [
 @app.get("/api/server-ip")
 async def get_server_ip():
     return {"ip": get_local_ip()}
+
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/api/v1/chat")
+def chat_endpoint(request: ChatRequest):
+    try:
+        payload = handle_chat_request(request.message)
+        frontend_items = []
+        if "items" in payload:
+            for obj in payload["items"]:
+                t = obj.get("transform", {})
+                item = {
+                    "instance_id": str(uuid.uuid4()),
+                    "asset_id": obj.get("asset_id", ""),
+                    "position": [t.get("t_x", 0), t.get("t_y", 0), t.get("t_z", 0)],
+                    "rotation": [0, t.get("yaw_y", 0), 0],
+                    "dimensions": obj.get("dimensions"),
+                    "economy": obj.get("economy")
+                }
+                frontend_items.append(item)
+                
+        return {
+            "status": "success",
+            "text": payload.get("text", ""),
+            "items": frontend_items
+        }
+    except Exception as e:
+        traceback.print_exc()
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "text": "عذراً، حدث خطأ أثناء الاتصال بالخادم. يرجى المحاولة مرة أخرى.",
+                "items": [],
+                "detail": str(e)
+            }
+        )
+
 
 @app.post("/api/generate-room")
 def generate_room(request: RoomLayoutRequest, api_request: Request):

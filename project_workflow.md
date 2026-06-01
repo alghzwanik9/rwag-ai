@@ -29,6 +29,9 @@ The system relies on an **Orchestrator Pattern** to connect a modern Next.js fro
 - [x] Mounted an `/outputs` directory in FastAPI to serve the `.glb` files over HTTP.
 - [x] Replaced the static UI placeholder image with a live **3D Canvas** using `@react-three/fiber` and `@react-three/drei`.
 - [x] Implemented `useGLTF` and `<Suspense>` in the frontend to dynamically fetch, load, and render the `.glb` scene in real-time.
+- [x] Added support for backend-provided `model_url` / `model_3d_url` fields, so furniture items can load real GLB models instead of fallback placeholders.
+- [x] Fixed `/api/v1/ikea-catalog` to return valid catalog asset payloads with safe numeric parsing and thumbnail/model field resolution.
+- [x] Added a temporary STIG/bar-stool test model mapping so sample furniture can be validated immediately with a CORS-compatible GLB link.
 - [x] Added colored furniture objects (Sofa, Table, TV Unit) to the mock payload and updated the Blender script to translate Hex Colors to Linear RGB Materials in the 3D space.
 
 ---
