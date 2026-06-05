@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useGLTF, Html, useHelper } from "@react-three/drei";
-import { ThreeEvent, useFrame, useThree } from "@react-three/fiber";
+import { ThreeEvent, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/useSceneStore";
 import { RigidBody, RapierRigidBody } from "@react-three/rapier";
@@ -127,9 +127,9 @@ export function computeAutoScale(
   }
 
   // Convert mm → metres (Three.js world-unit convention)
-  const targetW = (parseFloat(dims.width as any) || 1000) / 1000;
-  const targetH = (parseFloat(dims.height as any) || 1000) / 1000;
-  const targetD = (parseFloat(dims.depth as any) || 1000) / 1000;
+  const targetW = (parseFloat(String(dims.width)) || 1000) / 1000;
+  const targetH = (parseFloat(String(dims.height)) || 1000) / 1000;
+  const targetD = (parseFloat(String(dims.depth)) || 1000) / 1000;
 
   let sx = targetW / rawSize.x;
   let sy = targetH / rawSize.y;
@@ -147,44 +147,7 @@ export function computeAutoScale(
   return [sx, sy, sz];
 }
 
-function getVisualLowestY(object: THREE.Object3D): number {
-  let minY = Infinity;
-  
-  // We need the lowest vertex in the object's LOCAL space.
-  // object.matrixWorld is already updated. We'll convert child world pos to object local pos.
-  const worldMatrixInv = new THREE.Matrix4().copy(object.matrixWorld).invert();
 
-  object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.visible && child.geometry) {
-      const isTransparent = child.material && (
-        child.material.transparent === true || 
-        child.material.opacity < 1 || 
-        child.name.toLowerCase().includes('shadow') ||
-        child.name.toLowerCase().includes('plane') ||
-        child.name.toLowerCase().includes('bound')
-      );
-
-      if (!isTransparent) {
-        const geom = child.geometry;
-        const posAttribute = geom.attributes.position;
-        if (!posAttribute) return;
-
-        const childToRoot = new THREE.Matrix4().multiplyMatrices(worldMatrixInv, child.matrixWorld);
-        const v = new THREE.Vector3();
-
-        for (let i = 0; i < posAttribute.count; i++) {
-          v.fromBufferAttribute(posAttribute, i);
-          v.applyMatrix4(childToRoot);
-          if (v.y < minY) {
-            minY = v.y;
-          }
-        }
-      }
-    }
-  });
-
-  return minY !== Infinity ? minY : 0;
-}
 
 export function computePivotOffset(
   object: THREE.Object3D,
@@ -429,7 +392,7 @@ export default function RealFurnitureLoader({
   onSelect,
 }: RealFurnitureLoaderProps) {
   const [groupObj, setGroupObj] = useState<THREE.Group | null>(null);
-  const transformRef = useRef<any>(null);
+  const groupRef = useRef<THREE.Object3D>(null) as React.MutableRefObject<THREE.Object3D>;
   const rigidBodyRef = useRef<RapierRigidBody>(null);
 
   // ── State machine ─────────────────────────────────────────────────────────
@@ -458,7 +421,7 @@ export default function RealFurnitureLoader({
   }, [position, rotation, isSelected]);
 
   // ── Selection Visualizer ──────────────────────────────────────────────────
-  useHelper(isSelected ? (groupObj as any) : null, THREE.BoxHelper, "#00bcd4");
+  useHelper(isSelected ? groupRef : null, THREE.BoxHelper, "#00bcd4");
 
   // ── Bulletproof Dragging Logic ────────────────────────────────────────────
   const dragOffset = useRef<THREE.Vector3 | null>(null);
@@ -572,26 +535,9 @@ export default function RealFurnitureLoader({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSelected, groupObj, instanceId, updateSceneItem]);
+  }, [isSelected, groupObj, instanceId, updateSceneItem, rotation]);
 
-  // ── Click handler → product metadata card & Selection ─────────────────────
-  const handleClick = useCallback(
-    (e: ThreeEvent<MouseEvent>) => {
-      e.stopPropagation();
-      if (instanceId) {
-        setSelectedAssetId(instanceId);
-      }
-      const meta: FurnitureMetadata = { brandName, price, dimensions, buyUrl };
-      console.group(`Furniture — ${brandName}`);
-      console.log("Brand     :", brandName);
-      console.log("Price     :", price);
-      console.log("Dims (mm) :", `W${dimensions.width} × H${dimensions.height} × D${dimensions.depth}`);
-      console.log("Buy URL   :", buyUrl);
-      console.groupEnd();
-      onSelect?.(meta);
-    },
-    [instanceId, brandName, price, dimensions, buyUrl, onSelect, setSelectedAssetId]
-  );
+
 
   const resolvedModelUrl = modelUrl?.trim() || model3dUrl?.trim() || FALLBACK_MODEL_URL;
 
@@ -621,7 +567,7 @@ export default function RealFurnitureLoader({
         setLoadState("error");
       }
     },
-    [dimensions, uniformScale, brandName]
+    [dimensions, uniformScale, brandName, position]
   );
 
   // ── Derived geometry for fallback box (world-space metres, floor-anchored) ─
@@ -650,7 +596,12 @@ export default function RealFurnitureLoader({
       enabledRotations={[false, true, false]}
     >
       <group
-        ref={setGroupObj}
+        ref={(node) => {
+          if (node) {
+            groupRef.current = node;
+            setGroupObj(node);
+          }
+        }}
         onPointerDown={handlePointerDown}
         onClick={(e) => {
           e.stopPropagation();
@@ -708,7 +659,7 @@ export default function RealFurnitureLoader({
               <div className="flex items-center px-2 text-sm text-on-surface-variant font-medium">
                 اسحب للتحريك • R للتدوير
               </div>
-              <div className="w-[1px] bg-outline-variant my-1"></div>
+              <div className="w-px bg-outline-variant my-1"></div>
               <button 
                 onClick={(e) => { 
                   e.stopPropagation(); 
@@ -719,7 +670,7 @@ export default function RealFurnitureLoader({
               >
                 <span className="material-symbols-outlined text-[18px]">check_circle</span>
               </button>
-              <div className="w-[1px] bg-outline-variant my-1"></div>
+              <div className="w-px bg-outline-variant my-1"></div>
               <button 
                 onClick={(e) => { 
                   e.stopPropagation(); 

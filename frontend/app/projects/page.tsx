@@ -34,7 +34,7 @@ export default function ProjectsPage() {
       if (data) {
         clearScene();
         setActiveSceneId(data.sceneId || null);
-        if (data.sceneItems) data.sceneItems.forEach((item: any) => addSceneItem(item));
+        if (data.sceneItems) data.sceneItems.forEach((item: Parameters<typeof addSceneItem>[0]) => addSceneItem(item));
         if (data.customMaterials) useSceneStore.setState({ customMaterials: data.customMaterials });
         router.push("/studio");
       }

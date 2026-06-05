@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { supabase } from '@/lib/supabase';
+import { Json } from '@/types/supabase';
 
 export async function POST(req: Request) {
   try {
@@ -11,7 +12,14 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, sceneId, glbUrl, sceneItems, customMaterials, totalCost } = body;
+    const { name, sceneId, glbUrl, sceneItems, customMaterials, totalCost } = body as {
+      name: string;
+      sceneId: string;
+      glbUrl: string | null;
+      sceneItems: Json[];
+      customMaterials: { [key: string]: Json | undefined };
+      totalCost: number;
+    };
 
     if (!name) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
@@ -40,8 +48,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ status: "success", message: "تم الحفظ بنجاح", project_id: data.id });
-  } catch (error: any) {
-    console.error("Server Save Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const e = error as Error;
+    console.error("Server Save Error:", e);
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { data, error } = await supabase
       .from('projects')
-      .select('*')
+      .select('id,name,scene_id,glb_url,scene_items,custom_materials,total_cost,saved_at')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -35,8 +35,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       totalCost: data.total_cost,
       savedAt: data.saved_at
     });
-  } catch (error: any) {
-    console.error("Server Load Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    const e = error as Error;
+    console.error("Server Load Error:", e);
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

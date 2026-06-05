@@ -1,18 +1,37 @@
 "use client";
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { IProductTemplate } from '@/app/studio/config/catalogTemplates';
+import { SceneItem } from '@/lib/useSceneStore';
 
 interface IkeaAssetsLibraryProps {
   onClose: () => void;
-  addSceneItem: (item: any) => void;
+  addSceneItem: (item: Omit<SceneItem, 'addedAt' | 'position' | 'rotation'> & { position?: [number, number, number], rotation?: [number, number, number] }) => void;
   isAssetsLoading: boolean;
   catalogAssets: IProductTemplate[];
 }
 
+export interface RawAsset {
+  id: string;
+  name?: string;
+  brand?: string;
+  category?: string;
+  dimensions?: { width: number | string; height: number | string; depth: number | string; };
+  model_url?: string;
+  model_3d_url?: string;
+  modelUrl?: string;
+  price?: number | string;
+  currency?: string;
+  thumbnail_url?: string;
+  thumbnailUrl?: string;
+  image_url?: string;
+  short_description?: string;
+}
+
 export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryProps) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [realAssets, setRealAssets] = useState<any[]>([]);
+  const [realAssets, setRealAssets] = useState<RawAsset[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb";
@@ -102,7 +121,7 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
           </button>
         ))}
       </div>
-      <div className="flex-grow overflow-y-auto p-stack-lg">
+      <div className="grow overflow-y-auto p-stack-lg">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {isLoading && (
             <div className="col-span-full flex items-center justify-center py-8 text-on-surface-variant">
@@ -122,47 +141,47 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
             return cat === activeCategory;
           }).map((item, index) => {
             const safeId = item?.id || `fallback-id-${index}`;
-            const imageUrl = item?.image_url || item?.thumbnail_url || item?.thumbnailUrl || getPlaceholderImage(item?.category);
             
             return (
               <div key={safeId} className="group bg-white border border-outline-variant rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col">
                 <div className="relative aspect-video bg-surface-container flex items-center justify-center overflow-hidden">
-                  <img 
-                    src={imageUrl} 
-                    alt={item?.name || "Product"} 
+                  <Image 
+                    src={item.thumbnail_url || getPlaceholderImage(item.category || "")} 
+                    alt={(item?.name as string) || "Product"} 
+                    width={400}
+                    height={300}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
                       e.currentTarget.src = "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80";
                     }}
                   />
                 </div>
-                <div className="p-4 flex flex-col flex-grow justify-between gap-3">
+                <div className="p-4 flex flex-col grow justify-between gap-3">
                   <div>
-                    <h4 className="font-label-md text-on-surface line-clamp-1" title={item?.name}>{item?.name || "Unknown Product"}</h4>
-                    <p className="text-[10px] text-on-surface-variant line-clamp-1" title={item?.short_description}>{item?.short_description || "IKEA"}</p>
+                    <h4 className="font-label-md text-on-surface line-clamp-1" title={item?.name || undefined}>{item?.name || "Unknown Product"}</h4>
+                    <p className="text-[10px] text-on-surface-variant line-clamp-1" title={item?.short_description || undefined}>{item?.short_description || "IKEA"}</p>
                     <p className="font-bold text-secondary text-sm mt-1">{item?.price ? `${item.price} SAR` : "0 SAR"}</p>
                   </div>
                   <button 
                     onClick={() => {
                       // RealFurnitureLoader expects dimensions in millimetres!
-                      const widthMm = parseFloat(item?.dimensions?.width as any) || 1000;
-                      const heightMm = parseFloat(item?.dimensions?.height as any) || 1000;
-                      const depthMm = parseFloat(item?.dimensions?.depth as any) || 1000;
+                      const widthMm = parseFloat(String(item?.dimensions?.width)) || 1000;
+                      const heightMm = parseFloat(String(item?.dimensions?.height)) || 1000;
+                      const depthMm = parseFloat(String(item?.dimensions?.depth)) || 1000;
 
-                      const resolvedModelUrl = item?.model_url || item?.model_3d_url || item?.modelUrl || DEFAULT_MODEL_URL;
                       const newItem = {
                         id: safeId,
                         name: item?.name || "Unknown Product",
                         brand: item?.brand || "IKEA",
-                        category: item?.category || "seating",
-                        price: item?.price || 0,
+                        category: (["seating", "tables", "lighting", "rugs", "storage", "decor"].includes(item?.category || "") ? item?.category : "seating") as import('@/lib/useSceneStore').SceneItem["category"],
+                        price: Number(item.price) || 0,
                         currency: 'SAR' as const,
                         instanceId: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
                         position: [0, 0.5, 0] as [number, number, number],
                         rotation: [0, 0, 0] as [number, number, number],
                         dimensions: { width: widthMm, height: heightMm, depth: depthMm },
-                        modelUrl: resolvedModelUrl,
-                        thumbnailUrl: item?.thumbnail_url || item?.thumbnailUrl || imageUrl,
+                        modelUrl: item?.model_url || DEFAULT_MODEL_URL,
+                        thumbnailUrl: item?.thumbnail_url || getPlaceholderImage(item?.category || ""),
                         asset_id: safeId
                       };
                       console.log("Adding scene item:", newItem);

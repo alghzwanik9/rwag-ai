@@ -44,7 +44,7 @@ export function StudioToolbar({
         <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">حفظ المشروع</div>
       </button>
       
-      <div className="w-8 h-[1px] bg-outline-variant/30 my-1"></div>
+      <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
 
       <button onClick={() => { undo(); showToast("↩️ تراجع"); }} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
         <span className="material-symbols-outlined transition-transform group-hover:-translate-x-1">undo</span>
@@ -56,7 +56,7 @@ export function StudioToolbar({
         <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إعادة (Ctrl+Y)</div>
       </button>
 
-      <div className="w-8 h-[1px] bg-outline-variant/30 my-1"></div>
+      <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
       
       {/* Settings Menu Button */}
       <div className="relative group/menu">
@@ -94,7 +94,7 @@ export function StudioToolbar({
         )}
       </div>
 
-      <div className="w-8 h-[1px] bg-outline-variant/30 my-1"></div>
+      <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
       
       <button onClick={() => setIsProjectsModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
         <span className="material-symbols-outlined transition-transform group-hover:scale-110">folder_open</span>
@@ -103,7 +103,7 @@ export function StudioToolbar({
       
       <button onClick={() => setIsModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl bg-primary text-on-primary hover:bg-primary/90 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300 hover:-translate-y-0.5">
         <span className="material-symbols-outlined">chair</span>
-        <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity text-primary font-bold">إضافة أثاث</div>
+        <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity text-primary font-bold">إضافة أثاث</div>
       </button>
       <button onClick={() => setIsMaterialPaletteOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
         <span className="material-symbols-outlined transition-transform group-hover:scale-110">palette</span>
@@ -119,7 +119,7 @@ export function StudioToolbar({
         <span className="material-symbols-outlined transition-transform group-hover:scale-110">smart_toy</span>
         <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">المساعد الذكي (AI)</div>
       </button>
-      <div className="w-8 h-[1px] bg-outline-variant"></div>
+      <div className="w-8 h-px bg-outline-variant"></div>
       <button 
         onClick={() => {
           setViewMode(viewMode === 'orbit' ? 'fpv' : 'orbit');
@@ -135,12 +135,12 @@ export function StudioToolbar({
       >
         <span className="material-symbols-outlined">{viewMode === 'fpv' ? "cancel" : "directions_walk"}</span>
       </button>
-      <div className="w-8 h-[1px] bg-outline-variant"></div>
+      <div className="w-8 h-px bg-outline-variant"></div>
       <button onClick={resetCamera} className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high transition-all" title="إعادة المنظور">
         <span className="material-symbols-outlined">my_location</span>
       </button>
       
-      <div className="w-8 h-[1px] bg-outline-variant/30 my-1"></div>
+      <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
 
       {/* Clerk User Button */}
       <div className="group relative w-12 h-12 flex items-center justify-center rounded-xl">

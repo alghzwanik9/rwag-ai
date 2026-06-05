@@ -33,13 +33,14 @@ export function PromptBar({
           >
             <span className="material-symbols-outlined text-[14px]">close</span>
           </button>
-          <img src={imageBase64} alt="Upload Preview" className="h-16 w-16 object-cover rounded-lg border border-outline-variant" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={imageBase64} alt="Upload Preview" className="h-16 w-16 object-cover rounded-lg border border-outline-variant" />
         </div>
       )}
-      <div className="pointer-events-auto w-full bg-surface-container-lowest border border-outline-variant shadow-md rounded-full flex items-center px-6 py-3 gap-stack-md focus-within:ring-2 ring-secondary/20 transition-all hover:border-secondary">
+      <div className="grow bg-surface border border-outline-variant rounded-full flex items-center px-4 shadow-sm focus-within:ring-2 focus-within:ring-primary/20 transition-shadow">
         <span className="material-symbols-outlined text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
         <input 
-          className="flex-grow bg-transparent border-none focus:ring-0 font-body-lg text-body-lg placeholder-on-surface-variant text-on-surface text-right" 
+          className="grow bg-transparent border-none focus:ring-0 font-body-lg text-body-lg placeholder-on-surface-variant text-on-surface text-right" 
           dir="rtl" 
           placeholder="اكتب طلبك هنا، مثال: غرفة جلوس مودرن، أو ارفع صورة..." 
           type="text"

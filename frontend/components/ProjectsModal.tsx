@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSceneStore } from "@/lib/useSceneStore";
+import { useSceneStore, SceneItem, RwaqMaterial } from "@/lib/useSceneStore";
 import { FolderOpen, Plus } from "lucide-react";
 
 interface ProjectsModalProps {
@@ -19,8 +19,8 @@ interface Project {
   totalCost: number;
   sceneId?: string;
   glbUrl?: string;
-  sceneItems?: any[];
-  customMaterials?: Record<string, any>;
+  sceneItems?: SceneItem[];
+  customMaterials?: Record<string, RwaqMaterial>;
 }
 
 export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUrl, setSceneId }: ProjectsModalProps) {
@@ -51,7 +51,10 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
 
   useEffect(() => {
     if (isOpen) {
-      fetchProjects();
+      const timer = setTimeout(() => {
+        fetchProjects().catch(console.error);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -87,7 +90,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
       } else {
         onShowToast("حدث خطأ أثناء الحفظ");
       }
-    } catch (error) {
+    } catch {
       onShowToast("فشل الاتصال بالخادم");
     } finally {
       setIsLoading(false);
@@ -110,7 +113,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
         // We need to access Zustand internals or just use actions. 
         // We'll map through sceneItems and add them back.
         if (data.sceneItems) {
-          data.sceneItems.forEach((item: any) => {
+          data.sceneItems.forEach((item: Parameters<typeof addSceneItem>[0]) => {
             // Because addSceneItem auto-generates addedAt, it's fine.
             addSceneItem(item);
           });
@@ -126,7 +129,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
         onShowToast(`تم تحميل مشروع: ${data.name}`);
         onClose();
       }
-    } catch (error) {
+    } catch {
       onShowToast("فشل تحميل المشروع");
     } finally {
       setIsLoading(false);
@@ -136,9 +139,9 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-2xl bg-surface rounded-2xl shadow-2xl flex flex-col max-h-[85vh] border border-outline-variant">
+      <div className="relative w-full max-w-4xl bg-surface rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh] border border-outline-variant">
         
         <div className="p-stack-lg border-b border-outline-variant flex justify-between items-center bg-surface-container-low rounded-t-2xl">
           <h2 className="font-headline-sm font-bold text-primary flex items-center gap-2">
@@ -150,7 +153,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
           </button>
         </div>
 
-        <div className="p-stack-lg flex-grow overflow-y-auto space-y-8">
+        <div className="grow overflow-y-auto p-4 sm:p-6 bg-surface-container/30">
           
           {/* Save Section */}
           <div className="bg-primary-container/20 p-6 rounded-xl border border-primary/20">
@@ -161,7 +164,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 placeholder="اسم المشروع (مثال: صالة الضيوف الكلاسيكية)" 
-                className="flex-grow bg-white border border-outline-variant rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-body-md"
+                className="grow bg-white border border-outline-variant rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-body-md"
               />
               <button 
                 onClick={handleSave}
@@ -208,7 +211,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
                   </div>
                 ))
               ) : (
-                <div className="col-span-2 flex flex-col items-center justify-center p-12 text-center bg-surface-container-lowest border border-dashed border-outline-variant rounded-2xl">
+                <div className="p-4 flex flex-col grow justify-between gap-3 text-center bg-surface-container-lowest border border-dashed border-outline-variant rounded-2xl">
                   <div className="w-20 h-20 bg-secondary-container rounded-full flex items-center justify-center mb-6">
                     <FolderOpen className="w-10 h-10 text-secondary" />
                   </div>

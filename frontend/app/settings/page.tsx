@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useUser } from "@clerk/nextjs";
+import Image from 'next/image';
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -51,7 +52,7 @@ export default function SettingsPage() {
                   <div className="relative">
                     <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-outline-variant bg-surface-container flex items-center justify-center">
                       {user?.imageUrl ? (
-                        <img src={user.imageUrl} alt="Avatar" className="w-full h-full object-cover" />
+                        <Image src={user.imageUrl} alt="Profile" width={80} height={80} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-2xl font-bold text-on-surface-variant">{user?.firstName?.charAt(0) || "U"}</span>
                       )}

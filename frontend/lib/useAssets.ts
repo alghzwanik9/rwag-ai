@@ -80,9 +80,13 @@ export function useAssets(): UseAssetsResult {
         const data: { assets: CatalogAsset[]; total: number } = await res.json();
 
         if (!cancelled) {
-          setAssets(data.assets.map(toProductTemplate));
-          setFromApi(true);
-          setError(null);
+          if (data && Array.isArray(data.assets)) {
+            setAssets(data.assets.map(toProductTemplate));
+            setFromApi(true);
+            setError(null);
+          } else {
+            throw new Error("Invalid API response: missing 'assets' array");
+          }
         }
       } catch (err) {
         if (!cancelled) {

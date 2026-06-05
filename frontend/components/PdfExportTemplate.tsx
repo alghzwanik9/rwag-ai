@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { SceneItem, SupportedCurrency, formatCurrency } from '@/lib/useSceneStore';
+import Image from 'next/image';
 
 interface PdfExportTemplateProps {
   designerName: string;
@@ -65,7 +66,7 @@ export default function PdfExportTemplate({
       {/* 3D Snapshot */}
       {imageBase64 && (
         <div className="mb-10 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-          <img src={imageBase64} alt="Design Snapshot" className="w-full h-auto object-cover max-h-[120mm]" />
+          <Image src={imageBase64} alt="Design Snapshot" width={800} height={600} className="w-full h-auto object-cover max-h-[120mm]" />
         </div>
       )}
 

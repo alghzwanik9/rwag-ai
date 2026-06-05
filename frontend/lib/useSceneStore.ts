@@ -173,8 +173,8 @@ export const useSceneStore = create<SceneStore>()(
       coveLightColor: 3700,
       spotlightToggle: false,
       activeSceneId: null,
-      floorColor: '#ffffff', // Default white marble/wood
-      wallColor: '#f5f5f5', // Default off-white walls
+      floorColor: '#4f3c2b', // Default warm dark wood
+      wallColor: '#d6cdbd', // Default warm beige walls
       roomWidth: 10,
       roomDepth: 10,
       wallHeight: 4,
@@ -328,8 +328,8 @@ export const useSceneStore = create<SceneStore>()(
         coveLightIntensity: 10,
         coveLightColor: 3700,
         spotlightToggle: false,
-        floorColor: '#ffffff',
-        wallColor: '#f5f5f5',
+        floorColor: '#4f3c2b',
+        wallColor: '#d6cdbd',
         roomWidth: 10,
         roomDepth: 10,
         wallHeight: 4,

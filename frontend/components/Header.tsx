@@ -3,6 +3,7 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
+import Image from "next/image";
 
 export default function Header() {
   const { user } = useUser();
@@ -39,7 +40,7 @@ export default function Header() {
         </div>
         <div className="h-9 w-9 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden border border-outline-variant">
           {user?.imageUrl ? (
-            <img alt="User" className="h-full w-full object-cover" src={user.imageUrl} />
+            <Image alt="User" className="h-full w-full object-cover" src={user.imageUrl} width={36} height={36} />
           ) : (
             <span className="text-sm font-bold text-on-surface-variant">{user?.firstName?.charAt(0) || "U"}</span>
           )}

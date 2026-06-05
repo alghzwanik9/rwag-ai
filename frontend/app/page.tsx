@@ -1,10 +1,10 @@
-'use client';
-
 import Link from 'next/link';
-import { SignUpButton, useUser } from '@clerk/nextjs';
+import { SignUpButton } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
 
-export default function LandingPage() {
-  const { isLoaded, isSignedIn } = useUser();
+export default async function LandingPage() {
+  const { userId } = await auth();
+  const isSignedIn = !!userId;
 
   return (
     <div className="min-h-screen bg-surface text-on-surface selection:bg-secondary/20" dir="rtl">
@@ -12,7 +12,7 @@ export default function LandingPage() {
       <header className="fixed top-0 left-0 right-0 h-20 bg-surface/90 backdrop-blur-lg border-b border-outline-variant z-50 px-6 md:px-16 flex justify-between items-center transition-all">
         <div className="flex items-center gap-4">
           <h1 className="font-headline-md font-bold text-primary tracking-tight">رواق</h1>
-          <div className="h-6 w-[1px] bg-outline-variant hidden md:block"></div>
+          <div className="h-6 w-px bg-outline-variant hidden md:block"></div>
           <span className="font-label-md text-on-surface-variant hidden md:block">أستوديو التصميم الرقمي</span>
         </div>
         <nav className="hidden md:flex items-center gap-8">
@@ -21,7 +21,7 @@ export default function LandingPage() {
           <Link href="#contact" className="font-label-md text-on-surface-variant hover:text-primary transition-colors">تواصل معنا</Link>
         </nav>
         <div className="flex gap-4">
-          {isLoaded && isSignedIn ? (
+          {isSignedIn ? (
             <Link href="/studio" className="bg-secondary text-white px-8 py-2.5 rounded-full font-label-md hover:bg-secondary/90 transition-all shadow-sm hover:shadow active:scale-95 flex items-center gap-2">
               <span>انتقل إلى الأستوديو</span>
             </Link>
@@ -55,7 +55,7 @@ export default function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row justify-center gap-4 pt-8">
-              {isLoaded && isSignedIn ? (
+              {isSignedIn ? (
                 <Link href="/studio" className="bg-primary text-white px-8 py-4 rounded-full font-label-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-3 shadow-lg hover:shadow-xl hover:-translate-y-0.5">
                   <span>العودة إلى الأستوديو</span>
                   <span className="material-symbols-outlined text-sm">arrow_forward</span>
@@ -114,7 +114,7 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-tertiary-container text-on-primary py-12 px-6 md:px-16 text-center border-t border-outline-variant">
+      <footer className="bg-surface-container text-on-surface-variant py-12 px-6 md:px-16 text-center border-t border-outline-variant">
         <h2 className="font-headline-md font-bold mb-4">رواق للتصميم الداخلي</h2>
         <p className="font-body-sm text-on-primary-container mb-8">© 2026 جميع الحقوق محفوظة لأستوديو التصميم الرقمي.</p>
       </footer>

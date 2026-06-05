@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSceneStore } from "@/lib/useSceneStore";
 import { useAssets } from "@/lib/useAssets";
+import { AIResponseItem } from "../StudioClient";
 
 interface Message {
   role: "user" | "ai";
@@ -53,7 +54,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
         
         // Auto-inject items if returned
         if (data.items && data.items.length > 0) {
-          data.items.forEach((item: any) => {
+          data.items.forEach((item: AIResponseItem) => {
             const matchingAsset = catalogAssets.find(a => a.id === item.asset_id);
             if (matchingAsset) {
               addSceneItem({
@@ -61,7 +62,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
                 instanceId: item.instance_id,
                 position: item.position,
                 rotation: item.rotation,
-                dimensions: item.dimensions
+                dimensions: item.dimensions || { width: 1000, height: 1000, depth: 1000 }
               });
             } else {
               // Fallback
@@ -72,13 +73,13 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
                 brand: item.economy?.brand || "Rwaq AI",
                 price: item.economy?.price || 0,
                 currency: "SAR",
-                category: "seating" as any,
+                category: "seating",
                 modelUrl: "",
                 thumbnailUrl: "",
                 dimensions: { 
-                    width: item.dimensions?.width * 1000 || 1000, 
-                    height: item.dimensions?.height * 1000 || 1000, 
-                    depth: item.dimensions?.length * 1000 || 1000 
+                    width: item.dimensions?.width ? item.dimensions.width * 1000 : 1000, 
+                    height: item.dimensions?.height ? item.dimensions.height * 1000 : 1000,
+                    depth: item.dimensions?.depth ? item.dimensions.depth * 1000 : 1000 
                 },
                 position: item.position,
                 rotation: item.rotation
@@ -90,7 +91,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
       } else {
         setMessages(prev => [...prev, { role: "ai", text: "عذراً، حدث خطأ أثناء الاتصال بالخادم." }]);
       }
-    } catch (e) {
+    } catch {
       setMessages(prev => [...prev, { role: "ai", text: "حدث خطأ في الاتصال. تأكد من تشغيل الخادم." }]);
     } finally {
       setIsLoading(false);
@@ -101,7 +102,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
 
   return (
     <>
-      <div className={`fixed top-0 right-0 h-full w-[380px] bg-white border-l border-[#E0E0E0] shadow-2xl z-[120] transform transition-transform duration-300 flex flex-col`}>
+      <div className={`fixed top-0 right-0 h-full w-[380px] bg-white border-l border-[#E0E0E0] shadow-2xl z-120 transform transition-transform duration-300 flex flex-col`}>
         <div className="p-6 border-b border-[#E0E0E0] flex items-center justify-between bg-[#F5F7FA]">
           <div className="flex items-center gap-2 text-[#4A90E2]">
             <span className="material-symbols-outlined">smart_toy</span>
@@ -115,7 +116,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
           </button>
         </div>
 
-        <div className="flex-grow p-4 overflow-y-auto bg-surface flex flex-col gap-3">
+        <div className="grow overflow-y-auto p-4 flex flex-col gap-3 scrollbar-thin">
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] rounded-2xl p-3 text-sm ${msg.role === 'user' ? 'bg-primary text-on-primary rounded-tr-none' : 'bg-[#F5F7FA] text-on-surface border border-outline-variant rounded-tl-none'}`}>
@@ -136,14 +137,14 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
         </div>
 
         <div className="p-4 border-t border-[#E0E0E0] bg-white">
-          <div className="flex items-center gap-2 bg-[#F5F7FA] border border-outline-variant rounded-full px-4 py-2 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20">
+          <div className="flex bg-surface-container rounded-full overflow-hidden border border-outline-variant focus-within:border-primary grow p-1">
             <input 
               type="text" 
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSend()}
               placeholder="اكتب رسالتك هنا..."
-              className="flex-grow bg-transparent border-none focus:ring-0 text-sm py-2"
+              className="grow bg-transparent border-none focus:ring-0 text-sm py-2"
               dir="rtl"
             />
             <button 

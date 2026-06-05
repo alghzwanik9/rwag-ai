@@ -7,6 +7,7 @@ import { useUser } from "@clerk/nextjs";
 import { useState, useEffect } from 'react';
 import PdfExportTemplate from './PdfExportTemplate';
 import { FileDown, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 
 export default function Sidebar() {
   const { user } = useUser();
@@ -26,9 +27,12 @@ export default function Sidebar() {
   const [currentDate, setCurrentDate] = useState("");
 
   useEffect(() => {
-    setIsMounted(true);
-    setQuoteNumber(`RWAQ-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`);
-    setCurrentDate(new Date().toLocaleDateString('ar-SA'));
+    const timer = setTimeout(() => {
+      setIsMounted(true);
+      setQuoteNumber(`RWAQ-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`);
+      setCurrentDate(new Date().toLocaleDateString('ar-SA'));
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const exportRoomToPDF = () => {
@@ -91,7 +95,7 @@ export default function Sidebar() {
         <h1 className="font-headline-md text-headline-md text-on-primary leading-tight font-bold">رواق</h1>
         <p className="font-label-md text-label-md text-on-primary-container opacity-80">للتصميم الداخلي</p>
       </div>
-      <nav className="flex-grow space-y-2">
+      <nav className="grow space-y-2">
         <Link href="/projects" className={navItemClass('/projects')}>
           <span className="material-symbols-outlined" data-icon="folder_open">folder_open</span>
           <span className="font-body-md text-body-md">المشاريع</span>
@@ -184,7 +188,7 @@ export default function Sidebar() {
         
       <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3">
         {user?.imageUrl ? (
-          <img src={user.imageUrl} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
+          <Image src={user.imageUrl} width={40} height={40} alt="Profile" className="w-10 h-10 rounded-full object-cover" />
         ) : (
           <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold">
             {user?.firstName?.charAt(0) || "U"}

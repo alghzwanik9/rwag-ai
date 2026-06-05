@@ -46,8 +46,10 @@ export default function ARPage({ params }: PageProps) {
     if (typeof window === 'undefined') return;
 
     const url = buildGlbUrl(sceneId);
-    setGlbUrl(url);
-    setLoadState('loading');
+    const timer = setTimeout(() => {
+      setGlbUrl(url);
+      setLoadState('loading');
+    }, 0);
 
     // Probe the asset URL before handing off to model-viewer so we can
     // give the user a discriminated error message immediately.
@@ -65,6 +67,8 @@ export default function ARPage({ params }: PageProps) {
         console.error(`[AR Page] GLB probe failed — kind: ${kind}, url: ${url}`);
       }
     });
+    
+    return () => clearTimeout(timer);
   }, [sceneId]);
 
   // ── Resolving / initial ──────────────────────────────────────────────────

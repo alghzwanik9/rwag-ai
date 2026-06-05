@@ -11,31 +11,33 @@ interface ModelViewerElement extends HTMLElement {
   src: string;
   dismissPoster?: () => void;
   model?: {
-    materials: any[];
-    getMaterialByName: (name: string) => any;
+    materials: { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string) => void; setRoughnessFactor: (r: number) => void; setMetallicFactor: (m: number) => void; } }[];
+    getMaterialByName: (name: string) => { name: string; pbrMetallicRoughness: { setBaseColorFactor: (color: string) => void; setRoughnessFactor: (r: number) => void; setMetallicFactor: (m: number) => void; } } | undefined;
   };
 }
 
 /* eslint-disable @typescript-eslint/no-namespace */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-declare global {
-  namespace React {
-    namespace JSX {
-      interface IntrinsicElements {
-        'model-viewer': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & { [key: string]: any };
-      }
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+      'model-viewer': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & { 
+          src?: string; 
+          ar?: boolean; 
+          'ar-modes'?: string; 
+          'camera-controls'?: boolean; 
+          'auto-rotate'?: boolean; 
+          'environment-image'?: string; 
+          'shadow-intensity'?: string; 
+      };
     }
   }
 }
-/* eslint-enable @typescript-eslint/no-namespace */
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ─── Model-viewer wrapper (no SSR) ───────────────────────────────────────────
 
 const ModelViewerWrapper = dynamic(
   () =>
     import('@google/model-viewer').then(() => {
-      // eslint-disable-next-line react/display-name
       return function Viewer({
         url,
         customMaterials,
@@ -47,11 +49,11 @@ const ModelViewerWrapper = dynamic(
         onLoad?: () => void;
         onError?: (detail: string) => void;
       }) {
-        const ref = useRef<ModelViewerElement>(null);
         const [isLoaded, setIsLoaded] = useState(false);
+        const internalRef = useRef<ModelViewerElement>(null);
 
         useEffect(() => {
-          const el = ref.current;
+          const el = internalRef.current;
           if (!el) return;
 
           const handleLoad = () => {
@@ -77,8 +79,8 @@ const ModelViewerWrapper = dynamic(
         }, [url, onLoad, onError]);
 
         useEffect(() => {
-          if (!isLoaded || !ref.current || !customMaterials) return;
-          const el = ref.current;
+          if (!isLoaded || !internalRef.current || !customMaterials) return;
+          const el = internalRef.current;
           
           if (el.model && el.model.materials) {
             Object.entries(customMaterials).forEach(([matName, customMat]) => {
@@ -93,9 +95,6 @@ const ModelViewerWrapper = dynamic(
                 if (customMat.metalness !== undefined) {
                   material.pbrMetallicRoughness.setMetallicFactor(customMat.metalness);
                 }
-                // model-viewer requires a bit more API surface to set textures dynamically
-                // For Sprint 5 we focus on color/roughness via API. If textureUrl is present,
-                // we would use createTexture() which is async.
               }
             });
           }
@@ -103,7 +102,7 @@ const ModelViewerWrapper = dynamic(
 
         return (
           <model-viewer
-            ref={ref}
+            ref={internalRef}
             src={url}
             ar
             ar-modes="webxr scene-viewer quick-look"
@@ -112,7 +111,7 @@ const ModelViewerWrapper = dynamic(
             environment-image="neutral"
             shadow-intensity="1"
             style={{ width: '100%', height: '100%' }}
-            className="w-full h-full object-contain rounded-xl bg-gradient-to-tr from-[#e5e8ec] to-[#f8f9fa] dark:from-gray-800 dark:to-gray-900"
+            className="w-full h-full object-contain rounded-xl bg-linear-to-tr from-[#e5e8ec] to-[#f8f9fa] dark:from-gray-800 dark:to-gray-900"
           >
             <button
               slot="ar-button"
@@ -163,34 +162,19 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
   
   const customMaterials = useSceneStore((s) => s.customMaterials);
 
-  // Detect device type + build QR target URL
   useEffect(() => {
-    const ua = navigator.userAgent || navigator.vendor || (window as unknown as { opera: string }).opera;
-    const mobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
-      ua.toLowerCase()
-    );
-    setIsMobile(mobile);
-
     if (typeof window !== 'undefined') {
-      const { hostname, port } = window.location;
-      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-
-      if (isLocal) {
-        // On localhost (desktop dev), fetch real LAN IP for the QR code so
-        // the mobile device can scan and reach the correct address.
-        fetch('/api/server-ip')
-          .then((r) => r.json())
-          .then((d) => {
-            const ip = d.ip ?? hostname;
-            setTargetUrl(`http://${ip}:${port || '3000'}/ar/${sceneId}`);
-          })
-          .catch(() => {
-            setTargetUrl(`http://${hostname}:${port || '3000'}/ar/${sceneId}`);
-          });
-      } else {
-        // Already accessed via LAN IP — just use current origin
-        setTargetUrl(`${window.location.origin}/ar/${sceneId}`);
-      }
+      const timer = setTimeout(() => {
+        const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        setIsMobile(mobile);
+        
+        if (mobile) {
+          setTargetUrl(`${window.location.origin}/ar/${sceneId}`);
+        } else {
+          setTargetUrl(`${window.location.origin}/ar/${sceneId}`);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [sceneId]);
 
@@ -206,8 +190,7 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
       id="adaptive-ar-viewer"
       className="relative w-full h-full min-h-[500px] flex flex-col rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800"
     >
-      {/* ── 3D Model Viewer ─────────────────────────────────────────── */}
-      <div className="w-full h-full flex-grow relative">
+      <div className="w-full h-full grow relative">
         {glbUrl && (
           <ModelViewerWrapper
             url={glbUrl}
@@ -218,7 +201,6 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
         )}
       </div>
 
-      {/* ── model-viewer error overlay ─────────────────────────────── */}
       {modelState === 'error' && (
         <div
           id="model-viewer-error-overlay"
@@ -270,8 +252,6 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
               onClick={() => {
                 setModelState('loading');
                 setModelError('');
-                // Force model-viewer to reload by briefly clearing src
-                // The wrapper will remount on next render cycle
                 setTimeout(() => setModelState('loading'), 100);
               }}
               style={{
@@ -293,13 +273,12 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
         </div>
       )}
 
-      {/* ── Desktop QR Code Overlay ────────────────────────────────── */}
       {isMobile === false && targetUrl && modelState !== 'error' && (
         <div
           id="ar-qr-overlay"
           className="absolute top-6 right-6 bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl flex flex-col items-center justify-center border border-gray-100/50 z-20 hover:scale-105 transition-transform duration-300"
         >
-          <div className="bg-white p-2 rounded-xl">
+          <div className="grow bg-white p-2 rounded-xl">
             <QRCodeSVG value={targetUrl} size={110} level="H" />
           </div>
           <p className="text-xs text-gray-700 mt-3 font-semibold text-center max-w-[130px] leading-relaxed">

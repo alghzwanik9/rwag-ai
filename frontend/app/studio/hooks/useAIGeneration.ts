@@ -38,7 +38,7 @@ export function useAIGeneration(showToast: (msg: string) => void, catalogAssets:
           state.clearScene();
           // Clear monolithic room if present (assume handled by state or component later)
           
-          data.items.forEach((item: any) => {
+          data.items.forEach((item: { asset_id: string; instance_id: string; position?: [number, number, number]; rotation?: [number, number, number]; }) => {
              const matchingAsset = catalogAssets.find(a => a.id === item.asset_id);
              if (matchingAsset) {
                 state.addSceneItem({
@@ -56,7 +56,7 @@ export function useAIGeneration(showToast: (msg: string) => void, catalogAssets:
                     brand: "Rwaq AI",
                     price: 0,
                     currency: "SAR",
-                    category: "seating" as any,
+                    category: "seating" as const,
                     modelUrl: "",
                     thumbnailUrl: "",
                     dimensions: { width: 1000, height: 1000, depth: 1000 },

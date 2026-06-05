@@ -170,14 +170,7 @@ function Baseboard({ width, height, position, rotation }: { width: number; heigh
   );
 }
 
-function CrownMolding({ width, position, rotation }: { width: number; position: [number, number, number]; rotation?: [number, number, number] }) {
-  return (
-    <mesh position={position} rotation={rotation}>
-      <boxGeometry args={[width, 0.06, 0.12]} />
-      <meshStandardMaterial color="#f0ece4" roughness={0.7} metalness={0.0} />
-    </mesh>
-  );
-}
+
 
 export default function RealRoom() {
   const floorColor  = useSceneStore((s) => s.floorColor);
@@ -198,7 +191,7 @@ export default function RealRoom() {
 
   return (
     <group>
-      {/* Floor */}
+      {/* Solid Floor Slab */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
           <planeGeometry args={[roomWidth, roomDepth]} />
@@ -207,13 +200,13 @@ export default function RealRoom() {
             blur={[300, 100]}
             resolution={1024}
             mixBlur={1}
-            mixStrength={40}
-            roughness={0.2}
+            mixStrength={15}
+            roughness={0.4}
             depthScale={1.2}
             minDepthThreshold={0.4}
             maxDepthThreshold={1.4}
             metalness={0.1}
-            mirror={1}
+            mirror={0.8}
           />
         </mesh>
       </RigidBody>
@@ -232,15 +225,27 @@ export default function RealRoom() {
         fadeStrength={1}
       />
 
-      {/* Back Wall */}
+      {/* Back Wall - Accent Wood Slats */}
       <RigidBody type="fixed" colliders="cuboid">
-        <mesh position={[0, wallHeight / 2, -roomDepth / 2]} receiveShadow castShadow>
-          <boxGeometry args={[roomWidth, wallHeight, 0.2]} />
-          <primitive object={wallMaterial.clone()} attach="material" />
-        </mesh>
+        <group position={[0, wallHeight / 2, -roomDepth / 2]}>
+          <mesh receiveShadow castShadow>
+            <boxGeometry args={[roomWidth, wallHeight, 0.2]} />
+            <meshStandardMaterial color="#2a2015" roughness={0.9} />
+          </mesh>
+          {/* Wooden Slats Array */}
+          {Array.from({ length: Math.floor(roomWidth / 0.15) }).map((_, i) => {
+            const x = -roomWidth / 2 + 0.15 * i + 0.075;
+            return (
+              <mesh key={i} position={[x, 0, 0.15]} receiveShadow castShadow>
+                <boxGeometry args={[0.08, wallHeight, 0.1]} />
+                <meshStandardMaterial color="#5c4033" roughness={0.7} />
+              </mesh>
+            );
+          })}
+        </group>
       </RigidBody>
 
-      {/* Left Wall */}
+      {/* Left Wall - Concrete/Plaster */}
       <RigidBody type="fixed" colliders="cuboid">
         <mesh position={[-roomWidth / 2, wallHeight / 2, 0]} rotation={[0, Math.PI / 2, 0]} receiveShadow castShadow>
           <boxGeometry args={[roomDepth, wallHeight, 0.2]} />
@@ -248,23 +253,54 @@ export default function RealRoom() {
         </mesh>
       </RigidBody>
 
-      {/* Right Wall (for enclosure feel, thinner to avoid blocking view) */}
+      {/* Right Wall - Panoramic Glass Window */}
       <RigidBody type="fixed" colliders="cuboid">
-        <mesh position={[roomWidth / 2, wallHeight / 2, 0]} rotation={[0, -Math.PI / 2, 0]} receiveShadow castShadow>
-          <boxGeometry args={[roomDepth, wallHeight, 0.2]} />
-          <primitive object={wallMaterial.clone()} attach="material" />
-        </mesh>
+        <group position={[roomWidth / 2, wallHeight / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
+          {/* Glass */}
+          <mesh position={[0, 0, 0]}>
+            <boxGeometry args={[roomDepth, wallHeight, 0.05]} />
+            <meshStandardMaterial color="#88ccff" roughness={0.1} metalness={0.8} transparent opacity={0.25} />
+          </mesh>
+          {/* Top/Bottom Frames */}
+          <mesh position={[0, wallHeight / 2 - 0.05, 0.05]}><boxGeometry args={[roomDepth, 0.1, 0.1]} /><meshStandardMaterial color="#111" roughness={0.5} /></mesh>
+          <mesh position={[0, -wallHeight / 2 + 0.05, 0.05]}><boxGeometry args={[roomDepth, 0.1, 0.1]} /><meshStandardMaterial color="#111" roughness={0.5} /></mesh>
+          {/* Vertical Mullions */}
+          {Array.from({ length: 4 }).map((_, i) => {
+             const z = -roomDepth / 2 + (roomDepth / 3) * i;
+             return (
+               <mesh key={`mullion-${i}`} position={[z, 0, 0.05]}><boxGeometry args={[0.1, wallHeight, 0.1]} /><meshStandardMaterial color="#111" roughness={0.5} /></mesh>
+             )
+          })}
+        </group>
       </RigidBody>
 
-      {/* Baseboards */}
-      <Baseboard width={roomWidth} height={0.08} position={[0, 0.04, -roomDepth / 2 + 0.01]} />
-      <Baseboard width={roomDepth} height={0.08} position={[-roomWidth / 2 + 0.01, 0.04, 0]} rotation={[0, Math.PI / 2, 0]} />
-      <Baseboard width={roomDepth} height={0.08} position={[roomWidth / 2 - 0.01, 0.04, 0]} rotation={[0, -Math.PI / 2, 0]} />
+      {/* Architectural Dropped Ceiling (Cove Lighting) */}
+      <group position={[0, wallHeight, 0]}>
+         {/* Main ceiling slab */}
+         <mesh position={[0, 0, 0]} receiveShadow>
+           <boxGeometry args={[roomWidth + 0.2, 0.1, roomDepth + 0.2]} />
+           <meshStandardMaterial color="#fafafa" roughness={0.9} />
+         </mesh>
+         {/* Dropped panel */}
+         <mesh position={[0, -0.15, 0]} receiveShadow castShadow>
+           <boxGeometry args={[roomWidth - 0.8, 0.1, roomDepth - 0.8]} />
+           <meshStandardMaterial color="#f0ece4" roughness={0.9} />
+         </mesh>
+         {/* Glowing edge for cove light */}
+         <mesh position={[0, -0.09, 0]}>
+           <boxGeometry args={[roomWidth - 0.7, 0.02, roomDepth - 0.7]} />
+           <meshBasicMaterial color="#ffe8cc" />
+         </mesh>
+         {/* Cove point lights */}
+         <pointLight position={[roomWidth/2 - 0.6, -0.1, roomDepth/2 - 0.6]} color="#ffe8cc" intensity={0.6} distance={4} />
+         <pointLight position={[-roomWidth/2 + 0.6, -0.1, roomDepth/2 - 0.6]} color="#ffe8cc" intensity={0.6} distance={4} />
+         <pointLight position={[roomWidth/2 - 0.6, -0.1, -roomDepth/2 + 0.6]} color="#ffe8cc" intensity={0.6} distance={4} />
+         <pointLight position={[-roomWidth/2 + 0.6, -0.1, -roomDepth/2 + 0.6]} color="#ffe8cc" intensity={0.6} distance={4} />
+      </group>
 
-      {/* Crown molding */}
-      <CrownMolding width={roomWidth} position={[0, wallHeight - 0.03, -roomDepth / 2 + 0.01]} />
-      <CrownMolding width={roomDepth} position={[-roomWidth / 2 + 0.01, wallHeight - 0.03, 0]} rotation={[0, Math.PI / 2, 0]} />
-      <CrownMolding width={roomDepth} position={[roomWidth / 2 - 0.01, wallHeight - 0.03, 0]} rotation={[0, -Math.PI / 2, 0]} />
+      {/* Baseboards (Only on Left and Back) */}
+      <Baseboard width={roomWidth} height={0.08} position={[0, 0.04, -roomDepth / 2 + 0.1]} />
+      <Baseboard width={roomDepth} height={0.08} position={[-roomWidth / 2 + 0.1, 0.04, 0]} rotation={[0, Math.PI / 2, 0]} />
 
       {/* 3D Windows — Back Wall */}
       {backWindows.map((win) => (

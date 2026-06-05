@@ -70,7 +70,7 @@ export function SettingsMenu({ onClose, showToast }: SettingsMenuProps) {
         ].map(tab => (
           <button
             key={tab.id}
-            onClick={() => setSettingsTab(tab.id as any)}
+            onClick={() => setSettingsTab(tab.id as 'ambient' | 'studio' | 'room' | 'materials' | 'windows')}
             className={`flex-1 flex flex-col items-center justify-center gap-1 pb-2 pt-1 border-b-2 transition-all ${settingsTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 rounded-t-lg'}`}
           >
             <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
@@ -143,7 +143,7 @@ export function SettingsMenu({ onClose, showToast }: SettingsMenuProps) {
                 type="range" min="3000" max="6000" step="100"
                 value={coveLightColor}
                 onChange={(e) => setCoveLightColor(parseInt(e.target.value))}
-                className="w-full h-2 bg-gradient-to-r from-[#ffebd6] via-[#ffffff] to-[#d6ebff] rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
+                className="w-full h-2 bg-linear-to-r from-[#ffebd6] via-[#ffffff] to-[#d6ebff] rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
               />
             </div>
 
@@ -215,7 +215,7 @@ export function SettingsMenu({ onClose, showToast }: SettingsMenuProps) {
               </div>
             </div>
 
-            <div className="h-[1px] bg-outline-variant/20"></div>
+            <div className="h-px bg-outline-variant my-1" />
 
             <div>
               <label className="text-sm font-bold text-on-surface mb-3 block">ألوان الجدران (Walls)</label>
