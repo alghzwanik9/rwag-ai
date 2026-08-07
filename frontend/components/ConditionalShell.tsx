@@ -14,10 +14,13 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
   const pathname = usePathname();
   const isARRoute = pathname?.startsWith('/ar');
   const isLandingPage = pathname === '/';
-  
+  // Public marketing pages ship their own dark chrome and must not inherit the
+  // light app sidebar/header.
+  const isMarketingPage = pathname === '/privacy';
+
   // Pages that manage their own layout (they render inside the main content area with pr-[280px])
   // The Sidebar from ConditionalShell will still render for all non-excluded paths
-  const hideChrome = isARRoute || isLandingPage;
+  const hideChrome = isARRoute || isLandingPage || isMarketingPage;
 
   return (
     <>

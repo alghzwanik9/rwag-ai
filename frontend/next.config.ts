@@ -30,6 +30,18 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/api/v1/projects/:path*`,
       },
       {
+        source: "/api/v1/chat",
+        destination: `${backendUrl}/api/v1/chat`,
+      },
+      {
+        source: "/api/v1/db-check",
+        destination: `${backendUrl}/api/v1/db-check`,
+      },
+      {
+        source: "/api/v1/studio/:path*",
+        destination: `${backendUrl}/api/v1/studio/:path*`,
+      },
+      {
         source: "/api/server-ip",
         destination: `${backendUrl}/api/server-ip`,
       },

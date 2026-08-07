@@ -40,7 +40,7 @@ export default function MaterialPalette({ isOpen, onClose }: MaterialPaletteProp
     <>
       {/* Sidebar Panel */}
       <div 
-        className="fixed top-0 right-0 h-full w-[340px] bg-white border-l border-[#E0E0E0] shadow-2xl z-[120] flex flex-col animate-slide-in-right"
+        className="fixed top-0 right-0 h-full w-[340px] bg-white border-l border-[#E0E0E0] shadow-2xl z-120 flex flex-col animate-slide-in-right"
       >
         <div className="p-6 border-b border-[#E0E0E0] flex items-center justify-between bg-[#F5F7FA]">
           <div className="flex items-center gap-2 text-[#4A90E2]">
@@ -55,7 +55,7 @@ export default function MaterialPalette({ isOpen, onClose }: MaterialPaletteProp
           </button>
         </div>
 
-        <div className="p-6 flex-grow overflow-y-auto">
+        <div className="p-6 grow overflow-y-auto">
           {!selectedObjectId && (
             <div className="bg-[#F5F7FA] text-gray-600 p-3 rounded-lg mb-6 flex items-start gap-2 text-sm border border-[#E0E0E0]">
               <span className="material-symbols-outlined text-[18px]">touch_app</span>

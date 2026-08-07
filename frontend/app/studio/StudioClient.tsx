@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, Suspense, useRef, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
+
 import { Canvas, useFrame, useThree, ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PointerLockControls, useGLTF, Environment, ContactShadows, Sparkles } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -141,18 +143,8 @@ function AmbientController() {
         shadow-normalBias={0.05}
       />
       
-      {/* Rain particles */}
-      {ambientMode === 'rainy' && (
-        <Sparkles 
-          count={1000} 
-          scale={[20, 20, 20]} 
-          size={2} 
-          speed={0.8} 
-          opacity={0.2} 
-          color="#ffffff" 
-          position={[0, 5, 0]}
-        />
-      )}
+      {/* Rain effect disabled temporarily as it looks like a visual glitch loop */}
+
       
       {/* Fake interior point lights for midnight to make it cozy */}
       {ambientMode === 'midnight' && (
@@ -476,12 +468,12 @@ function FPVControls() {
 
   return null;
 }
-
 export default function StudioClient() {
   const DEFAULT_GLB = null;
-
   const [modelUrl, setModelUrl] = useState<string | null>(DEFAULT_GLB);
   const [sceneId, setSceneId]   = useState<string>("default");
+  const searchParams = useSearchParams();
+  const activeReference = searchParams.get("reference");
 
   const [prompt, setPrompt]               = useState("");
   const [isLoading, setIsLoading]         = useState(false);
@@ -603,11 +595,16 @@ export default function StudioClient() {
     setIsToastVisible(true);
 
     try {
+      const finalPrompt = activeReference 
+        ? `[Style Reference: ${activeReference}] ${prompt}` 
+        : prompt;
+
       const res = await fetch("/api/generate-room", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt || "تصميم الغرفة الموجودة في الصورة", imageBase64 }),
+        body: JSON.stringify({ prompt: finalPrompt || "تصميم الغرفة الموجودة في الصورة", imageBase64 }),
       });
+
 
       if (res.ok) {
         const data = await res.json();
@@ -833,7 +830,7 @@ export default function StudioClient() {
     <>
       <div className="print:hidden bg-surface text-on-surface overflow-hidden" dir="rtl">
 
-        <nav className="fixed left-4 top-1/2 -translate-y-1/2 w-16 bg-surface/60 backdrop-blur-xl rounded-2xl border border-outline-variant/30 shadow-2xl flex flex-col items-center gap-2 py-4 z-40 transition-all hover:bg-surface/80 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)]">
+        <nav className="fixed left-4 top-1/2 -translate-y-1/2 w-16 max-h-[90vh] overflow-y-auto no-scrollbar bg-surface/60 backdrop-blur-xl rounded-2xl border border-outline-variant/30 shadow-2xl flex flex-col items-center gap-2 py-4 z-40 transition-all hover:bg-surface/80 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)]">
           
           <button onClick={() => setIsProjectsModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-primary hover:bg-primary hover:text-on-primary transition-all duration-300" title="حفظ المشروع">
             <span className="material-symbols-outlined transition-transform group-hover:scale-110">save</span>
@@ -850,6 +847,45 @@ export default function StudioClient() {
           <button onClick={() => { redo(); showToast("↪️ إعادة"); }} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
             <span className="material-symbols-outlined transition-transform group-hover:translate-x-1">redo</span>
             <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إعادة (Ctrl+Y)</div>
+          </button>
+
+          <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
+          
+          <button onClick={resetCamera} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
+            <span className="material-symbols-outlined transition-transform group-hover:scale-110">3d_rotation</span>
+            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إعادة ضبط الكاميرا</div>
+          </button>
+          
+          <button 
+            onClick={() => {
+              if (controlsRef.current && controlsRef.current.object) {
+                const camera = controlsRef.current.object;
+                const target = controlsRef.current.target;
+                const direction = camera.position.clone().sub(target).normalize();
+                camera.position.addScaledVector(direction, -2);
+                controlsRef.current.update();
+              }
+            }}
+            className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300"
+          >
+            <span className="material-symbols-outlined transition-transform group-hover:scale-110">zoom_in</span>
+            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">تقريب الكاميرا</div>
+          </button>
+
+          <button 
+            onClick={() => {
+              if (controlsRef.current && controlsRef.current.object) {
+                const camera = controlsRef.current.object;
+                const target = controlsRef.current.target;
+                const direction = camera.position.clone().sub(target).normalize();
+                camera.position.addScaledVector(direction, 2);
+                controlsRef.current.update();
+              }
+            }}
+            className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300"
+          >
+            <span className="material-symbols-outlined transition-transform group-hover:scale-110">zoom_out</span>
+            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إبعاد الكاميرا</div>
           </button>
 
           <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
@@ -881,7 +917,7 @@ export default function StudioClient() {
                       className="text-primary hover:text-secondary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-primary/10 transition-colors"
                       title="إعادة ضبط على الافتراضي"
                     >
-                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                      <span className="material-symbols-outlined text-[18px]">device_reset</span>
                     </button>
                     <button onClick={() => setIsSettingsMenuOpen(false)} className="text-on-surface-variant hover:text-error w-8 h-8 flex items-center justify-center rounded-lg hover:bg-error/10 transition-colors">
                       <span className="material-symbols-outlined text-[18px]">close</span>
@@ -1275,8 +1311,8 @@ export default function StudioClient() {
           </div>
         </nav>
 
-        <main className="fixed inset-0 pr-[280px] pt-16 pb-24 overflow-hidden bg-background flex items-center justify-center p-container-padding">
-          <div className="w-full h-full relative rounded-xl border border-outline-variant bg-white overflow-hidden group">
+        <main className="fixed inset-0 overflow-hidden bg-background">
+          <div className="w-full h-full relative bg-white overflow-hidden group">
             <div className="absolute inset-0 z-0">
               <Canvas 
                 shadows 
@@ -1345,46 +1381,7 @@ export default function StudioClient() {
               </Canvas>
             </div>
 
-            {/* Viewport Controls */}
-            <div className="absolute top-4 right-4 flex flex-col gap-2">
-              <button 
-                onClick={resetCamera}
-                title="إعادة ضبط الكاميرا"
-                className="bg-surface/90 backdrop-blur p-2 rounded border border-outline-variant hover:bg-white text-on-surface"
-              >
-                <span className="material-symbols-outlined">3d_rotation</span>
-              </button>
-              <button 
-                onClick={() => {
-                  if (controlsRef.current && controlsRef.current.object) {
-                    const camera = controlsRef.current.object;
-                    const target = controlsRef.current.target;
-                    const direction = camera.position.clone().sub(target).normalize();
-                    camera.position.addScaledVector(direction, -2);
-                    controlsRef.current.update();
-                  }
-                }}
-                title="تقريب"
-                className="bg-surface/90 backdrop-blur p-2 rounded border border-outline-variant hover:bg-white text-on-surface"
-              >
-                <span className="material-symbols-outlined">zoom_in</span>
-              </button>
-              <button 
-                onClick={() => {
-                  if (controlsRef.current && controlsRef.current.object) {
-                    const camera = controlsRef.current.object;
-                    const target = controlsRef.current.target;
-                    const direction = camera.position.clone().sub(target).normalize();
-                    camera.position.addScaledVector(direction, 2);
-                    controlsRef.current.update();
-                  }
-                }}
-                title="إبعاد"
-                className="bg-surface/90 backdrop-blur p-2 rounded border border-outline-variant hover:bg-white text-on-surface"
-              >
-                <span className="material-symbols-outlined">zoom_out</span>
-              </button>
-            </div>
+
 
             {/* Active Selection Tooltip (Simulated) */}
             {isLoading && (
@@ -1398,7 +1395,23 @@ export default function StudioClient() {
 
         {/* AI Prompt Input (Bottom Center) */}
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-[800px] z-50 px-container-padding pointer-events-none flex flex-col items-center">
+          {activeReference && (
+            <div className="relative pointer-events-auto bg-[#4A90E2]/10 border border-[#4A90E2]/30 rounded-xl px-4 py-1.5 shadow-xs flex items-center gap-2 self-start mb-2 ml-6 text-xs text-[#4A90E2] font-bold">
+              <span className="material-symbols-outlined text-[14px]">brush</span>
+              <span>النمط المعماري النشط: {activeReference}</span>
+              <button 
+                onClick={() => {
+                  window.location.search = "";
+                }}
+                className="hover:text-red-500 rounded-full w-4 h-4 flex items-center justify-center transition-colors"
+                title="إزالة النمط"
+              >
+                <span className="material-symbols-outlined text-[12px]">close</span>
+              </button>
+            </div>
+          )}
           {imageBase64 && (
+
             <div className="relative pointer-events-auto bg-surface-container-lowest border border-outline-variant rounded-xl p-2 shadow-sm self-end mb-2 mr-6">
               <button 
                 onClick={() => setImageBase64(null)}
@@ -1410,7 +1423,7 @@ export default function StudioClient() {
               <img src={imageBase64} alt="Upload Preview" className="h-16 w-16 object-cover rounded-lg border border-outline-variant" />
             </div>
           )}
-          <div className="pointer-events-auto w-full bg-surface-container-lowest border border-outline-variant shadow-md rounded-full flex items-center px-6 py-3 gap-stack-md focus-within:ring-2 ring-secondary/20 transition-all hover:border-secondary">
+          <div className="pointer-events-auto w-full bg-surface/80 backdrop-blur-2xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.1)] rounded-full flex items-center px-6 py-3 gap-stack-md focus-within:ring-2 ring-primary/30 transition-all hover:shadow-[0_12px_48px_rgba(0,0,0,0.15)]">
             <span className="material-symbols-outlined text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
             <input 
               className="grow bg-transparent border-none focus:ring-0 font-body-lg text-body-lg placeholder-on-surface-variant text-primary" 
@@ -1443,18 +1456,6 @@ export default function StudioClient() {
               <span>{isLoading ? "جاري..." : "توليد"}</span>
               {!isLoading && <span className="material-symbols-outlined text-sm">send</span>}
             </button>
-          </div>
-        </div>
-
-        {/* Quick Info Cards (Bento style at bottom corners) - Reusing Stitch layout for economy summary */}
-        <div className="fixed bottom-24 right-[300px] flex gap-4 pointer-events-none">
-          <div className="bg-surface/90 backdrop-blur p-4 rounded-xl border border-outline-variant shadow-sm w-48 pointer-events-auto">
-            <p className="font-label-sm text-label-sm text-on-surface-variant mb-1">الميزانية التقديرية</p>
-            <h4 className="font-headline-md text-headline-md font-bold text-secondary">{formattedBudget}</h4>
-          </div>
-          <div className="bg-surface/90 backdrop-blur p-4 rounded-xl border border-outline-variant shadow-sm w-48 pointer-events-auto">
-            <p className="font-label-sm text-label-sm text-on-surface-variant mb-1">التكلفة الفعلية</p>
-            <h4 className={`font-headline-md text-headline-md font-bold ${isBudgetExceeded() ? "text-error" : "text-primary"}`}>{formattedTotal}</h4>
           </div>
         </div>
 

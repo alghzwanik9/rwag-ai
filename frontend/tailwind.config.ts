@@ -57,13 +57,35 @@ const config: Config = {
         "tertiary-fixed": "#e0e3e6",
         "tertiary-fixed-dim": "#c4c7ca",
         "on-tertiary-fixed": "#191c1e",
-        "on-tertiary-fixed-variant": "#44474a"
+        "on-tertiary-fixed-variant": "#44474a",
+
+        // ── Rwaq Landing ("Spatial Luxury") ────────────────────────────────
+        // Dark, tactile palette used exclusively by the public marketing
+        // surface. The authenticated app keeps the light "Atelier" tokens
+        // above, so these are namespaced to avoid any collision.
+        rwaq: {
+          "slate": "#0E1015",        // Deep Slate — page canvas
+          "slate-deep": "#090B0F",   // Footer / recessed wells
+          "surface": "#141821",      // Raised panels
+          "elevated": "#1A1F2B",     // Cards on panels
+          "sand": "#A48E74",         // Warm Sand — secondary accent
+          "gold": "#E8C488",         // Muted Champagne Gold — primary accent
+          "gold-dim": "#8A7452",     // Gold at rest (borders, inactive)
+          "ink": "#F5F7FA",          // Text primary
+          "ink-muted": "#98A1B0",    // Text secondary
+          "ink-faint": "#5C6675",    // Text tertiary / captions
+          "line": "#232936",         // Hairline dividers
+          "live": "#6FCF97"          // Live/health status only
+        }
       },
       borderRadius: {
         "DEFAULT": "0.125rem",
         "lg": "0.25rem",
         "xl": "0.5rem",
-        "full": "0.75rem"
+        "full": "0.75rem",
+        // The tokens above intentionally shrink `rounded-full` to 0.75rem for
+        // the app shell, so the landing page uses `rounded-pill` for true pills.
+        "pill": "9999px"
       },
       spacing: {
         "sidebar-width": "280px",
@@ -76,6 +98,10 @@ const config: Config = {
         "toolbar-height": "64px"
       },
       fontFamily: {
+        // Landing page typography: Arabic display/body vs. Latin tech labels.
+        "tajawal": ["Tajawal", "IBM Plex Sans", "sans-serif"],
+        "outfit": ["Outfit", "Inter", "sans-serif"],
+        "tech": ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         "body-md": ["IBM Plex Sans", "sans-serif"],
         "label-md": ["IBM Plex Sans", "sans-serif"],
         "label-sm": ["IBM Plex Sans", "sans-serif"],

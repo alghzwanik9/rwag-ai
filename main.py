@@ -274,12 +274,21 @@ def generate_room(request: RoomLayoutRequest, api_request: Request):
                     frontend_items.append(item)
         
         response_data = {"status": "success", "items": frontend_items}
-        
         if "room_dimensions" in payload:
             response_data["room_dimensions"] = payload["room_dimensions"]
+        if "concept_philosophy" in payload:
+            response_data["concept_philosophy"] = payload["concept_philosophy"]
+        if "architectural_references" in payload:
+            response_data["architectural_references"] = payload["architectural_references"]
+        if "spatial_layout_rules" in payload:
+            response_data["spatial_layout_rules"] = payload["spatial_layout_rules"]
+        if "wall_color" in payload:
+            response_data["wall_color"] = payload["wall_color"]
+        if "floor_color" in payload:
+            response_data["floor_color"] = payload["floor_color"]
             
         return response_data
-        
+
     except Exception as e:
         traceback.print_exc()
         error_str = str(e)
@@ -422,7 +431,77 @@ async def load_project_v1(project_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/db-check")
+async def db_check():
+    import httpx
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+    
+    if not supabase_url or not supabase_key:
+        return {"status": "error", "message": "Supabase configuration missing in .env"}
+        
+    try:
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}"
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{supabase_url}/rest/v1/", headers=headers)
+            if resp.status_code in (200, 204):
+                return {"status": "success", "message": "Connected to Supabase successfully"}
+            else:
+                return {"status": "error", "message": f"Supabase responded with code: {resp.status_code}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/v1/studio/generate")
+async def generate_studio_image(request: Request):
+    import httpx
+    body = await request.json()
+    prompt = body.get("prompt", "")
+    room_type = body.get("settings", {}).get("roomType", "Living Room")
+    decor_style = body.get("settings", {}).get("decorStyle", "Modern")
+    color_palette = body.get("settings", {}).get("colorPalette", "Warm Neutrals")
+    
+    enriched_prompt = f"Professional interior design photography of a {room_type}, {decor_style} style, {color_palette} color palette. {prompt}. High resolution, detailed lighting, realistic render."
+    
+    fal_key = os.getenv("FAL_KEY")
+    if not fal_key:
+        print("Warning: FAL_KEY not found. Returning premium placeholder image.")
+        return {
+            "image_url": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?q=80&w=1000&auto=format&fit=crop",
+            "prompt_used": enriched_prompt,
+            "message": "تم التوليد بنجاح (وضع تجريبي)"
+        }
+        
+    try:
+        headers = {
+            "Authorization": f"Key {fal_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "prompt": enriched_prompt,
+            "image_size": "landscape_16_9",
+            "sync_mode": True
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post("https://queue.fal.run/fal-ai/flux/schnell", json=payload, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                img_url = data.get("images", [{}])[0].get("url")
+                if img_url:
+                    return {
+                        "image_url": img_url,
+                        "prompt_used": enriched_prompt,
+                        "message": "تم التوليد بنجاح"
+                    }
+            print(f"Fal API failed: {resp.status_code} - {resp.text}")
+            raise HTTPException(status_code=resp.status_code, detail=f"Fal API failed: {resp.text}")
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
