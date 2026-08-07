@@ -1,0 +1,326 @@
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background-color: #f9f9f9;
+}
+
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.sidebar-active-indicator {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #0060ac;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c4c7c7;
+    border-radius: 10px;
+}
+
+/* ==========================================================================
+   RWAQ LANDING — "Spatial Luxury" design system
+   Scoped to the public marketing page via .rwaq-landing, so the authenticated
+   Atelier (light) app shell above is never affected.
+
+   Layering note: the reusable surface classes live in `@layer components` so
+   ordinary Tailwind utilities (hover:border-*, rounded-*, opacity-*) still win
+   over them. Only the page-level ground colour stays unlayered — it has to
+   override the `bg-surface` utility set on <body> by the root layout.
+   ========================================================================== */
+
+:root {
+    --rwaq-slate: #0e1015;
+    --rwaq-slate-deep: #090b0f;
+    --rwaq-surface: #141821;
+    --rwaq-sand: #a48e74;
+    --rwaq-gold: #e8c488;
+    --rwaq-ink: #f5f7fa;
+    --rwaq-ink-muted: #98a1b0;
+    --rwaq-glass: rgba(255, 255, 255, 0.03);
+    --rwaq-glass-line: rgba(255, 255, 255, 0.08);
+    --rwaq-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The canvas must stay dark past the scroll boundaries (rubber-banding,
+   mobile overscroll), so the ground is painted on <body> itself. */
+body:has(.rwaq-landing) {
+    background-color: var(--rwaq-slate);
+    color: var(--rwaq-ink);
+}
+
+/* ── Keyframes (layer-independent) ────────────────────────────────────── */
+
+@keyframes rwaq-fade-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes rwaq-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-9px); }
+}
+
+@keyframes rwaq-halo {
+    0% { transform: scale(1); opacity: 0.65; }
+    70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes rwaq-sweep {
+    from { transform: translateX(-120%); }
+    to { transform: translateX(220%); }
+}
+
+@keyframes rwaq-scan {
+    0% { transform: translateY(-100%); opacity: 0; }
+    12%, 88% { opacity: 1; }
+    100% { transform: translateY(1100%); opacity: 0; }
+}
+
+@keyframes rwaq-draw {
+    from { stroke-dashoffset: var(--dash, 400); }
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes rwaq-spin-slow {
+    to { transform: rotate(360deg); }
+}
+
+@layer components {
+    .rwaq-landing {
+        font-family: 'Tajawal', 'IBM Plex Sans', sans-serif;
+        background-color: var(--rwaq-slate);
+        color: var(--rwaq-ink);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    .rwaq-landing ::selection {
+        background: rgba(232, 196, 136, 0.26);
+        color: var(--rwaq-ink);
+    }
+
+    /* Latin technical labels (model names, SKUs, metrics) */
+    .rwaq-landing .font-tech {
+        font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+        font-feature-settings: 'tnum' 1;
+    }
+
+    .rwaq-landing :is(h1, h2, h3) {
+        text-wrap: balance;
+    }
+
+    /* Keyboard focus: gold ring, never removed. */
+    .rwaq-landing :is(a, button, input, [tabindex]):focus-visible {
+        outline: 2px solid var(--rwaq-gold);
+        outline-offset: 3px;
+        border-radius: 4px;
+    }
+
+    .rwaq-landing ::-webkit-scrollbar-thumb {
+        background: #2b3240;
+    }
+
+    /* ── Surfaces ──────────────────────────────────────────────────────── */
+
+    .rwaq-glass {
+        background: var(--rwaq-glass);
+        backdrop-filter: blur(22px) saturate(150%);
+        -webkit-backdrop-filter: blur(22px) saturate(150%);
+        border: 1px solid var(--rwaq-glass-line);
+    }
+
+    .rwaq-glass-deep {
+        background: linear-gradient(
+            160deg,
+            rgba(255, 255, 255, 0.055) 0%,
+            rgba(255, 255, 255, 0.02) 42%,
+            rgba(255, 255, 255, 0.008) 100%
+        );
+        backdrop-filter: blur(28px) saturate(160%);
+        -webkit-backdrop-filter: blur(28px) saturate(160%);
+        border: 1px solid var(--rwaq-glass-line);
+    }
+
+    /* Light catching the top edge of a panel, as on a physical bevel. */
+    .rwaq-bevel {
+        position: relative;
+    }
+
+    .rwaq-bevel::before {
+        content: '';
+        position: absolute;
+        inset-inline: 12%;
+        top: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(232, 196, 136, 0.5), transparent);
+        pointer-events: none;
+    }
+
+    /* Fine film grain keeps large dark gradients from banding. */
+    .rwaq-grain::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .rwaq-gold-text {
+        background: linear-gradient(102deg, #f3dcb2 0%, var(--rwaq-gold) 38%, var(--rwaq-sand) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    .rwaq-float { animation: rwaq-float 7s var(--rwaq-ease) infinite; }
+    .rwaq-spin-slow { animation: rwaq-spin-slow 22s linear infinite; }
+
+    /* Scroll reveal — [data-visible] is set by the Reveal component. */
+    .rwaq-reveal {
+        opacity: 0;
+        transform: translateY(22px);
+        transition:
+            opacity 0.85s var(--rwaq-ease),
+            transform 0.85s var(--rwaq-ease);
+        transition-delay: var(--reveal-delay, 0ms);
+    }
+
+    .rwaq-reveal[data-visible='true'] {
+        opacity: 1;
+        transform: none;
+    }
+
+    /* Primary pill CTA: champagne fill with a soft outward bloom. */
+    .rwaq-landing .rwaq-cta {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.625rem;
+        border-radius: 9999px;
+        padding: 0.875rem 1.75rem;
+        font-size: 15px;
+        font-weight: 500;
+        color: #1a1408;
+        background: linear-gradient(102deg, #f3dcb2 0%, var(--rwaq-gold) 52%, #d9b477 100%);
+        border: 1px solid rgba(255, 240, 214, 0.55);
+        box-shadow:
+            0 0 0 1px rgba(232, 196, 136, 0.16),
+            0 10px 34px -10px rgba(232, 196, 136, 0.5),
+            inset 0 1px 0 rgba(255, 255, 255, 0.45);
+        overflow: hidden;
+        transition:
+            box-shadow 0.4s var(--rwaq-ease),
+            transform 0.4s var(--rwaq-ease);
+    }
+
+    .rwaq-landing .rwaq-cta:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 0 0 1px rgba(232, 196, 136, 0.3),
+            0 16px 46px -10px rgba(232, 196, 136, 0.68),
+            inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    }
+
+    .rwaq-landing .rwaq-cta:active {
+        transform: translateY(0);
+    }
+
+    .rwaq-landing .rwaq-cta::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(100deg, transparent 22%, rgba(255, 255, 255, 0.55) 50%, transparent 78%);
+        transform: translateX(-120%);
+        opacity: 0;
+    }
+
+    .rwaq-landing .rwaq-cta:hover::after {
+        opacity: 1;
+        animation: rwaq-sweep 0.9s var(--rwaq-ease);
+    }
+
+    /* Gold specular sweep for outline buttons. */
+    .rwaq-sweep::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        background: linear-gradient(
+            100deg,
+            transparent 20%,
+            rgba(255, 255, 255, 0.28) 50%,
+            transparent 80%
+        );
+        transform: translateX(-120%);
+        opacity: 0;
+    }
+
+    .rwaq-sweep:hover::after {
+        opacity: 1;
+        animation: rwaq-sweep 0.9s var(--rwaq-ease);
+    }
+
+    /* Tactile card lift driven by pointer position (--mx/--my set inline). */
+    .rwaq-tilt {
+        transform-style: preserve-3d;
+        transition: transform 0.5s var(--rwaq-ease), border-color 0.4s ease;
+    }
+
+    /* Cursor-follow highlight inside bento cards. */
+    .rwaq-spot::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.45s ease;
+        background: radial-gradient(
+            420px circle at var(--mx, 50%) var(--my, 50%),
+            rgba(232, 196, 136, 0.13),
+            transparent 62%
+        );
+    }
+
+    .rwaq-spot:hover::before { opacity: 1; }
+
+    /* Blueprint ground plane used behind spatial sections. */
+    .rwaq-blueprint {
+        background-image:
+            linear-gradient(rgba(232, 196, 136, 0.055) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(232, 196, 136, 0.055) 1px, transparent 1px);
+        background-size: 56px 56px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rwaq-landing *,
+    .rwaq-landing *::before,
+    .rwaq-landing *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .rwaq-landing .rwaq-reveal {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}

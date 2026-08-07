@@ -1,0 +1,226 @@
+[
+  {
+    "id": "deck_chair",
+    "name": "كرسي سطح",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "seating",
+    "modelUrl": "/assets/deck_chair.glb",
+    "dimensions": {
+      "width": 580,
+      "height": 900,
+      "depth": 600
+    }
+  },
+  {
+    "id": "dining_chair",
+    "name": "كرسي طعام",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "seating",
+    "modelUrl": "/assets/dining_chair.glb",
+    "dimensions": {
+      "width": 450,
+      "height": 850,
+      "depth": 500
+    }
+  },
+  {
+    "id": "drawer_cabinet",
+    "name": "خزانة أدراج",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "storage",
+    "modelUrl": "/assets/drawer_cabinet.glb",
+    "dimensions": {
+      "width": 600,
+      "height": 800,
+      "depth": 400
+    }
+  },
+  {
+    "id": "coffee_table_art",
+    "name": "طاولة قهوة مودرن",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "tables",
+    "modelUrl": "/assets/coffee_table_art.glb",
+    "dimensions": {
+      "width": 1000,
+      "height": 450,
+      "depth": 600
+    }
+  },
+  {
+    "id": "display_shelf",
+    "name": "رف عرض",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "storage",
+    "modelUrl": "/assets/display_shelf.glb",
+    "dimensions": {
+      "width": 800,
+      "height": 1200,
+      "depth": 300
+    }
+  },
+  {
+    "id": "coffee_table_round",
+    "name": "طاولة قهوة بيضاء",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "tables",
+    "modelUrl": "/assets/coffee_table_round.glb",
+    "dimensions": {
+      "width": 800,
+      "height": 450,
+      "depth": 800
+    }
+  },
+  {
+    "id": "armchair_wood",
+    "name": "كرسي بذراعين خشب",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "seating",
+    "modelUrl": "/assets/armchair_wood.glb",
+    "dimensions": {
+      "width": 700,
+      "height": 950,
+      "depth": 750
+    }
+  },
+  {
+    "id": "outdoor_set",
+    "name": "طقم حديقة",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "tables",
+    "modelUrl": "/assets/outdoor_set.glb",
+    "dimensions": {
+      "width": 1500,
+      "height": 750,
+      "depth": 1500
+    }
+  },
+  {
+    "id": "sofa_khronos",
+    "name": "كنبة",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "seating",
+    "modelUrl": "/assets/sofa_khronos.glb",
+    "dimensions": {
+      "width": 820,
+      "height": 1010,
+      "depth": 960
+    }
+  },
+  {
+    "id": "toy_drum",
+    "name": "ديكور",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/toy_drum.glb",
+    "dimensions": {
+      "width": 600,
+      "height": 600,
+      "depth": 600
+    }
+  },
+  {
+    "id": "camera_antique",
+    "name": "كاميرا",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/camera_antique.glb",
+    "dimensions": {
+      "width": 200,
+      "height": 300,
+      "depth": 150
+    }
+  },
+  {
+    "id": "vase_flowers",
+    "name": "مزهرية",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/vase_flowers.glb",
+    "dimensions": {
+      "width": 150,
+      "height": 350,
+      "depth": 150
+    }
+  },
+  {
+    "id": "damaged_helmet",
+    "name": "ديكور",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/damaged_helmet.glb",
+    "dimensions": {
+      "width": 250,
+      "height": 250,
+      "depth": 300
+    }
+  },
+  {
+    "id": "metal_rough",
+    "name": "ديكور",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/metal_rough.glb",
+    "dimensions": {
+      "width": 200,
+      "height": 200,
+      "depth": 200
+    }
+  },
+  {
+    "id": "materials_shoe",
+    "name": "حذاء",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/materials_shoe.glb",
+    "dimensions": {
+      "width": 310,
+      "height": 120,
+      "depth": 100
+    }
+  },
+  {
+    "id": "water_bottle",
+    "name": "قنينة",
+    "brand": "Rwaq",
+    "price": 0,
+    "currency": "SAR",
+    "category": "decor",
+    "modelUrl": "/assets/water_bottle.glb",
+    "dimensions": {
+      "width": 80,
+      "height": 250,
+      "depth": 80
+    }
+  }
+]

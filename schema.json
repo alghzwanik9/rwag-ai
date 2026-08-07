@@ -25,6 +25,15 @@
       },
       "required": ["width", "depth"]
     },
+    "ambient_mode": {
+      "type": "string",
+      "enum": ["morning", "rainy", "midnight"],
+      "description": "The lighting and weather mood of the room. Choose morning for bright/warm, rainy for overcast/soft, or midnight for dark/dramatic."
+    },
+    "architecture_style": {
+      "type": "string",
+      "description": "The architectural and interior design style of the room (e.g., Industrial, Minimalist, Japandi, Bohemian)."
+    },
     "objects": {
       "type": "array",
       "items": {

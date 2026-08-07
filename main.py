@@ -21,7 +21,7 @@ def get_local_ip():
     return IP
 
 from orchestrator import BlenderOrchestrator
-from ai_agent import generate_layout
+from ai_agent import generate_layout, handle_chat_request
 
 app = FastAPI(title="Atelier AI Orchestrator")
 
@@ -41,6 +41,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from ai_agent import get_retriever
+
+@app.on_event("startup")
+def startup_event():
+    print("Initializing global RAG Retriever...")
+    get_retriever()
+    print("RAG Retriever initialized successfully.")
 
 # ── Asset Catalog ──────────────────────────────────────────────────────────────
 
@@ -76,7 +84,40 @@ async def ingest_assets(req: IngestRequest, background_tasks: BackgroundTasks):
 async def get_assets():
     """Return the furniture asset catalog from LanceDB."""
     records = ingestion_pipeline.get_all()
-    return {"assets": records, "total": len(records)}
+    return {"items": records, "total": len(records)}
+
+FALLBACK_GLB_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb"
+
+
+def _resolve_ikea_model_url(name: str, category: str) -> str:
+    text = f"{name or ''} {category or ''}".strip().lower()
+    if not text:
+        return FALLBACK_GLB_URL
+
+    if "sofa" in text or "كنب" in text or "أريكة" in text:
+        return "/assets/sofa.glb"
+    elif "chair" in text or "كرسي" in text or "armchair" in text or "seating" in text:
+        return "/assets/armchair.glb"
+    elif "tv" in text or "تلفاز" in text or "تلفزيون" in text or "media" in text:
+        return "/assets/tv_unit.glb"
+    elif "table" in text or "طاول" in text or "desk" in text or "مكتب" in text:
+        return "/assets/table.glb"
+    elif "rug" in text or "سجاد" in text:
+        return "/assets/rug.glb"
+    elif "plant" in text or "نبات" in text or "decor" in text or "ديكور" in text:
+        return "/assets/plant.glb"
+
+    # If the catalog metadata does not provide a real 3D model URL,
+    # use a generic fallback GLB so the studio renders a real object
+    # instead of a plain procedural cube.
+    return FALLBACK_GLB_URL
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 @app.get("/api/v1/ikea-catalog")
 async def get_ikea_catalog(limit: int = 200):
@@ -93,24 +134,39 @@ async def get_ikea_catalog(limit: int = 200):
         
         results = []
         for r in records:
+            name = str(r.get("name", "Unknown"))
+            category = str(r.get("category", ""))
+            model_url = str(r.get("model_url", "") or r.get("model_3d_url", "") or _resolve_ikea_model_url(name, category))
+            model_3d_url = str(r.get("model_3d_url", "") or r.get("model_url", "") or model_url or FALLBACK_GLB_URL)
             results.append({
                 "id": str(r.get("item_id", "")),
-                "name": str(r.get("name", "Unknown")),
-                "category": str(r.get("category", "")),
-                "price": float(r.get("price", 0.0)),
+                "name": name,
+                "category": category,
+                "price": _safe_float(r.get("price", 0.0)),
                 "dimensions": {
-                    "width": float(r.get("dim_width", 0.0)),
-                    "height": float(r.get("dim_height", 0.0)),
-                    "depth": float(r.get("dim_depth", 0.0))
+                    "width": _safe_float(r.get("dim_width_mm", r.get("dim_width", 0.0))),
+                    "height": _safe_float(r.get("dim_height_mm", r.get("dim_height", 0.0))),
+                    "depth": _safe_float(r.get("dim_depth_mm", r.get("dim_depth", 0.0)))
                 },
                 "link": str(r.get("link", "")),
-                "short_description": str(r.get("short_description", ""))
+                "short_description": str(r.get("short_description", "")),
+                "model_url": model_url,
+                "model_3d_url": model_3d_url,
+                "thumbnail_url": str(r.get("thumbnail_url", "") or r.get("image_url", "")),
+                "default_scale_x": _safe_float(r.get("default_scale_x", 1.0), 1.0),
+                "default_scale_y": _safe_float(r.get("default_scale_y", 1.0), 1.0),
+                "default_scale_z": _safe_float(r.get("default_scale_z", 1.0), 1.0),
             })
         return {"items": results, "total": len(results)}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/furniture")
+async def get_furniture(limit: int = 200):
+    """Alias for /api/v1/ikea-catalog required by the frontend"""
+    return await get_ikea_catalog(limit=limit)
 
 # ── Legacy / existing endpoints ────────────────────────────────────────────────
 
@@ -149,6 +205,46 @@ MOCK_INVENTORY = [
 async def get_server_ip():
     return {"ip": get_local_ip()}
 
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/api/v1/chat")
+def chat_endpoint(request: ChatRequest):
+    try:
+        payload = handle_chat_request(request.message)
+        frontend_items = []
+        if "items" in payload:
+            for obj in payload["items"]:
+                t = obj.get("transform", {})
+                item = {
+                    "instance_id": str(uuid.uuid4()),
+                    "asset_id": obj.get("asset_id", ""),
+                    "position": [t.get("t_x", 0), t.get("t_y", 0), t.get("t_z", 0)],
+                    "rotation": [0, t.get("yaw_y", 0), 0],
+                    "dimensions": obj.get("dimensions"),
+                    "economy": obj.get("economy")
+                }
+                frontend_items.append(item)
+                
+        return {
+            "status": "success",
+            "text": payload.get("text", ""),
+            "items": frontend_items
+        }
+    except Exception as e:
+        traceback.print_exc()
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "text": "عذراً، حدث خطأ أثناء الاتصال بالخادم. يرجى المحاولة مرة أخرى.",
+                "items": [],
+                "detail": str(e)
+            }
+        )
+
+
 @app.post("/api/generate-room")
 def generate_room(request: RoomLayoutRequest, api_request: Request):
     try:
@@ -178,12 +274,21 @@ def generate_room(request: RoomLayoutRequest, api_request: Request):
                     frontend_items.append(item)
         
         response_data = {"status": "success", "items": frontend_items}
-        
         if "room_dimensions" in payload:
             response_data["room_dimensions"] = payload["room_dimensions"]
+        if "concept_philosophy" in payload:
+            response_data["concept_philosophy"] = payload["concept_philosophy"]
+        if "architectural_references" in payload:
+            response_data["architectural_references"] = payload["architectural_references"]
+        if "spatial_layout_rules" in payload:
+            response_data["spatial_layout_rules"] = payload["spatial_layout_rules"]
+        if "wall_color" in payload:
+            response_data["wall_color"] = payload["wall_color"]
+        if "floor_color" in payload:
+            response_data["floor_color"] = payload["floor_color"]
             
         return response_data
-        
+
     except Exception as e:
         traceback.print_exc()
         error_str = str(e)
@@ -326,7 +431,77 @@ async def load_project_v1(project_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/db-check")
+async def db_check():
+    import httpx
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+    
+    if not supabase_url or not supabase_key:
+        return {"status": "error", "message": "Supabase configuration missing in .env"}
+        
+    try:
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}"
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{supabase_url}/rest/v1/", headers=headers)
+            if resp.status_code in (200, 204):
+                return {"status": "success", "message": "Connected to Supabase successfully"}
+            else:
+                return {"status": "error", "message": f"Supabase responded with code: {resp.status_code}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/v1/studio/generate")
+async def generate_studio_image(request: Request):
+    import httpx
+    body = await request.json()
+    prompt = body.get("prompt", "")
+    room_type = body.get("settings", {}).get("roomType", "Living Room")
+    decor_style = body.get("settings", {}).get("decorStyle", "Modern")
+    color_palette = body.get("settings", {}).get("colorPalette", "Warm Neutrals")
+    
+    enriched_prompt = f"Professional interior design photography of a {room_type}, {decor_style} style, {color_palette} color palette. {prompt}. High resolution, detailed lighting, realistic render."
+    
+    fal_key = os.getenv("FAL_KEY")
+    if not fal_key:
+        print("Warning: FAL_KEY not found. Returning premium placeholder image.")
+        return {
+            "image_url": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?q=80&w=1000&auto=format&fit=crop",
+            "prompt_used": enriched_prompt,
+            "message": "تم التوليد بنجاح (وضع تجريبي)"
+        }
+        
+    try:
+        headers = {
+            "Authorization": f"Key {fal_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "prompt": enriched_prompt,
+            "image_size": "landscape_16_9",
+            "sync_mode": True
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post("https://queue.fal.run/fal-ai/flux/schnell", json=payload, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                img_url = data.get("images", [{}])[0].get("url")
+                if img_url:
+                    return {
+                        "image_url": img_url,
+                        "prompt_used": enriched_prompt,
+                        "message": "تم التوليد بنجاح"
+                    }
+            print(f"Fal API failed: {resp.status_code} - {resp.text}")
+            raise HTTPException(status_code=resp.status_code, detail=f"Fal API failed: {resp.text}")
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

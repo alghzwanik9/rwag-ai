@@ -1,0 +1,74 @@
+{
+    "synthetic_table_1": {
+        "name": "طاولة مصنعة 1",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 1555,
+        "h": 717,
+        "d": 611,
+        "model_url": "/assets/synthetic/table_1.glb"
+    },
+    "synthetic_table_2": {
+        "name": "طاولة مصنعة 2",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 1376,
+        "h": 861,
+        "d": 616,
+        "model_url": "/assets/synthetic/table_2.glb"
+    },
+    "synthetic_table_3": {
+        "name": "طاولة مصنعة 3",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 1722,
+        "h": 850,
+        "d": 1040,
+        "model_url": "/assets/synthetic/table_3.glb"
+    },
+    "synthetic_table_4": {
+        "name": "طاولة مصنعة 4",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 1323,
+        "h": 671,
+        "d": 630,
+        "model_url": "/assets/synthetic/table_4.glb"
+    },
+    "synthetic_table_5": {
+        "name": "طاولة مصنعة 5",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 1108,
+        "h": 803,
+        "d": 961,
+        "model_url": "/assets/synthetic/table_5.glb"
+    },
+    "synthetic_shelf_1": {
+        "name": "رف مصنع 1",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 681,
+        "h": 1743,
+        "d": 473,
+        "model_url": "/assets/synthetic/shelf_1.glb"
+    },
+    "synthetic_shelf_2": {
+        "name": "رف مصنع 2",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 622,
+        "h": 1489,
+        "d": 405,
+        "model_url": "/assets/synthetic/shelf_2.glb"
+    },
+    "synthetic_shelf_3": {
+        "name": "رف مصنع 3",
+        "category": "tables",
+        "source": "Synthetic Factory",
+        "w": 942,
+        "h": 1833,
+        "d": 432,
+        "model_url": "/assets/synthetic/shelf_3.glb"
+    }
+}

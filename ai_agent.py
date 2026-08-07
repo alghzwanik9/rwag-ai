@@ -1,10 +1,67 @@
 import os
+import sys
 import json
+
+# Fix for Windows console encoding (CrewAI emojis)
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from crewai import Agent, Task, Crew, LLM
+
 load_dotenv()
+
+# Set environment variables for CrewAI LLM native initialization
+api_key = os.environ.get("GEMINI_API_KEY")
+os.environ["GOOGLE_API_KEY"] = api_key or ""
+os.environ["GEMINI_API_KEY"] = api_key or ""
+
+
+# ── Pydantic Output Models for CrewAI ─────────────────────────────────────────
+
+class Dimensions(BaseModel):
+    length: float = Field(description="Length (size along X axis) in meters")
+    width: float = Field(description="Width/Depth (size along Z axis) in meters")
+    height: float = Field(description="Height (size along Y axis) in meters")
+
+class Transform(BaseModel):
+    t_x: float = Field(description="Translation along X axis (in meters)")
+    t_y: float = Field(default=0.0, description="Translation along Y axis (vertical). MUST be strictly 0.0")
+    t_z: float = Field(description="Translation along Z axis (in meters)")
+    yaw_y: float = Field(description="Rotation angle around Y axis (in degrees, e.g. 0, 90, 180, -90)")
+    scale: float = Field(default=1.0, description="Scale multiplier, default is 1.0")
+
+class Economy(BaseModel):
+    price: float = Field(description="Retail price of the furniture in Saudi Riyal (SAR)")
+    currency: str = Field(default="SAR", description="ISO currency code, e.g. SAR")
+    store_url: str = Field(description="Product retail URL")
+    brand: str = Field(description="Brand name (e.g. IKEA, Abyat, West Elm)")
+    sku: str = Field(description="SKU or item ID reference")
+
+class Object3D(BaseModel):
+    id: str = Field(description="Unique string identifier for this instance (e.g. sofa_main)")
+    type: str = Field(description="Type of object. Must be one of: 'furniture', 'window', 'wall'")
+    asset_id: str = Field(description="Asset ID. For 'furniture', must be one of: sofa, coffee_table, tv_unit, plant, armchair, bookshelf, rug")
+    hex_color: str = Field(description="Hex color code (e.g., #FFFFFF)")
+    dimensions: Dimensions
+    transform: Transform
+    economy: Economy
+
+class RoomDimensions(BaseModel):
+    width: float = Field(description="Width of the room in meters (X axis size)")
+    depth: float = Field(description="Depth of the room in meters (Z axis size)")
+
+class FullDesignOutput(BaseModel):
+    concept_philosophy: str = Field(description="A detailed design philosophy concept, rationale, colors, and textures explanation.")
+    architectural_references: List[str] = Field(description="List of architectural reference URLs or project names (e.g., Dezeen, ArchDaily).")
+    spatial_layout_rules: str = Field(description="Strict technical layout rules, clearances, and circulation details.")
+    room_dimensions: RoomDimensions
+    objects: List[Object3D]
 
 from asset_scraper import IngestionPipeline
 
@@ -67,173 +124,141 @@ def get_retriever():
             _retriever_instance = False # Use False to indicate failure and avoid retrying
     return _retriever_instance
 
-def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str = "schema.json") -> dict:
-    """Uses Gemini to generate a 3D scene payload adhering to the schema, with optional multimodal vision input."""
-    with open(schema_path, "r", encoding='utf-8') as f:
-        schema = json.load(f)
-
-    # Refine prompt using Groq (translates Arabic, enriches design context, saves tokens/load on Gemini)
-    refined_prompt = refine_prompt_with_groq(prompt)
-
-    asset_registry = get_dynamic_asset_registry()
-    system_instruction = (
-        "You are an expert interior design AI architect and a strict 3D mathematician. "
-        "Your job is to read user prompts and design a 3D room layout matching their request. "
-        "Generate a valid JSON object strictly adhering to the provided JSON Schema.\n"
-        "MULTIMODAL VISION TASK: If an image is provided in the prompt, you MUST visually analyze the room type, style, and furniture placement. "
-        "Estimate the physical size of the room in meters (Width and Depth) and add a `room_dimensions` object to the root JSON. "
-        "Match the identified furniture with the closest available `asset_id`s in our catalog. "
-        "Calculate logical `position` [x, 0, z] coordinates mapping the 2D image layout into our 3D grid as accurately as possible.\n\n"
-        "### STRICT ARCHITECTURAL CONSTRAINTS:\n"
-        "1. REALISTIC ROOM SIZE: Default to smaller, cozy room dimensions (e.g., 5x5 or 4x5 meters) instead of massive spaces, unless the user explicitly asks for a huge hall. "
-        "The floor must be 5x5x0.1 located at (t_x: 0, t_y: 0, t_z: 0). "
-        "The scene MUST be a 'Diorama' (an open stage). ALWAYS generate exactly 2 walls at the back perimeters to frame the scene (e.g., North wall at z=-2.5, West wall at x=-2.5). "
-        "NEVER enclose the room fully. ALWAYS leave the front (South z=2.5 and East x=2.5) completely open for the isometric camera to view inside.\n"
-        "2. ORIGIN & COORDINATES: The origin (0,0,0) is the CENTER of the room. A 5x5 floor goes from X=-2.5 to X=2.5, and Z=-2.5 to Z=2.5.\n"
-        "3. STRICT SPATIAL BOUNDARIES (CRITICAL): ALL generated objects (furniture, plants, etc.) MUST have their `[t_x, t_z]` coordinates strictly inside the room's dimensions. For a 5x5 floor, NO object can have an X or Z coordinate < -2.5 or > 2.5 (e.g., t_x = -4.0 is FORBIDDEN and out-of-bounds). Do not let any object float outside the floor grid.\n"
-        "3. FLOOR ANCHOR & Z POSITION: All objects MUST have transform.t_y = 0. Never place objects in the air or below the floor. "
-        "Their Z position (which in Blender is the vertical axis, corresponding to t_y = 0 in the JSON payload) must be strictly >= 0 (resting on the floor).\n"
-        "4. WALL PLACEMENT: NEVER place walls across the center. A wall along the X axis (length=5) should have Z=-2.5. A wall along the Z axis (width=5) should have X=-2.5.\n"
-        "5. WALL SNAPPING & CLIPPING PREVENTION: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge perfectly aligned flush with a perimeter wall. "
-        "They must NOT intersect or clip through the wall boundaries. For example, if a wall of thickness (width) W_w is at Z = Z_w, the inner surface of the wall is at Z_inner = Z_w + W_w/2. "
-        "For an object of depth (width) W_o aligned flush with this wall, its center Z must be located at Z_inner + W_o/2 (i.e., Z = Z_w + W_w/2 + W_o/2). "
-        "If wall is at Z = -2.5 (width 0.2) and object width is 0.4, center Z = -2.5 + 0.1 + 0.2 = -2.2. Any other value (like -2.3 or -2.4) causes clipping and is strictly prohibited.\n"
-        "6. DYNAMIC WINDOW MESH (CRITICAL): You MUST generate exactly ONE large, floor-to-ceiling architectural window mesh on one of the main walls. Its `type` must be `\"window\"`. Position it flush against or slightly cutting into one of the walls (e.g. if wall is at Z=-2.5, place window at Z=-2.49). Make it wide and tall (e.g., length: 3.0, width: 0.2, height: 2.5) to let natural light in.\n"
-        "7. FURNITURE GROUPING & SPACING (CRITICAL): Furniture MUST face the correct logical direction using `transform.yaw_y` (0, 90, 180, -90 degrees). You MUST group related items but KEEP THEM SPACED OUT. A TV unit and a sofa should be at least 3 meters apart (e.g., Sofa at Z=-1.5, TV at Z=1.5). Do NOT clump them at the center (0,0).\n"
-        f"8. STRICT ASSET REGISTRY & COLLISION PREVENTION: For 'furniture', you MUST provide an `asset_id` strictly chosen from this list: {json.dumps(asset_registry)}. You MUST use spatial math to avoid overlapping. No two pieces of furniture should share the exact same [t_x, t_z] coordinates (except a rug which goes under furniture). Provide at least 0.5m buffer between adjacent chairs/tables.\n"
-        "9. MASTER COLOR THEORY & CONTRAST (CRITICAL): Act as a Master Interior Designer. Define a harmonious architectural palette at the root level using `wall_color` and `floor_color`. Apply the 60-30-10 Rule: 60% dominant neutral colors (walls/floor), 30% secondary contrasting colors (main furniture like sofas/tables), and 10% accent colors (chairs, plants, rugs). STRICT CONTRAST RULE: The furniture MUST NOT blend into the floor or walls. If the floor is light wood, the sofa or rug MUST be a darker or distinct color (e.g., Navy blue, Emerald green, or Dark Grey) to create visual depth. Ensure the generated palette 'pops' with beautiful contrast.\n"
-        "10. INTELLIGENT DETAILING & FILLERS (PROACTIVE DESIGN): Do not be a literal command executor. Be a proactive Interior Designer. Even if the user asks for a simple room, YOU MUST intelligently add logical, non-intrusive filler objects from the asset registry to complete the scene (e.g., add a `plant` in an empty corner, add a `rug` under the coffee table, add an `armchair` at a slight angle near the sofa).\n"
-        "11. COZY GROUPING: Group furniture to create conversational and functional zones. Objects should be clustered naturally (e.g., place a plant right next to the TV stand, not in a random distant corner).\n"
-        "12. SMART ECONOMY (CRITICAL): For EVERY 'furniture' object, you MUST include an 'economy' object conforming to the schema. Generate realistic retail prices for the Saudi market (currency: 'SAR'). Determine the brand based on style: basic/modern = IKEA (SAR 100-2500), contemporary = Abyat (SAR 1500-4500), luxury = West Elm (SAR 4000+). Generate a realistic dummy `store_url` matching the brand, and a random `sku`.\n\n"
-        "### ONE-SHOT PERFECT EXAMPLE (5x5 Cozy Room):\n"
-        "```json\n"
-        "{\n"
-        "  \"stage\": 1,\n"
-        "  \"wall_color\": \"#E8E5DF\",\n"
-        "  \"floor_color\": \"#A48E74\",\n"
-        "  \"room_dimensions\": {\n"
-        "    \"width\": 5,\n"
-        "    \"depth\": 5\n"
-        "  },\n"
-        "  \"objects\": [\n"
-        "    {\n"
-        "      \"id\": \"tv_unit_main\",\n"
-        "      \"type\": \"furniture\",\n"
-        "      \"asset_id\": \"tv_unit\",\n"
-        "      \"hex_color\": \"#1A1A1A\",\n"
-        "      \"dimensions\": {\"length\": 1.5, \"width\": 0.4, \"height\": 0.6},\n"
-        "      \"transform\": {\"t_x\": 0, \"t_y\": 0, \"t_z\": 1.5, \"yaw_y\": 180, \"scale\": 1.0},\n"
-        "      \"economy\": {\"price\": 850, \"currency\": \"SAR\", \"store_url\": \"https://www.ikea.com/sa/en/p/besta\", \"brand\": \"IKEA\", \"sku\": \"302.945.05\"}\n"
-        "    },\n"
-        "    {\n"
-        "      \"id\": \"sofa_main\",\n"
-        "      \"type\": \"furniture\",\n"
-        "      \"asset_id\": \"sofa\",\n"
-        "      \"hex_color\": \"#0060ac\",\n"
-        "      \"dimensions\": {\"length\": 2.2, \"width\": 0.9, \"height\": 0.8},\n"
-        "      \"transform\": {\"t_x\": 0, \"t_y\": 0, \"t_z\": -1.5, \"yaw_y\": 0, \"scale\": 1.0},\n"
-        "      \"economy\": {\"price\": 5400, \"currency\": \"SAR\", \"store_url\": \"https://www.westelm.com.sa/en/p/harmony-sofa\", \"brand\": \"West Elm\", \"sku\": \"WE-8832\"}\n"
-        "    },\n"
-        "    {\n"
-        "      \"id\": \"armchair_side\",\n"
-        "      \"type\": \"furniture\",\n"
-        "      \"asset_id\": \"armchair\",\n"
-        "      \"hex_color\": \"#E5A93C\",\n"
-        "      \"dimensions\": {\"length\": 0.8, \"width\": 0.8, \"height\": 0.9},\n"
-        "      \"transform\": {\"t_x\": 1.5, \"t_y\": 0, \"t_z\": -1.0, \"yaw_y\": -45, \"scale\": 1.0},\n"
-        "      \"economy\": {\"price\": 1400, \"currency\": \"SAR\", \"store_url\": \"https://www.abyat.com/sa/en/armchair\", \"brand\": \"Abyat\", \"sku\": \"AB-882\"}\n"
-        "    },\n"
-        "    {\n"
-        "      \"id\": \"coffee_table\",\n"
-        "      \"type\": \"furniture\",\n"
-        "      \"asset_id\": \"coffee_table\",\n"
-        "      \"hex_color\": \"#8B4513\",\n"
-        "      \"dimensions\": {\"length\": 1.0, \"width\": 0.6, \"height\": 0.4},\n"
-        "      \"transform\": {\"t_x\": 0, \"t_y\": 0, \"t_z\": -0.5, \"yaw_y\": 0, \"scale\": 1.0},\n"
-        "      \"economy\": {\"price\": 1200, \"currency\": \"SAR\", \"store_url\": \"https://www.abyat.com/sa/en/coffee-table-valen\", \"brand\": \"Abyat\", \"sku\": \"AB-1102\"}\n"
-        "    },\n"
-        "    {\n"
-        "      \"id\": \"rug_main\",\n"
-        "      \"type\": \"furniture\",\n"
-        "      \"asset_id\": \"rug\",\n"
-        "      \"hex_color\": \"#D3C5B5\",\n"
-        "      \"dimensions\": {\"length\": 2.5, \"width\": 1.5, \"height\": 0.02},\n"
-        "      \"transform\": {\"t_x\": 0, \"t_y\": 0, \"t_z\": 0.0, \"yaw_y\": 0, \"scale\": 1.0},\n"
-        "      \"economy\": {\"price\": 450, \"currency\": \"SAR\", \"store_url\": \"https://www.ikea.com/sa/en/p/stoense-rug\", \"brand\": \"IKEA\", \"sku\": \"104.268.04\"}\n"
-        "    },\n"
-        "    {\n"
-        "      \"id\": \"plant_corner\",\n"
-        "      \"type\": \"furniture\",\n"
-        "      \"asset_id\": \"plant\",\n"
-        "      \"hex_color\": \"#2E8B57\",\n"
-        "      \"dimensions\": {\"length\": 0.6, \"width\": 0.6, \"height\": 1.5},\n"
-        "      \"transform\": {\"t_x\": -2.0, \"t_y\": 0, \"t_z\": 1.5, \"yaw_y\": 0, \"scale\": 1.0},\n"
-        "      \"economy\": {\"price\": 220, \"currency\": \"SAR\", \"store_url\": \"https://www.ikea.com/sa/en/p/fejka-artificial\", \"brand\": \"IKEA\", \"sku\": \"404.339.42\"}\n"
-        "    }\n"
-        "  ]\n"
-        "}\n"
-        "```\n\n"
-        f"### JSON SCHEMA:\n{json.dumps(schema, indent=2)}"
-    )
-
-    contents = [refined_prompt]
-    if image_b64:
-        import base64
-        try:
-            if "," in image_b64:
-                mime_type = image_b64.split(";")[0].split(":")[1]
-                data = image_b64.split(",")[1]
-            else:
-                mime_type = "image/jpeg"
-                data = image_b64
-            
-            image_bytes = base64.b64decode(data)
-            contents.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
-            print(f"Added multimodal image to Gemini payload (mime_type: {mime_type})")
-        except Exception as e:
-            print(f"Failed to parse image Base64: {e}")
-
+def analyze_image_layout(image_b64: str) -> str:
+    """Uses Gemini to describe the room in the image for the design pipeline."""
+    import base64
     try:
+        if "," in image_b64:
+            mime_type = image_b64.split(";")[0].split(":")[1]
+            data = image_b64.split(",")[1]
+        else:
+            mime_type = "image/jpeg"
+            data = image_b64
+        
+        image_bytes = base64.b64decode(data)
+        parts = [
+            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            "Analyze this room image for interior design. Describe the style, room type, color palette, furniture items, and their relative positions. Output a detailed paragraph in English."
+        ]
+        
         response = _client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-            ),
+            contents=parts
         )
-        response_text = response.text
-    except Exception as gemini_err:
-        print(f"Gemini API failed ({gemini_err}). Falling back to Groq...")
-        try:
-            from groq import Groq
-            groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-            groq_response = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": refined_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=4000,
-                response_format={"type": "json_object"}
-            )
-            response_text = groq_response.choices[0].message.content
-        except Exception as groq_err:
-            print(f"Groq fallback also failed: {groq_err}")
-            raise RuntimeError(f"Both primary (Gemini) and fallback (Groq) models failed. Gemini Error: {gemini_err}") from groq_err
+        return response.text.strip()
+    except Exception as e:
+        print(f"Vision analysis failed: {e}")
+        return ""
 
+def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str = "schema.json") -> dict:
+    """Uses CrewAI to generate a 3D scene payload using a Philosopher agent and a Spatial Architect agent."""
+    
+    # 1. Vision preprocessing
+    image_context = ""
+    if image_b64:
+        print("Analyzing image context using vision model...")
+        analyzed_desc = analyze_image_layout(image_b64)
+        if analyzed_desc:
+            image_context = f"\nAdditional Room Image Context:\n{analyzed_desc}\n"
+            print(f"Vision context gathered: {analyzed_desc[:100]}...")
+
+    asset_registry = get_dynamic_asset_registry()
+
+    # Initialize CrewAI LLM using the loaded Gemini API key
+    llm = LLM(model="gemini/gemini-2.5-flash", api_key=os.environ.get("GEMINI_API_KEY"))
+
+    # 2. Define CrewAI Agents
+    philosopher = Agent(
+        role="Design Philosopher",
+        goal="Analyze user requirements, translate any Arabic input to English, and output a detailed design concept backed by established design philosophies.",
+        backstory=(
+            "You are a world-class interior design philosopher and art historian. You believe that spaces should tell a story "
+            "and be grounded in established design movements (Minimalism, Bauhaus, Japandi, Biophilic, Mid-Century Modern, Brutalism). "
+            "You analyze client wishes and craft deep conceptual designs, explaining why specific colors (using hex codes), "
+            "textures, materials, and lighting setups work conceptually. You provide real or realistic references (e.g. Dezeen, ArchDaily projects)."
+        ),
+        llm=llm,
+        verbose=True
+    )
+
+    architect = Agent(
+        role="Layout & Spatial Architect",
+        goal="Take the philosophical concept and generate a practical, structural room layout conforming to strict 3D schema constraints.",
+        backstory=(
+            "You are a strict 3D architectural planner and spatial mathematician. You translate abstract design philosophies "
+            "into functional, safe, and beautifully spaced room layouts. You respect room scale, clearance walkways (e.g., 36 inches or 0.9m for pathways), "
+            "natural light entry, wall snapping, and prevent collision or overlapping of furniture. You output a mathematically precise layout "
+            "conforming to the 3D scene schema."
+        ),
+        llm=llm,
+        verbose=True
+    )
+
+    # 3. Define Tasks
+    philosopher_task = Task(
+        description=(
+            f"Analyze the following user design request: {prompt}. {image_context}\n"
+            "Formulate a cohesive design concept backed by established interior design philosophies. "
+            "Explain why specific textures, colors, and lighting work. Provide real or realistic reference URLs "
+            "(e.g., Dezeen, ArchDaily articles or specific designer project names)."
+        ),
+        expected_output="A detailed design philosophy description, color rationale, and architectural reference URLs.",
+        agent=philosopher
+    )
+
+    architect_task = Task(
+        description=(
+            "Using the design concept, style guidelines, and references from the Design Philosopher, create a practical 3D room layout.\n"
+            "STRICT SPATIAL AND SCHEMA CONSTRAINTS:\n"
+            "1. REALISTIC ROOM SIZE: Default to room dimensions (width and depth between 4m and 6m, e.g., 5x5m). The floor is centered at (t_x: 0, t_y: 0, t_z: 0).\n"
+            "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North wall at z=-2.5, West wall at x=-2.5). "
+            "NEVER enclose the room fully. Leave the front (South and East sides) open for the camera.\n"
+            "3. STRICT COORDINATE BOUNDARIES: ALL generated objects MUST have their [t_x, t_z] coordinates strictly inside the room's dimensions. For a 5x5 room, no object coordinates can be < -2.5 or > 2.5.\n"
+            "4. FLOOR ANCHOR: All objects MUST have transform.t_y = 0.0. Never let objects float or sink.\n"
+            "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge perfectly aligned flush with a perimeter wall without intersecting it. "
+            "e.g., if West Wall is at X=-2.5 (width 0.2), and a TV unit of depth (width) 0.4 is placed there, its t_x coordinate must be -2.5 + 0.1 + 0.2 = -2.2.\n"
+            "6. WINDOW: Generate exactly ONE large floor-to-ceiling window mesh flush against one of the walls (type must be 'window').\n"
+            "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Group related items but keep them spaced out (e.g. coffee table in front of sofa, TV unit opposite sofa, at least 0.9m pathways).\n"
+            f"8. ASSET REGISTRY: For 'furniture' objects, choose asset_id strictly from this list: {json.dumps(asset_registry)}. Avoid overlaps.\n"
+            "9. COLOR CONTRAST: Apply colors to the objects matching the Philosopher's concept and color palette. Ensure good contrast.\n"
+            "10. SMART ECONOMY: For every object, generate realistic price (currency 'SAR') and store details: basic = IKEA (SAR 100-2500), contemporary = Abyat (SAR 1500-4500), luxury = West Elm (SAR 4000+)."
+        ),
+        expected_output="A structured FullDesignOutput JSON document containing room dimensions and the list of 3D objects with coordinates, dimensions, and economic details.",
+        agent=architect,
+        output_json=FullDesignOutput
+    )
+
+    # 4. Kickoff Crew
+    crew = Crew(
+        agents=[philosopher, architect],
+        tasks=[philosopher_task, architect_task],
+        verbose=True
+    )
+
+    print("Kicking off CrewAI design pipeline...")
+    result = crew.kickoff()
+    print("CrewAI design pipeline finished successfully.")
+
+    # 5. Parse and Process Output
     try:
-        text = response_text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        elif text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        payload = json.loads(text.strip())
+        if hasattr(result, 'json_dict') and result.json_dict:
+            payload = result.json_dict
+        else:
+            payload = json.loads(result.raw.strip())
+            
+        print("Enriching generated layout payload with catalog details using RAG...")
         
-        # Enrich with real IKEA data using RAG
+        # Enforce that stage key is present
+        payload["stage"] = 1
+        
+        # Extract wall and floor colors if missing from root (usually set by agents or fallback)
+        if "wall_color" not in payload:
+            # Look at objects or assign a default light warm color
+            payload["wall_color"] = "#E8E5DF"
+        if "floor_color" not in payload:
+            payload["floor_color"] = "#A48E74"
+            
+        # RAG enrichment for real furniture details
         try:
             retriever = get_retriever()
             if retriever and "objects" in payload:
@@ -253,8 +278,7 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
                                 "sku": best["item_id"],
                                 "name": best["name"]
                             }
-                            # The frontend expects dimensions in meters (X=length, Y=height, Z=width/depth)
-                            # CSV dimensions are in mm.
+                            # Convert mm to meters
                             if best["dim_width"] > 0 and best["dim_height"] > 0 and best["dim_depth"] > 0:
                                 obj["dimensions"] = {
                                     "length": best["dim_width"] / 1000.0,
@@ -263,8 +287,115 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
                                 }
         except Exception as rag_e:
             print(f"[RAG] Failed to enrich payload: {rag_e}")
-            
+
         return payload
+        
     except Exception as e:
-        print(f"Failed to parse LLM response: {response_text}")
+        print(f"Failed to parse or enrich CrewAI response: {result}")
         raise e
+
+def handle_chat_request(user_message: str) -> dict:
+    """Uses Gemini to interpret chat and LanceDB RAG to find matching items."""
+    system_instruction = (
+        "You are an AI Interior Design Assistant. A user will talk to you. "
+        "If they are asking to add or find a specific furniture item (e.g. 'add a cheap sofa', 'find a blue chair', 'أضف كنبة'), "
+        "extract the keywords for a database search into 'search_query' (in English or Arabic), and set 'intent' to 'add'. "
+        "If they are just chatting, set 'intent' to 'chat' and 'search_query' to null. "
+        "Output JSON only: {\"intent\": \"add\"|\"chat\", \"search_query\": \"...\"|null}"
+    )
+    
+    try:
+        response = _client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[user_message],
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+            ),
+        )
+        data = json.loads(response.text.strip())
+    except Exception as e:
+        print(f"Chat intent parsing failed: {e}")
+        data = {"intent": "chat", "search_query": None}
+
+    response_payload = {
+        "text": "مرحباً! كيف يمكنني مساعدتك؟",
+        "items": []
+    }
+
+    if data.get("intent") == "add" and data.get("search_query"):
+        try:
+            retriever = get_retriever()
+            if retriever:
+                results = retriever.search(data["search_query"], limit=1)
+                if results:
+                    best = results[0]
+                    price = best.get("price", 0)
+                    name = best.get("name", "أثاث")
+                    
+                    response_payload["text"] = f"لقد وجدت {name} بسعر {price} ريال. سأقوم بإضافته إلى الغرفة الآن!"
+                    
+                    item_obj = {
+                        "name": name,
+                        "hex_color": "#ffffff",
+                        "economy": {
+                            "price": float(price),
+                            "currency": "SAR",
+                            "store_url": best.get("link", ""),
+                            "brand": "IKEA",
+                            "sku": best.get("item_id", ""),
+                            "name": name
+                        }
+                    }
+                    
+                    dim_w = best.get("dim_width", 0)
+                    dim_h = best.get("dim_height", 0)
+                    dim_d = best.get("dim_depth", 0)
+                    
+                    if dim_w > 0 and dim_h > 0 and dim_d > 0:
+                        item_obj["dimensions"] = {
+                            "length": dim_w / 1000.0,
+                            "height": dim_h / 1000.0,
+                            "width": dim_d / 1000.0
+                        }
+                    else:
+                        item_obj["dimensions"] = {"length": 1.0, "height": 1.0, "width": 1.0}
+                        
+                    item_obj["transform"] = {"t_x": 0, "t_y": 0, "t_z": 0, "yaw_y": 0, "scale": 1.0}
+                    
+                    cat_lower = str(best.get("category", "")).lower()
+                    if "sofa" in cat_lower or "seating" in cat_lower or "مقاعد" in cat_lower:
+                        item_obj["asset_id"] = "sofa"
+                    elif "table" in cat_lower or "طاولات" in cat_lower:
+                        item_obj["asset_id"] = "coffee_table"
+                    elif "tv" in cat_lower or "تلفزيون" in cat_lower:
+                        item_obj["asset_id"] = "tv_unit"
+                    elif "rug" in cat_lower or "سجاد" in cat_lower:
+                        item_obj["asset_id"] = "rug"
+                    elif "chair" in cat_lower or "كرسي" in cat_lower or "armchair" in cat_lower:
+                        item_obj["asset_id"] = "armchair"
+                    elif "bed" in cat_lower or "سرير" in cat_lower:
+                        item_obj["asset_id"] = "bed"
+                    else:
+                        item_obj["asset_id"] = "sofa"
+                        
+                    response_payload["items"].append(item_obj)
+                else:
+                    response_payload["text"] = "عذراً، لم أتمكن من العثور على أثاث يطابق طلبك."
+        except Exception as e:
+            print(f"RAG search failed in chat: {e}")
+            response_payload["text"] = "حدث خطأ أثناء البحث في الكتالوج."
+    else:
+        try:
+            chat_response = _client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[user_message],
+                config=types.GenerateContentConfig(
+                    system_instruction="You are a helpful Interior Design AI. Answer in Arabic briefly.",
+                ),
+            )
+            response_payload["text"] = chat_response.text.strip()
+        except Exception as e:
+            pass
+
+    return response_payload

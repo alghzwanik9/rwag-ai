@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pyarrow as pa
 import lancedb
-from sentence_transformers import SentenceTransformer
+from google import genai
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("rag_ingestor")
@@ -16,7 +16,7 @@ CSV_PATH = Path("data/IKEA_SA_Furniture_Web_Scrapings_sss.csv")
 DB_PATH = Path(".lancedb")
 TABLE_NAME = "ikea_catalog"
 
-# Schema with vector support (sentence-transformers usually outputs 384 dims for all-MiniLM-L6-v2)
+# Schema with vector support (Gemini text-embedding-004 outputs 768 dims)
 SCHEMA = pa.schema([
     pa.field("item_id", pa.string()),
     pa.field("name", pa.string()),
@@ -27,7 +27,7 @@ SCHEMA = pa.schema([
     pa.field("dim_depth", pa.float32()),
     pa.field("link", pa.string()),
     pa.field("short_description", pa.string()),
-    pa.field("vector", pa.list_(pa.float32(), 384))
+    pa.field("vector", pa.list_(pa.float32(), 768))
 ])
 
 def safe_float(val, default=0.0):
@@ -49,8 +49,8 @@ def main():
         logger.error(f"CSV not found at {CSV_PATH}")
         return
 
-    logger.info("Loading sentence-transformers model...")
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+    logger.info("Initializing Gemini API client for embeddings...")
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
     
     records = []
     with open(CSV_PATH, "r", encoding="utf-8") as f:
@@ -70,7 +70,7 @@ def main():
 
     logger.info(f"Loaded {len(records)} records from CSV.")
     
-    batch_size = 500
+    batch_size = 100 # Gemini allows up to 100 texts per batch
     db = lancedb.connect(str(DB_PATH))
     
     if TABLE_NAME in db.table_names():
@@ -88,12 +88,18 @@ def main():
             texts.append(text)
             
         try:
-            # Batch embedding
-            embs = model.encode(texts)
+            # Batch embedding using Gemini API
+            from google.genai import types
+            
+            # Use smaller chunks if needed, but 100 is usually fine for text-embedding-004
+            response = client.models.embed_content(
+                model='text-embedding-004',
+                contents=texts
+            )
             
             # Map vectors back
-            for r, emb in zip(batch, embs):
-                r["vector"] = emb.tolist()
+            for r, emb in zip(batch, response.embeddings):
+                r["vector"] = emb.values
                 
             table.add(batch)
             logger.info(f"Ingested {i + len(batch)} / {total}")

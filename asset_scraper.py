@@ -69,6 +69,9 @@ ASSET_SCHEMA = pa.schema([
     pa.field("source",            pa.string()),
     pa.field("model_url",         pa.string()),
     pa.field("thumbnail_url",     pa.string()),
+    pa.field("style",             pa.string()),
+    pa.field("image_url",         pa.string()),
+    pa.field("model_3d_url",      pa.string()),
     pa.field("dim_width_mm",      pa.float32()),   # millimetres
     pa.field("dim_height_mm",     pa.float32()),
     pa.field("dim_depth_mm",      pa.float32()),
@@ -86,7 +89,10 @@ class AssetRecord:
     category:       str           # seating | tables | lighting | rugs | decor
     source:         str           # vendor / repo name
     model_url:      str           # .glb URL (local path or absolute)
+    style:          str = ""
     thumbnail_url:  str = ""
+    image_url:      str = ""
+    model_3d_url:   str = ""
     dim_width_mm:   float = 1000.0
     dim_height_mm:  float = 1000.0
     dim_depth_mm:   float = 1000.0
@@ -111,6 +117,9 @@ class AssetRecord:
                 "height": self.dim_height_mm,
                 "depth":  self.dim_depth_mm,
             },
+            "style":         self.style,
+            "image_url":     self.image_url,
+            "model_3d_url":  self.model_3d_url,
             "default_scale": [
                 self.default_scale_x,
                 self.default_scale_y,
@@ -144,9 +153,12 @@ class LanceDBAssetStore:
             "asset_id":        record.asset_id,
             "name":            record.name,
             "category":        record.category,
+            "style":           record.style or "",
             "source":          record.source,
             "model_url":       record.model_url,
-            "thumbnail_url":   record.thumbnail_url,
+            "model_3d_url":    record.model_3d_url or "",
+            "thumbnail_url":   record.thumbnail_url or "",
+            "image_url":       record.image_url or "",
             "dim_width_mm":    float(record.dim_width_mm),
             "dim_height_mm":   float(record.dim_height_mm),
             "dim_depth_mm":    float(record.dim_depth_mm),
@@ -173,9 +185,12 @@ class LanceDBAssetStore:
                 asset_id      = r["asset_id"],
                 name          = r["name"],
                 category      = r["category"],
+                style         = r.get("style", ""),
                 source        = r["source"],
                 model_url     = r["model_url"],
+                model_3d_url  = r.get("model_3d_url", ""),
                 thumbnail_url = r.get("thumbnail_url", ""),
+                image_url     = r.get("image_url", ""),
                 dim_width_mm  = r["dim_width_mm"],
                 dim_height_mm = r["dim_height_mm"],
                 dim_depth_mm  = r["dim_depth_mm"],
@@ -228,9 +243,9 @@ def parse_dimensions(text: str) -> Optional[tuple[float, float, float]]:
     # Pattern 2: individual labelled fields (Width / Height / Depth)
     labels = {}
     for axis, pattern in [
-        ("w", r"(?:width|w)[:\s]+([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)"),
-        ("h", r"(?:height|h)[:\s]+([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)"),
-        ("d", r"(?:depth|depth)[:\s]+([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)"),
+        ("w", r"\b(?:width|w)[:\s]+([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)"),
+        ("h", r"\b(?:height|h)[:\s]+([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)"),
+        ("d", r"\b(?:depth|d)[:\s]+([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)"),
     ]:
         m2 = re.search(pattern, text, re.IGNORECASE)
         if m2:
@@ -253,6 +268,72 @@ class IngestionResult:
     def log(self, msg: str, level: str = "info") -> None:
         self.messages.append(msg)
         getattr(logger, level)(msg)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Source 1.5: Synthetic Data Scanner
+# ─────────────────────────────────────────────────────────────────────────────
+
+class SyntheticFileScanner:
+    """
+    Scans frontend/public/assets/synthetic/ for .glb files and uses the
+    auto-generated synthetic_metadata.json for precise dimensions.
+    """
+
+    def run(
+        self,
+        store: LanceDBAssetStore,
+        result: IngestionResult,
+        dry_run: bool = False,
+    ) -> None:
+        synthetic_dir = _ROOT / "frontend" / "public" / "assets" / "synthetic"
+        meta_path = synthetic_dir / "synthetic_metadata.json"
+        
+        if not synthetic_dir.exists() or not meta_path.exists():
+            result.log(f"Synthetic asset dir or metadata not found: {synthetic_dir}", "warning")
+            return
+
+        with open(meta_path, 'r', encoding='utf-8') as f:
+            metadata = json.load(f)
+
+        for glb_path in sorted(synthetic_dir.glob("*.glb")):
+            stem = glb_path.stem  # e.g. "table_1"
+            meta_key = f"synthetic_{stem}" # As defined in blender_factory.py
+            
+            # Allow fallback if the key is just the stem
+            if meta_key not in metadata and stem in metadata:
+                meta_key = stem
+                
+            seed = metadata.get(meta_key)
+
+            if seed is None:
+                result.log(
+                    f"SKIP {glb_path.name} — no metadata entry in synthetic_metadata.json", "warning"
+                )
+                result.skipped += 1
+                continue
+
+            record = AssetRecord(
+                asset_id      = meta_key,
+                name          = seed.get("name", stem),
+                category      = seed.get("category", "decor"),
+                source        = seed.get("source", "Synthetic Factory"),
+                model_url     = seed.get("model_url", f"/assets/synthetic/{glb_path.name}"),
+                thumbnail_url = "",
+                dim_width_mm  = float(seed.get("w", 1000)),
+                dim_height_mm = float(seed.get("h", 1000)),
+                dim_depth_mm  = float(seed.get("d", 1000)),
+            )
+
+            if dry_run:
+                result.log(f"[DRY-RUN] Would ingest: {record.asset_id}")
+            else:
+                try:
+                    store.upsert(record)
+                    result.log(f"Ingested synthetic asset: {record.name} ({record.asset_id})")
+                    result.ingested += 1
+                except Exception as exc:
+                    result.log(f"ERROR persisting {stem}: {exc}", "error")
+                    result.errors += 1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source 1: Local File System Scanner
@@ -619,6 +700,9 @@ class IngestionPipeline:
         if source == "local":
             LocalFileScanner().run(self.store, result, dry_run=dry_run)
 
+        elif source == "synthetic":
+            SyntheticFileScanner().run(self.store, result, dry_run=dry_run)
+
         elif source == "khronos":
             KhronosGitHubScraper(delay=delay, max_models=max_models).run(
                 self.store, result, dry_run=dry_run
@@ -632,15 +716,16 @@ class IngestionPipeline:
             ).run(self.store, result, dry_run=dry_run)
 
         elif source == "all":
-            # Run local + khronos in sequence
+            # Run local + synthetic + khronos in sequence
             result.log("=== Running ALL sources ===")
             LocalFileScanner().run(self.store, result, dry_run=dry_run)
+            SyntheticFileScanner().run(self.store, result, dry_run=dry_run)
             KhronosGitHubScraper(delay=delay, max_models=max_models).run(
                 self.store, result, dry_run=dry_run
             )
 
         else:
-            raise ValueError(f"Unknown source '{source}'. Use: local | khronos | http | all")
+            raise ValueError(f"Unknown source '{source}'. Use: local | synthetic | khronos | http | all")
 
         result.log(
             f"Pipeline complete — ingested={result.ingested} "
@@ -660,7 +745,7 @@ class IngestionPipeline:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Rwaq Asset Ingestion Pipeline")
     parser.add_argument("--source",    default="local",
-                        choices=["local", "khronos", "http", "all"],
+                        choices=["local", "synthetic", "khronos", "http", "all"],
                         help="Ingestion source")
     parser.add_argument("--url",       default=None,
                         help="Target URL for source=http")
