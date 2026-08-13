@@ -20,6 +20,8 @@ graphify-out/
 *.blend
 *.blend1
 *.glb
+generated_blender_script.py
+
 
 # OS generated files
 .DS_Store

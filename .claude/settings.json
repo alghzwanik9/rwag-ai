@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"^\\(D:|/|[A-Za-z]:\\\\\\\\\\\\\\\\\\)|warning|error\")",
+      "Bash(grep -nE \"warning|error|\\\\.tsx|\\\\.ts$\")"
+    ]
+  }
+}

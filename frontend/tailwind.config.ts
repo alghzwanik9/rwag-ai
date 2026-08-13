@@ -59,6 +59,16 @@ const config: Config = {
         "on-tertiary-fixed": "#191c1e",
         "on-tertiary-fixed-variant": "#44474a",
 
+        // ── Narrative landing ("architectural drawing") ────────────────────
+        // Flat tokens for the scroll-driven 3D landing page. `slate` overrides
+        // Tailwind's default slate scale — verified unused in this codebase.
+        "ink": "#0A1220",    // base background
+        "night": "#12203A",  // surfaces and cards
+        "brass": "#C79A4B",  // brand accent — wireframes, figures, CTA
+        "sand": "#E8DCC8",   // wood and beige materials
+        "chalk": "#F7F4EE",  // primary text
+        "slate": "#7C8CA5",  // secondary text and labels
+
         // ── Rwaq Landing ("Spatial Luxury") ────────────────────────────────
         // Dark, tactile palette used exclusively by the public marketing
         // surface. The authenticated app keeps the light "Atelier" tokens
@@ -98,6 +108,11 @@ const config: Config = {
         "toolbar-height": "64px"
       },
       fontFamily: {
+        // Narrative landing: Kufi headings / Plex Sans Arabic body / Plex Mono
+        // numerals. Variables are set by next/font in app/layout.tsx.
+        "kufi": ["var(--font-kufi)", "sans-serif"],
+        "plex-arabic": ["var(--font-plex-arabic)", "sans-serif"],
+        "plex-mono": ["var(--font-plex-mono)", "monospace"],
         // Landing page typography: Arabic display/body vs. Latin tech labels.
         "tajawal": ["Tajawal", "IBM Plex Sans", "sans-serif"],
         "outfit": ["Outfit", "Inter", "sans-serif"],

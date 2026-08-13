@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from main import app
+from backend.app.main import app
 
 client = TestClient(app)
 
@@ -13,8 +13,8 @@ def test_get_server_ip():
     assert "ip" in data
     assert isinstance(data["ip"], str)
 
-def test_list_projects():
-    response = client.get("/api/projects")
+def test_get_ikea_catalog():
+    response = client.get("/api/v1/ikea-catalog?limit=5")
     assert response.status_code == 200
     data = response.json()
-    assert "projects" in data
+    assert "items" in data
