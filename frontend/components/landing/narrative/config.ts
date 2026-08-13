@@ -14,19 +14,46 @@ export const ROOM = {
 
 /* ── Materials (Act 3) ──────────────────────────────────────────────────── */
 
-/** Palette for the material pass; the wireframe grey is the Act 1–2 state. */
+/**
+ * Palette for the material pass; the wireframe grey is the Act 1–2 state.
+ *
+ * The three surfaces are spaced deliberately far apart in value — off-white
+ * plaster, mid sand floor, dark oak — because that separation is what reads as
+ * a designed room. Pulling them into a single warm band, as an earlier pass
+ * did, flattens the space no matter how good the lighting is.
+ */
 export const MATERIALS = {
   wireframe: '#5A6474',
-  /** Fluted oak slats on the back wall. */
-  oak: '#9A7248',
-  /** Recessed panel behind the flutes, one step darker for depth. */
-  oakRecess: '#5A4028',
-  /** Matte plaster on the other three walls. */
-  plaster: '#C4B9A5',
-  /** Travertine floor, sand. */
-  travertine: '#CDC0A6',
+  /** Fluted oak slats on the back wall — the room's darkest surface. */
+  oak: '#7E5A34',
+  /** Recessed panel behind the flutes, well below the slats for depth. */
+  oakRecess: '#3C2917',
+  /** Matte plaster: a warm off-white, NOT a beige. Barely saturated, so it
+   * takes its warmth from the key light rather than from its own pigment. */
+  plaster: '#E9E3D9',
+  /** Ceiling plaster, a shade lighter again so the room reads open overhead. */
+  ceiling: '#F1ECE4',
+  /** Travertine floor, sand — the middle value between plaster and oak. It
+   * faces the sky and every light in the rig, so its base stays well down. */
+  travertine: '#B29C78',
   /** Phase 1 placeholder slab the travertine cross-fades in over. */
   slab: '#2A3242',
+} as const;
+
+/** Act 4 furniture, drawn from the same palette so the volumes belong. */
+export const FURNITURE = {
+  /** Wool rug. Deliberately the one cool, dark note in an otherwise warm
+   * room: a sand-adjacent rug sat at the travertine's own value and hue and
+   * simply vanished into the floor, taking the seating zone with it. */
+  rug: '#414E4C',
+  /** Oatmeal upholstery — the room's one neutral that leans away from warm. */
+  upholstery: '#A79E90',
+  /** Solid oak tops, matching the back-wall fluting. */
+  oak: '#7E5A34',
+  /** Dark bronze legs and frames. */
+  frame: '#3F3830',
+  /** Switched-off panel — near black, with just enough sheen to catch the key. */
+  screen: '#15181D',
 } as const;
 
 /** Fluted oak profile on the back wall — slat count and section in meters. */
@@ -157,21 +184,58 @@ export const CTA = {
 
 /* ── Act 4 footprints ───────────────────────────────────────────────────── */
 
+export type FurnishingId = 'rug' | 'sofa' | 'table' | 'desk' | 'console' | 'tv';
+
+export type Supplier = 'IKEA' | 'West Elm' | 'أبيات' | 'إكسترا';
+
+/** Plan rectangle in meters, centered on the room's origin. */
 export type Footprint = {
-  labelAr: string;
-  /** Center position on the floor in meters (room-centered coordinates). */
   x: number;
   z: number;
   w: number;
   d: number;
 };
 
-export const FOOTPRINTS: readonly Footprint[] = [
-  { labelAr: 'سجادة', x: 0, z: 0.4, w: 3.0, d: 2.2 },
-  { labelAr: 'أريكة', x: 0, z: 1.6, w: 2.3, d: 0.95 },
-  { labelAr: 'طاولة', x: 0, z: 0.2, w: 1.1, d: 0.6 },
-  { labelAr: 'مكتب', x: -1.7, z: -1.7, w: 1.4, d: 0.7 },
+export type Furnishing = {
+  /** Selects the Act 4 volume, and keys its Act 5 line item. */
+  id: FurnishingId;
+  labelAr: string;
+  supplier: Supplier;
+  /** SAR. */
+  price: number;
+  /** Absent on wall-mounted pieces — they stand on nothing, so they draw no
+   * plan outline, but they still occupy a slot in the reveal order. */
+  footprint?: Footprint;
+};
+
+/**
+ * The single source of truth for what is in the room.
+ *
+ * The Act 4 plan outlines, the Act 4 volumes and the Act 5 quote are all
+ * derived from this one list, in this order — so the card can never drift out
+ * of step with what the scene actually renders. Adding a piece here adds it to
+ * all three; the total recomputes on its own.
+ */
+export const FURNISHINGS: readonly Furnishing[] = [
+  { id: 'rug', labelAr: 'سجادة منسوجة', supplier: 'IKEA', price: 1495,
+    footprint: { x: 0, z: 0.4, w: 3.0, d: 2.2 } },
+  { id: 'sofa', labelAr: 'أريكة ٣ مقاعد', supplier: 'IKEA', price: 2495,
+    footprint: { x: 0, z: 1.6, w: 2.3, d: 0.95 } },
+  { id: 'table', labelAr: 'طاولة قهوة بلوط', supplier: 'أبيات', price: 1150,
+    footprint: { x: 0, z: 0.2, w: 1.1, d: 0.6 } },
+  { id: 'desk', labelAr: 'مكتب خشب صلب', supplier: 'أبيات', price: 1780,
+    footprint: { x: -1.7, z: -1.7, w: 1.4, d: 0.7 } },
+  // Sits against the fluted wall, 5 mm clear of the slat faces.
+  { id: 'console', labelAr: 'كونسول تلفزيون بلوط', supplier: 'أبيات', price: 1320,
+    footprint: { x: 0, z: -2.24, w: 1.6, d: 0.4 } },
+  { id: 'tv', labelAr: 'شاشة ٥٥ بوصة', supplier: 'إكسترا', price: 2850 },
 ];
+
+export type PlacedFurnishing = Furnishing & { footprint: Footprint };
+
+/** Narrowing guard so callers can read `footprint` without a non-null assertion. */
+export const isPlaced = (piece: Furnishing): piece is PlacedFurnishing =>
+  piece.footprint !== undefined;
 
 /** Dashed circulation paths between footprints, labeled `90 سم`. */
 export const CIRCULATION: readonly { from: readonly [number, number]; to: readonly [number, number] }[] = [
@@ -181,21 +245,11 @@ export const CIRCULATION: readonly { from: readonly [number, number]; to: readon
 
 /* ── Act 5 cost card ────────────────────────────────────────────────────── */
 
-export type CostItem = {
-  nameAr: string;
-  supplier: 'IKEA' | 'West Elm' | 'أبيات';
-  price: number;
-};
-
-export const COST_ITEMS: readonly CostItem[] = [
-  { nameAr: 'أريكة ٣ مقاعد', supplier: 'IKEA', price: 2495 },
-  { nameAr: 'طاولة قهوة بلوط', supplier: 'أبيات', price: 1150 },
-  { nameAr: 'سجادة منسوجة', supplier: 'IKEA', price: 1495 },
-  { nameAr: 'مكتب خشب صلب', supplier: 'أبيات', price: 1780 },
-  { nameAr: 'مصباح أرضي نحاسي', supplier: 'West Elm', price: 620 },
-];
-
-export const COST_TOTAL: number = COST_ITEMS.reduce((sum, item) => sum + item.price, 0);
+/**
+ * The quote is `FURNISHINGS` itself — there is no second list to keep in sync,
+ * and the total is never a literal anyone can forget to update.
+ */
+export const COST_TOTAL: number = FURNISHINGS.reduce((sum, piece) => sum + piece.price, 0);
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 

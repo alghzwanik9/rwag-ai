@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ACT_COPY, COST_ITEMS, CTA, type ActCopy, type ActId } from './config';
+import { ACT_COPY, CTA, FURNISHINGS, type ActCopy, type ActId } from './config';
 import type { HudRefs } from './hud';
 
 /** Mono numerals stay LTR inside the RTL layout. */
@@ -67,13 +67,13 @@ function CostCard({ hud }: { hud: HudRefs }) {
         QUOTE — SAR
       </p>
       <ul className="divide-y divide-slate/15">
-        {COST_ITEMS.map((item) => (
-          <li key={item.nameAr} className="flex items-center justify-between gap-3 py-2.5">
+        {FURNISHINGS.map((piece) => (
+          <li key={piece.id} className="flex items-center justify-between gap-3 py-2.5">
             <span className="min-w-0">
-              <span className="block truncate font-plex-arabic text-sm text-chalk">{item.nameAr}</span>
-              <span className="block font-plex-mono text-[10px] tracking-wide text-slate">{item.supplier}</span>
+              <span className="block truncate font-plex-arabic text-sm text-chalk">{piece.labelAr}</span>
+              <span className="block font-plex-mono text-[10px] tracking-wide text-slate">{piece.supplier}</span>
             </span>
-            <Money value={item.price} />
+            <Money value={piece.price} />
           </li>
         ))}
       </ul>

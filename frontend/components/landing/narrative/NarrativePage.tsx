@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ScrollControls } from '@react-three/drei';
 import {
@@ -31,8 +31,37 @@ function useMediaFlag(query: string): boolean {
   return matches;
 }
 
+/** All three live at module scope so `useSyncExternalStore` sees stable identities. */
+const subscribeToNothing = () => () => {};
+const readMotionParam = () => new URLSearchParams(window.location.search).get('motion');
+const motionParamOnServer = () => null;
+
+/**
+ * `?motion=off` opts into the static page. Nothing else selects it.
+ *
+ * The OS `prefers-reduced-motion` setting deliberately does NOT gate the
+ * scene: Windows turns that flag on machine-wide as part of unrelated
+ * animation preferences, so honouring it silently removed the narrative for
+ * people who had never asked to lose it. The static page is still built and
+ * still reachable — it is a choice the visitor makes, not a state the system
+ * imposes.
+ *
+ * Read straight off `window.location` rather than through `useSearchParams`,
+ * which would opt this route out of static rendering unless the whole tree
+ * were wrapped in a Suspense boundary. The flag is only ever needed on the
+ * client, so there is nothing to gain from the router here. Nothing is
+ * subscribed to either: the query string cannot change without a navigation
+ * that remounts this component.
+ *
+ * The server snapshot is `null`, so the static HTML and the hydration pass
+ * agree; React then re-reads the client snapshot.
+ */
+function useMotionParam(): string | null {
+  return useSyncExternalStore(subscribeToNothing, readMotionParam, motionParamOnServer);
+}
+
 export default function NarrativePage() {
-  const reducedMotion = useMediaFlag('(prefers-reduced-motion: reduce)');
+  const motion = useMotionParam();
   const compact = useMediaFlag('(max-width: 767px)');
 
   const scrollEl = useRef<HTMLElement | null>(null);
@@ -45,8 +74,8 @@ export default function NarrativePage() {
     [],
   );
 
-  // Bypassed reduced-motion check to always show the interactive 3D scene
-  // if (reducedMotion) return <StaticFallback />;
+  // Every hook above runs unconditionally, so this early return is safe.
+  if (motion === 'off') return <StaticFallback />;
 
   const acts = compact ? MOBILE_ACTS : DESKTOP_ACTS;
   const ranges = compact ? MOBILE_RANGES : DESKTOP_RANGES;
@@ -63,8 +92,12 @@ export default function NarrativePage() {
         </div>
       </div>
 
-      {/* `shadows` enables the shadow map the Act 3 key light casts into. */}
-      <Canvas shadows dpr={[1, 2]} camera={{ fov: 42, near: 0.1, far: 60 }}>
+      {/* Enables the shadow map the Act 3 key light casts into.
+          "percentage" (PCFShadowMap) rather than a bare `shadows`: the boolean
+          form selects PCFSoftShadowMap, which this three version dropped from
+          its shader define table — it silently degrades to BasicShadowMap,
+          giving single-tap aliased edges and ignoring `shadow-radius`. */}
+      <Canvas shadows="percentage" dpr={[1, 2]} camera={{ fov: 42, near: 0.1, far: 60 }}>
         <color attach="background" args={['#0A1220']} />
         <fog attach="fog" args={['#0A1220', 12, 30]} />
         <ScrollControls pages={acts.length} damping={0.25}>

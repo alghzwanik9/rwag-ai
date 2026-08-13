@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ACT_COPY, COST_ITEMS, COST_TOTAL, CTA } from './config';
+import { ACT_COPY, COST_TOTAL, CTA, FURNISHINGS } from './config';
 
 /**
  * Reduced-motion version: no canvas, no animation — all copy stacked
@@ -39,14 +39,14 @@ export default function StaticFallback() {
 
         <section className="mt-16 max-w-sm rounded-2xl border border-slate/25 bg-night p-6">
           <ul className="divide-y divide-slate/15">
-            {COST_ITEMS.map((item) => (
-              <li key={item.nameAr} className="flex items-center justify-between gap-3 py-2.5">
+            {FURNISHINGS.map((piece) => (
+              <li key={piece.id} className="flex items-center justify-between gap-3 py-2.5">
                 <span className="min-w-0">
-                  <span className="block truncate font-plex-arabic text-sm">{item.nameAr}</span>
-                  <span className="block font-plex-mono text-[10px] tracking-wide text-slate">{item.supplier}</span>
+                  <span className="block truncate font-plex-arabic text-sm">{piece.labelAr}</span>
+                  <span className="block font-plex-mono text-[10px] tracking-wide text-slate">{piece.supplier}</span>
                 </span>
                 <span dir="ltr" className="font-plex-mono">
-                  {item.price.toLocaleString('en-US')}
+                  {piece.price.toLocaleString('en-US')}
                 </span>
               </li>
             ))}
