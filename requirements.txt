@@ -1,0 +1,84 @@
+# Rwaq AI — backend dependencies
+#
+# Derived by reading the imports of every Python entry point and everything
+# they pull in transitively from backend/:
+#   backend/app/main.py, config.py, schemas.py, api/routes.py,
+#   backend/app/services/{ai,blender,rag,scraper}_service.py,
+#   orchestrator.py, ai_agent.py, rag_retriever.py, rag_ingestor.py,
+#   asset_scraper.py, blender_generator.py, clean_db.py
+#
+# Python 3.12 (the interpreter this was resolved against is 3.12.10).
+
+# ── web ────────────────────────────────────────────────────────────────────
+# backend/app/main.py: FastAPI, CORSMiddleware, StaticFiles
+# backend/app/api/routes.py: APIRouter, HTTPException, Request, BackgroundTasks
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+# backend/app/schemas.py: BaseModel; ai_agent.py: BaseModel, Field
+pydantic==2.10.4
+
+# ── ai ─────────────────────────────────────────────────────────────────────
+# ai_agent.py + rag_ingestor.py + backend/app/services/rag_service.py:
+#   `from google import genai` / `from google.genai import types`
+# NOTE: this is the current SDK (package `google-genai`), NOT the legacy
+# `google-generativeai` package. They are different distributions.
+google-genai==1.2.0
+# ai_agent.py: `from crewai import Agent, Task, Crew, LLM`
+crewai==0.95.0
+# ai_agent.py line 83, imported lazily inside a function: `from groq import Groq`
+groq==0.15.0
+
+# ── vector ─────────────────────────────────────────────────────────────────
+# rag_service.py, rag_ingestor.py, asset_scraper.py
+lancedb==0.17.0
+pyarrow==18.1.0
+# Required by asset_scraper.py:180 — `self._table.to_pandas()`. Not imported by
+# name anywhere, which is why it is easy to miss: lancedb's `.to_pandas()` needs
+# pandas at call time. Without it that line raises ModuleNotFoundError, the bare
+# `except Exception: return []` on line 181 swallows it, and /api/v1/assets
+# answers 200 with total:0 while 19 rows sit in the table.
+pandas==2.2.3
+
+# ── 3d ─────────────────────────────────────────────────────────────────────
+# Intentionally empty — see the "Blender" note at the bottom of this file.
+# `bpy` is NOT a dependency of the host interpreter.
+
+# ── utility ────────────────────────────────────────────────────────────────
+# config.py, ai_agent.py, asset_scraper.py: load_dotenv
+python-dotenv==1.0.1
+# asset_scraper.py: async HTTP client
+httpx==0.28.1
+# asset_scraper.py: `from bs4 import BeautifulSoup`
+beautifulsoup4==4.12.3
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Imported somewhere in the tree but NOT reachable at runtime — deliberately
+# excluded rather than silently installed:
+#
+#   openai
+#     Imported only by ai_assistant.py (`from openai import OpenAI`).
+#     Nothing imports ai_assistant. Verified:
+#       $ grep -rn "ai_assistant" --include=*.py .
+#       (no hits outside the file itself)
+#
+#   bpy
+#     Imported only by blender_factory.py and generated_blender_script.py.
+#     Both are executed *inside* Blender, never imported by this interpreter.
+#     Nothing imports blender_factory either (only a comment in
+#     asset_scraper.py:300 mentions it by name).
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# Blender: this project needs a real Blender executable, not the pip wheel.
+#
+# orchestrator.py:11  BLENDER_EXECUTABLE = os.getenv("BLENDER_EXECUTABLE", "blender")
+# orchestrator.py:50  subprocess.run([executable, "--background", "--python",
+#                                     GENERATED_SCRIPT_PATH], ...)
+#
+# blender_generator.py imports only json/os/re — it *emits* a Python script;
+# it does not drive Blender itself. The script is then handed to Blender as a
+# separate process. So `pip install bpy` would satisfy no import in this
+# codebase and would not make .glb export work.
+#
+# Install Blender separately and either put it on PATH as `blender` or set
+# BLENDER_EXECUTABLE to its absolute path.

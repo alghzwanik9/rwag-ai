@@ -492,7 +492,12 @@ export default function StudioClient() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { assets: catalogAssets, isLoading: isAssetsLoading } = useAssets();
+  const {
+    assets: catalogAssets,
+    isLoading: isAssetsLoading,
+    error: assetsError,
+    isDemoData: isDemoCatalog,
+  } = useAssets();
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null);
 
   const sceneItems       = useSceneStore((s) => s.sceneItems);
@@ -1532,6 +1537,28 @@ export default function StudioClient() {
             <p className="text-on-surface font-bold text-sm animate-pulse">جاري تجهيز الغرفة...</p>
           </div>
         </div>
+
+        {/* ── تنبيه: الخادم غير متاح ──
+             لا يُخفى هذا الخطأ خلف بيانات تجريبية: الكتالوج يبقى فارغاً حتى
+             يعمل الخادم، عدا إذا طُلبت البيانات التجريبية صراحةً. */}
+        {assetsError && (
+          <div
+            role="alert"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-110 flex items-center gap-3 rounded-full border border-error/40 bg-error-container px-5 py-2.5 text-on-error-container shadow-lg"
+          >
+            <span className="material-symbols-outlined text-[20px]">cloud_off</span>
+            <span className="text-sm font-medium">{assetsError}</span>
+            {isDemoCatalog ? (
+              <span className="rounded-full bg-on-error-container/15 px-2.5 py-0.5 text-[11px] font-bold">
+                بيانات تجريبية
+              </span>
+            ) : (
+              <a href="?demo=1" className="text-[11px] font-bold underline underline-offset-2">
+                عرض بيانات تجريبية
+              </a>
+            )}
+          </div>
+        )}
 
         {/* ── إشعار Toast ── */}
         <div className={`fixed bottom-32 left-1/2 -translate-x-1/2 bg-primary-container text-on-primary px-6 py-3 rounded-full shadow-lg z-100 transition-opacity duration-500 ${isToastVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}>

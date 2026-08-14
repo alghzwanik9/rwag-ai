@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(grep -E \"^\\(D:|/|[A-Za-z]:\\\\\\\\\\\\\\\\\\)|warning|error\")",
-      "Bash(grep -nE \"warning|error|\\\\.tsx|\\\\.ts$\")"
+      "Bash(grep -nE \"warning|error|\\\\.tsx|\\\\.ts$\")",
+      "Bash(python -m pip list)",
+      "Bash(grep -rnoE \"\\(fetch|axios\\)\\\\\\(\\\\s*[\\\\`'\\\\\"][^\\\\`'\\\\\"]{0,90}\" app/studio/page.tsx components/studio/ lib/)",
+      "Bash(sed -E \"s/fetch\\\\\\(\\\\s*[\\\\`'\\\\\"]//\")"
     ]
   }
 }

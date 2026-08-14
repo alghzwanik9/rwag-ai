@@ -51,23 +51,45 @@ function toProductTemplate(a: CatalogAsset): IProductTemplate {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 interface UseAssetsResult {
+  /** Empty when the backend is unreachable, unless demo data is opted into. */
   assets: IProductTemplate[];
   isLoading: boolean;
+  /** Non-null means the catalog could not be loaded. Callers must surface it. */
   error: string | null;
-  /** True when the data came from the API rather than the local fallback */
+  /** True when the data came from the API rather than the local demo set. */
   fromApi: boolean;
+  /** True when `assets` holds the bundled demo catalog, not real backend data. */
+  isDemoData: boolean;
+}
+
+/**
+ * Opt-in switch for the bundled demo catalog.
+ *
+ * Set `NEXT_PUBLIC_USE_DEMO_CATALOG=true`, or append `?demo=1` to the URL, to
+ * substitute `IKEA_TEMPLATES` when the backend cannot be reached. Both routes
+ * are deliberately explicit: this hook used to fall back to those templates on
+ * *any* failure, which meant the studio looked fully populated while nothing
+ * behind it was running. A backend outage must be visible, not papered over.
+ */
+function demoCatalogRequested(): boolean {
+  if (process.env.NEXT_PUBLIC_USE_DEMO_CATALOG === "true") return true;
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("demo") === "1";
 }
 
 /**
  * Fetches the furniture catalog from `GET /api/v1/assets`.
- * Automatically falls back to the static IKEA_TEMPLATES when the backend
- * is unavailable (e.g. during static preview or the API is starting up).
+ *
+ * On failure it reports the error and returns an empty catalog. It does NOT
+ * substitute local templates unless demo data is explicitly requested — see
+ * `demoCatalogRequested`.
  */
 export function useAssets(): UseAssetsResult {
-  const [assets, setAssets] = useState<IProductTemplate[]>(IKEA_TEMPLATES);
+  const [assets, setAssets] = useState<IProductTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fromApi, setFromApi] = useState(false);
+  const [isDemoData, setIsDemoData] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,27 +100,31 @@ export function useAssets(): UseAssetsResult {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data: { assets: CatalogAsset[]; total: number } = await res.json();
+        if (!Array.isArray(data?.assets)) {
+          throw new Error("Invalid API response: missing 'assets' array");
+        }
 
-        if (!cancelled) {
-          if (data && Array.isArray(data.assets)) {
-            setAssets(data.assets.map(toProductTemplate));
-            setFromApi(true);
-            setError(null);
-          } else {
-            throw new Error("Invalid API response: missing 'assets' array");
-          }
-        }
+        if (cancelled) return;
+        setAssets(data.assets.map(toProductTemplate));
+        setFromApi(true);
+        setIsDemoData(false);
+        setError(null);
       } catch (err) {
-        if (!cancelled) {
-          // Backend unreachable — silently fall back to local templates
-          console.warn(
-            "[useAssets] Could not reach /api/v1/assets, using local fallback:",
-            err
-          );
-          setAssets(IKEA_TEMPLATES);
-          setFromApi(false);
-          setError(err instanceof Error ? err.message : "Unknown error");
-        }
+        if (cancelled) return;
+        console.error(
+          "[useAssets] GET /api/v1/assets failed — the backend is unreachable:",
+          err,
+        );
+        const message = err instanceof Error ? err.message : "Unknown error";
+        setFromApi(false);
+        setError(`تعذّر تحميل الكتالوج من الخادم (${message})`);
+
+        // No silent substitute: without an explicit demo opt-in the catalog
+        // stays empty, and that emptiness plus `error` is what makes the
+        // outage visible in the UI.
+        const useDemo = demoCatalogRequested();
+        setAssets(useDemo ? IKEA_TEMPLATES : []);
+        setIsDemoData(useDemo);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -108,5 +134,5 @@ export function useAssets(): UseAssetsResult {
     return () => { cancelled = true; };
   }, []);
 
-  return { assets, isLoading, error, fromApi };
+  return { assets, isLoading, error, fromApi, isDemoData };
 }

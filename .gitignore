@@ -32,8 +32,20 @@ generated_blender_script.py
 ehthumbs.db
 Thumbs.db
 
+# Node / Frontend
+node_modules/
+dist/
+build/
+.next/
+
+# Tests & Caches
+.pytest_cache/
+.coverage
+htmlcov/
+
 # IDEs and Editors
 .vscode/
 .idea/
 *.swp
 *.swo
+

@@ -70,18 +70,18 @@ bpy.ops.object.select_by_type(type='MESH')
 bpy.ops.object.delete()
 
 # Generating floor: floor_1
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, 0, -0.05))
+bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, -0.05))
 current_obj = bpy.context.active_object
 current_obj.name = 'floor_1'
-current_obj.scale = (5 * 1.0, 5 * 1.0, 0.1 * 1.0)
-current_obj.rotation_euler[2] = math.radians(0)
+current_obj.scale = (5.0 * 1.0, 5.0 * 1.0, 0.1 * 1.0)
+current_obj.rotation_euler[2] = math.radians(0.0)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 bpy.context.view_layer.update()
 if 'floor' != 'floor':
     world_corners = [current_obj.matrix_world @ mathutils.Vector(corner) for corner in current_obj.bound_box]
     true_min_z = min([corner.z for corner in world_corners])
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
+    if true_min_z < 0.0:
+        z_offset = 0.0 - true_min_z
         current_obj.location.z += z_offset
         bpy.context.view_layer.update()
 # Bounding Box Clamp and Collision Avoidance
@@ -97,23 +97,23 @@ if current_obj:
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get('Principled BSDF')
     if bsdf:
-        bsdf.inputs['Base Color'].default_value = (0.6583748172794485, 0.5711248294648731, 0.47353149614800955, 1.0)
+        bsdf.inputs['Base Color'].default_value = (0.8549926081242338, 0.8549926081242338, 0.8549926081242338, 1.0)
         if 'Roughness' in bsdf.inputs: bsdf.inputs['Roughness'].default_value = 0.2
     current_obj.data.materials.append(mat)
 
 # Generating wall: wall_north
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, -2.5, 1.5))
+bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, -2.5, 1.5))
 current_obj = bpy.context.active_object
 current_obj.name = 'wall_north'
-current_obj.scale = (5 * 1.0, 0.2 * 1.0, 3.0 * 1.0)
-current_obj.rotation_euler[2] = math.radians(0)
+current_obj.scale = (5.0 * 1.0, 0.2 * 1.0, 3.0 * 1.0)
+current_obj.rotation_euler[2] = math.radians(0.0)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 bpy.context.view_layer.update()
 if 'wall' != 'floor':
     world_corners = [current_obj.matrix_world @ mathutils.Vector(corner) for corner in current_obj.bound_box]
     true_min_z = min([corner.z for corner in world_corners])
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
+    if true_min_z < 0.0:
+        z_offset = 0.0 - true_min_z
         current_obj.location.z += z_offset
         bpy.context.view_layer.update()
 # Bounding Box Clamp and Collision Avoidance
@@ -129,23 +129,23 @@ if current_obj:
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get('Principled BSDF')
     if bsdf:
-        bsdf.inputs['Base Color'].default_value = (0.9130986517934192, 0.9130986517934192, 0.9130986517934192, 1.0)
+        bsdf.inputs['Base Color'].default_value = (1.0, 1.0, 1.0, 1.0)
         if 'Roughness' in bsdf.inputs: bsdf.inputs['Roughness'].default_value = 0.9
     current_obj.data.materials.append(mat)
 
 # Generating wall: wall_west
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(-2.5, 0, 1.5))
+bpy.ops.mesh.primitive_cube_add(size=1.0, location=(-2.5, 0.0, 1.5))
 current_obj = bpy.context.active_object
 current_obj.name = 'wall_west'
-current_obj.scale = (0.2 * 1.0, 5 * 1.0, 3.0 * 1.0)
-current_obj.rotation_euler[2] = math.radians(0)
+current_obj.scale = (0.2 * 1.0, 5.0 * 1.0, 3.0 * 1.0)
+current_obj.rotation_euler[2] = math.radians(0.0)
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 bpy.context.view_layer.update()
 if 'wall' != 'floor':
     world_corners = [current_obj.matrix_world @ mathutils.Vector(corner) for corner in current_obj.bound_box]
     true_min_z = min([corner.z for corner in world_corners])
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
+    if true_min_z < 0.0:
+        z_offset = 0.0 - true_min_z
         current_obj.location.z += z_offset
         bpy.context.view_layer.update()
 # Bounding Box Clamp and Collision Avoidance
@@ -163,41 +163,6 @@ if current_obj:
     if bsdf:
         bsdf.inputs['Base Color'].default_value = (0.9130986517934192, 0.9130986517934192, 0.9130986517934192, 1.0)
         if 'Roughness' in bsdf.inputs: bsdf.inputs['Roughness'].default_value = 0.9
-    current_obj.data.materials.append(mat)
-
-# Generating window: main_window
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0, -2.49, 1.25))
-current_obj = bpy.context.active_object
-current_obj.name = 'main_window'
-current_obj.scale = (3.0 * 1.0, 0.2 * 1.0, 2.5 * 1.0)
-current_obj.rotation_euler[2] = math.radians(0)
-bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-bpy.context.view_layer.update()
-if 'window' != 'floor':
-    world_corners = [current_obj.matrix_world @ mathutils.Vector(corner) for corner in current_obj.bound_box]
-    true_min_z = min([corner.z for corner in world_corners])
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
-        current_obj.location.z += z_offset
-        bpy.context.view_layer.update()
-# Bounding Box Clamp and Collision Avoidance
-if 'window' not in ['floor', 'wall', 'window']:
-    room_bounds = (-2.4, 2.5, -2.4, 2.5)
-    clamp_to_room_bounds(current_obj, [current_obj], room_bounds)
-    if avoid_collisions(current_obj, [current_obj], existing_groups, room_bounds):
-        existing_groups.append([current_obj])
-    else:
-        current_obj = None
-if current_obj:
-    mat = bpy.data.materials.new(name='main_window_mat')
-    mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get('Principled BSDF')
-    if bsdf:
-        bsdf.inputs['Base Color'].default_value = (0.26225065752969623, 0.3467040563550296, 0.45078578283822346, 1.0)
-        if 'Transmission' in bsdf.inputs: bsdf.inputs['Transmission'].default_value = 1.0
-        if 'Roughness' in bsdf.inputs: bsdf.inputs['Roughness'].default_value = 0.05
-        if 'IOR' in bsdf.inputs: bsdf.inputs['IOR'].default_value = 1.45
-        mat.blend_method = 'BLEND'
     current_obj.data.materials.append(mat)
 
 # Generating furniture: tv_unit_main
@@ -228,20 +193,20 @@ if imported_meshes:
     dim_x = max_x - min_x
     dim_y = max_y - min_y
     dim_z = max_z - min_z
-    max_dim_ai = max(1.8, 0.4, 0.5) * 1.0
+    max_dim_ai = max(1.5, 0.4, 0.6) * 1.0
     max_dim_model = max(dim_x, dim_y, dim_z)
     uniform_scale = (max_dim_ai / max_dim_model) if max_dim_model > 0 else 1.0
     parent_empty.scale = (uniform_scale, uniform_scale, uniform_scale)
-    parent_empty.rotation_euler[2] = math.radians(0)
-    parent_empty.location = (0, -2.2, 0)
+    parent_empty.rotation_euler[2] = math.radians(0.0)
+    parent_empty.location = (0.0, -2.2, 0.0)
     bpy.context.view_layer.update()
     true_min_z = float('inf')
     for obj in imported_meshes:
         world_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
         obj_min_z = min([corner.z for corner in world_corners])
         true_min_z = min(true_min_z, obj_min_z)
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
+    if true_min_z < 0.0:
+        z_offset = 0.0 - true_min_z
         parent_empty.location.z += z_offset
     bpy.context.view_layer.update()
     # Bounding Box Clamp and Collision Avoidance
@@ -261,7 +226,7 @@ if imported_meshes:
             if slot.material and slot.material.use_nodes:
                 bsdf = slot.material.node_tree.nodes.get('Principled BSDF')
                 if bsdf:
-                    bsdf.inputs['Base Color'].default_value = (0.013702083047289686, 0.013702083047289686, 0.013702083047289686, 1.0)
+                    bsdf.inputs['Base Color'].default_value = (0.010329823029626936, 0.010329823029626936, 0.010329823029626936, 1.0)
 
 # Generating furniture: sofa_main
 # Importing asset sofa.glb for sofa_main
@@ -291,20 +256,20 @@ if imported_meshes:
     dim_x = max_x - min_x
     dim_y = max_y - min_y
     dim_z = max_z - min_z
-    max_dim_ai = max(2.4, 0.95, 0.8) * 1.0
+    max_dim_ai = max(2.2, 0.9, 0.8) * 1.0
     max_dim_model = max(dim_x, dim_y, dim_z)
     uniform_scale = (max_dim_ai / max_dim_model) if max_dim_model > 0 else 1.0
     parent_empty.scale = (uniform_scale, uniform_scale, uniform_scale)
-    parent_empty.rotation_euler[2] = math.radians(180)
-    parent_empty.location = (0, 1.0, 0)
+    parent_empty.rotation_euler[2] = math.radians(180.0)
+    parent_empty.location = (0.0, 1.0, 0.0)
     bpy.context.view_layer.update()
     true_min_z = float('inf')
     for obj in imported_meshes:
         world_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
         obj_min_z = min([corner.z for corner in world_corners])
         true_min_z = min(true_min_z, obj_min_z)
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
+    if true_min_z < 0.0:
+        z_offset = 0.0 - true_min_z
         parent_empty.location.z += z_offset
     bpy.context.view_layer.update()
     # Bounding Box Clamp and Collision Avoidance
@@ -324,7 +289,7 @@ if imported_meshes:
             if slot.material and slot.material.use_nodes:
                 bsdf = slot.material.node_tree.nodes.get('Principled BSDF')
                 if bsdf:
-                    bsdf.inputs['Base Color'].default_value = (0.06847816984440017, 0.06847816984440017, 0.06847816984440017, 1.0)
+                    bsdf.inputs['Base Color'].default_value = (0.0, 0.11697066775851084, 0.41254261348390375, 1.0)
 
 # Generating furniture: coffee_table
 # Importing asset table.glb for coffee_table
@@ -358,16 +323,16 @@ if imported_meshes:
     max_dim_model = max(dim_x, dim_y, dim_z)
     uniform_scale = (max_dim_ai / max_dim_model) if max_dim_model > 0 else 1.0
     parent_empty.scale = (uniform_scale, uniform_scale, uniform_scale)
-    parent_empty.rotation_euler[2] = math.radians(0)
-    parent_empty.location = (0, 0.0, 0)
+    parent_empty.rotation_euler[2] = math.radians(0.0)
+    parent_empty.location = (0.0, 0.0, 0.0)
     bpy.context.view_layer.update()
     true_min_z = float('inf')
     for obj in imported_meshes:
         world_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
         obj_min_z = min([corner.z for corner in world_corners])
         true_min_z = min(true_min_z, obj_min_z)
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
+    if true_min_z < 0.0:
+        z_offset = 0.0 - true_min_z
         parent_empty.location.z += z_offset
     bpy.context.view_layer.update()
     # Bounding Box Clamp and Collision Avoidance
@@ -387,165 +352,7 @@ if imported_meshes:
             if slot.material and slot.material.use_nodes:
                 bsdf = slot.material.node_tree.nodes.get('Principled BSDF')
                 if bsdf:
-                    bsdf.inputs['Base Color'].default_value = (0.35153259950043936, 0.08437621154414882, 0.026241221894849898, 1.0)
-
-# Generating furniture: rug_main
-# Importing asset rug.glb for rug_main
-bpy.ops.import_scene.gltf(filepath=r'D:/DEV/ACTIVE/rwaq-ai/assets/rug.glb')
-bpy.context.view_layer.update()
-imported_objs = list(bpy.context.selected_objects)
-imported_meshes = [obj for obj in imported_objs if obj.type == 'MESH']
-if imported_meshes:
-    parent_empty = bpy.data.objects.new('rug_main_parent', None)
-    bpy.context.scene.collection.objects.link(parent_empty)
-    parent_empty.location = (0, 0, 0)
-    bpy.context.view_layer.update()
-    for obj in imported_objs:
-        obj.parent = parent_empty
-        obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
-    min_x = min_y = min_z = float('inf')
-    max_x = max_y = max_z = float('-inf')
-    for obj in imported_meshes:
-        for vertex in obj.bound_box:
-            world_vertex = obj.matrix_world @ mathutils.Vector(vertex)
-            min_x = min(min_x, world_vertex.x)
-            max_x = max(max_x, world_vertex.x)
-            min_y = min(min_y, world_vertex.y)
-            max_y = max(max_y, world_vertex.y)
-            min_z = min(min_z, world_vertex.z)
-            max_z = max(max_z, world_vertex.z)
-    dim_x = max_x - min_x
-    dim_y = max_y - min_y
-    dim_z = max_z - min_z
-    max_dim_ai = max(2.5, 1.6, 0.02) * 1.0
-    max_dim_model = max(dim_x, dim_y, dim_z)
-    uniform_scale = (max_dim_ai / max_dim_model) if max_dim_model > 0 else 1.0
-    parent_empty.scale = (uniform_scale, uniform_scale, uniform_scale)
-    parent_empty.rotation_euler[2] = math.radians(0)
-    parent_empty.location = (0, 0.4, 0)
-    bpy.context.view_layer.update()
-    true_min_z = float('inf')
-    for obj in imported_meshes:
-        world_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
-        obj_min_z = min([corner.z for corner in world_corners])
-        true_min_z = min(true_min_z, obj_min_z)
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
-        parent_empty.location.z += z_offset
-    bpy.context.view_layer.update()
-    # Bounding Box Clamp and Collision Avoidance
-    if 'furniture' not in ['floor', 'wall', 'window']:
-        room_bounds = (-2.4, 2.5, -2.4, 2.5)
-        clamp_to_room_bounds(parent_empty, imported_meshes, room_bounds)
-        if avoid_collisions(parent_empty, imported_meshes, existing_groups, room_bounds):
-            existing_groups.append(imported_meshes)
-        else:
-            imported_meshes = []
-    for obj in imported_meshes:
-        if not obj.data.materials:
-            mat = bpy.data.materials.new(name='rug_main_mat')
-            mat.use_nodes = True
-            obj.data.materials.append(mat)
-        for slot in obj.material_slots:
-            if slot.material and slot.material.use_nodes:
-                bsdf = slot.material.node_tree.nodes.get('Principled BSDF')
-                if bsdf:
-                    bsdf.inputs['Base Color'].default_value = (0.7454042095403874, 0.7454042095403874, 0.7454042095403874, 1.0)
-
-# Generating furniture: armchair_accent
-print("WARNING: Asset 'khronos_sheenchair' not found in assets/ folder. Falling back to primitive shape.")
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(1.5, 0.5, 0.4))
-current_obj = bpy.context.active_object
-current_obj.name = 'armchair_accent'
-current_obj.scale = (0.7 * 1.0, 0.7 * 1.0, 0.8 * 1.0)
-current_obj.rotation_euler[2] = math.radians(135)
-bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-bpy.context.view_layer.update()
-if 'furniture' != 'floor':
-    world_corners = [current_obj.matrix_world @ mathutils.Vector(corner) for corner in current_obj.bound_box]
-    true_min_z = min([corner.z for corner in world_corners])
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
-        current_obj.location.z += z_offset
-        bpy.context.view_layer.update()
-# Bounding Box Clamp and Collision Avoidance
-if 'furniture' not in ['floor', 'wall', 'window']:
-    room_bounds = (-2.4, 2.5, -2.4, 2.5)
-    clamp_to_room_bounds(current_obj, [current_obj], room_bounds)
-    if avoid_collisions(current_obj, [current_obj], existing_groups, room_bounds):
-        existing_groups.append([current_obj])
-    else:
-        current_obj = None
-if current_obj:
-    mat = bpy.data.materials.new(name='armchair_accent_mat')
-    mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get('Principled BSDF')
-    if bsdf:
-        bsdf.inputs['Base Color'].default_value = (0.11443537382697373, 0.3419144249086609, 0.35153259950043936, 1.0)
-    current_obj.data.materials.append(mat)
-
-# Generating furniture: plant_corner
-# Importing asset plant.glb for plant_corner
-bpy.ops.import_scene.gltf(filepath=r'D:/DEV/ACTIVE/rwaq-ai/assets/plant.glb')
-bpy.context.view_layer.update()
-imported_objs = list(bpy.context.selected_objects)
-imported_meshes = [obj for obj in imported_objs if obj.type == 'MESH']
-if imported_meshes:
-    parent_empty = bpy.data.objects.new('plant_corner_parent', None)
-    bpy.context.scene.collection.objects.link(parent_empty)
-    parent_empty.location = (0, 0, 0)
-    bpy.context.view_layer.update()
-    for obj in imported_objs:
-        obj.parent = parent_empty
-        obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
-    min_x = min_y = min_z = float('inf')
-    max_x = max_y = max_z = float('-inf')
-    for obj in imported_meshes:
-        for vertex in obj.bound_box:
-            world_vertex = obj.matrix_world @ mathutils.Vector(vertex)
-            min_x = min(min_x, world_vertex.x)
-            max_x = max(max_x, world_vertex.x)
-            min_y = min(min_y, world_vertex.y)
-            max_y = max(max_y, world_vertex.y)
-            min_z = min(min_z, world_vertex.z)
-            max_z = max(max_z, world_vertex.z)
-    dim_x = max_x - min_x
-    dim_y = max_y - min_y
-    dim_z = max_z - min_z
-    max_dim_ai = max(0.6, 0.6, 1.5) * 1.0
-    max_dim_model = max(dim_x, dim_y, dim_z)
-    uniform_scale = (max_dim_ai / max_dim_model) if max_dim_model > 0 else 1.0
-    parent_empty.scale = (uniform_scale, uniform_scale, uniform_scale)
-    parent_empty.rotation_euler[2] = math.radians(0)
-    parent_empty.location = (-1.8, -2.0, 0)
-    bpy.context.view_layer.update()
-    true_min_z = float('inf')
-    for obj in imported_meshes:
-        world_corners = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
-        obj_min_z = min([corner.z for corner in world_corners])
-        true_min_z = min(true_min_z, obj_min_z)
-    if true_min_z < 0:
-        z_offset = 0 - true_min_z
-        parent_empty.location.z += z_offset
-    bpy.context.view_layer.update()
-    # Bounding Box Clamp and Collision Avoidance
-    if 'furniture' not in ['floor', 'wall', 'window']:
-        room_bounds = (-2.4, 2.5, -2.4, 2.5)
-        clamp_to_room_bounds(parent_empty, imported_meshes, room_bounds)
-        if avoid_collisions(parent_empty, imported_meshes, existing_groups, room_bounds):
-            existing_groups.append(imported_meshes)
-        else:
-            imported_meshes = []
-    for obj in imported_meshes:
-        if not obj.data.materials:
-            mat = bpy.data.materials.new(name='plant_corner_mat')
-            mat.use_nodes = True
-            obj.data.materials.append(mat)
-        for slot in obj.material_slots:
-            if slot.material and slot.material.use_nodes:
-                bsdf = slot.material.node_tree.nodes.get('Principled BSDF')
-                if bsdf:
-                    bsdf.inputs['Base Color'].default_value = (0.027320891639074894, 0.2581828529215958, 0.0953074666309647, 1.0)
+                    bsdf.inputs['Base Color'].default_value = (0.2581828529215958, 0.0595112381629812, 0.006512090792594475, 1.0)
 
 # Stage 5: Material & Illumination (EEVEE Next)
 if hasattr(bpy.context.scene.render, 'engine'):
@@ -560,6 +367,6 @@ for obj in bpy.data.objects:
             obj.data.materials.append(mat)
 
 # Save the scene
-bpy.ops.wm.save_as_mainfile(filepath=r'D:\DEV\ACTIVE\rwaq-ai\frontend\public\outputs\output_1e674e80-b849-41b1-b38d-744aaaaf2140.blend')
+bpy.ops.wm.save_as_mainfile(filepath=r'D:\DEV\ACTIVE\rwaq-ai\output.blend')
 # Export GLB
-bpy.ops.export_scene.gltf(filepath=r'D:\DEV\ACTIVE\rwaq-ai\frontend\public\outputs\output_1e674e80-b849-41b1-b38d-744aaaaf2140.glb', export_format='GLB')
+bpy.ops.export_scene.gltf(filepath=r'D:\DEV\ACTIVE\rwaq-ai\output.glb', export_format='GLB')
