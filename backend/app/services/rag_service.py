@@ -113,3 +113,135 @@ def get_ikea_catalog_data(limit: int = 200) -> Dict[str, Any]:
     except Exception as e:
         print(f"Error fetching catalog data: {e}")
         return {"items": [], "assets": [], "total": 0}
+
+def find_budget_alternatives(current_item_id: str, budget_left: float) -> List[Dict[str, Any]]:
+    """Finds cheaper or budget-fitting furniture alternatives from LanceDB."""
+    try:
+        db = lancedb.connect(str(LANCEDB_DIR))
+        if "ikea_catalog" not in db.table_names():
+            return []
+
+        table = db.open_table("ikea_catalog")
+        all_records = table.search().limit(300).to_arrow().to_pylist()
+
+        # Find target item if it exists
+        target_item = None
+        for r in all_records:
+            if str(r.get("item_id", "")) == str(current_item_id) or str(r.get("name", "")).lower() == str(current_item_id).lower():
+                target_item = r
+                break
+
+        target_category = ""
+        target_price = float("inf")
+        if target_item:
+            target_category = str(target_item.get("category", "")).lower()
+            target_price = safe_float(target_item.get("price", 0.0))
+        else:
+            # Infer category from current_item_id string
+            id_lower = str(current_item_id).lower()
+            if "sofa" in id_lower or "كنب" in id_lower:
+                target_category = "sofas"
+            elif "chair" in id_lower or "كرسي" in id_lower:
+                target_category = "chairs"
+            elif "table" in id_lower or "طاولة" in id_lower:
+                target_category = "tables"
+            elif "tv" in id_lower or "تلفاز" in id_lower:
+                target_category = "tv"
+            elif "rug" in id_lower or "سجاد" in id_lower:
+                target_category = "rugs"
+
+        alternatives = []
+        for r in all_records:
+            item_price = safe_float(r.get("price", 0.0))
+            item_cat = str(r.get("category", "")).lower()
+            item_name = str(r.get("name", "Unknown"))
+            item_id = str(r.get("item_id", ""))
+
+            # Don't recommend the same item
+            if item_id == current_item_id:
+                continue
+
+            # Check if it fits the budget or is cheaper than the target item
+            is_cheaper = item_price < target_price or (budget_left > 0 and item_price <= budget_left)
+            cat_match = (not target_category) or (target_category in item_cat) or (item_cat in target_category)
+
+            if is_cheaper and cat_match and item_price > 0:
+                savings = max(0.0, target_price - item_price) if target_price < float("inf") else 0.0
+                if savings > 0:
+                    justification = f"بديل ممتاز من {item_name} يوفر حوالي {savings:.0f} ر.س مع الحفاظ على التناسق والوظيفة."
+                else:
+                    justification = f"خيار أنيق من {item_name} بسعر {item_price:.0f} ر.س يتناسب بدقة مع ميزانيتك المتبقية."
+
+                alternatives.append({
+                    "brand": "IKEA",
+                    "name": item_name,
+                    "price": item_price,
+                    "currency": "SAR",
+                    "store_url": str(r.get("link", "")),
+                    "sku": item_id,
+                    "justification": justification
+                })
+
+        # Sort by price ascending and return top 4
+        alternatives.sort(key=lambda x: x["price"])
+        return alternatives[:4]
+    except Exception as e:
+        print(f"Error in find_budget_alternatives: {e}")
+        return []
+
+def get_all_standards_catalog() -> List[Dict[str, Any]]:
+    """Returns all structured architectural standards from LanceDB or local json files."""
+    try:
+        standards_dir = LANCEDB_DIR.parent / "data" / "architectural_standards"
+        if standards_dir.exists():
+            import json
+            results = []
+            for file_path in standards_dir.glob("*.json"):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    results.append(json.load(f))
+            return results
+    except Exception as e:
+        print(f"Error loading standards catalog: {e}")
+
+    try:
+        db = lancedb.connect(str(LANCEDB_DIR))
+        if "architectural_standards" in db.table_names():
+            import json
+            tbl = db.open_table("architectural_standards")
+            rows = tbl.search().limit(20).to_arrow().to_pylist()
+            return [json.loads(r["rules_json"]) for r in rows if "rules_json" in r]
+    except Exception as e:
+        print(f"Error querying architectural_standards table: {e}")
+
+    return []
+
+def get_relevant_standards_context(prompt: str) -> str:
+    """Finds matching architectural standards and returns a formatted context string for agents."""
+    p_lower = prompt.lower()
+    standards = get_all_standards_catalog()
+    matched = []
+
+    for std in standards:
+        rtype = str(std.get("room_type", "")).lower()
+        cat = str(std.get("category", "")).lower()
+        name_ar = str(std.get("name_ar", ""))
+
+        if (rtype and (rtype in p_lower or any(w in p_lower for w in ["معيشة", "جلوس", "صالة", "living"] if rtype == "living_room"))) or \
+           (rtype == "bedroom" and any(w in p_lower for w in ["نوم", "master", "bedroom", "سرير"])) or \
+           (rtype == "kitchen" and any(w in p_lower for w in ["مطبخ", "kitchen", "طهي"])) or \
+           (rtype == "home_office" and any(w in p_lower for w in ["مكتب", "office", "دراسة", "عمل"])) or \
+           (rtype == "dining_room" and any(w in p_lower for w in ["طعام", "سفرة", "dining"])) or \
+           ("lighting" in cat or "material" in cat):
+            matched.append(std)
+
+    if not matched:
+        matched = standards[:3]
+
+    import json
+    context_lines = ["\n### RELEVANT ARCHITECTURAL STANDARDS & ERGONOMIC RULES:"]
+    for m in matched:
+        context_lines.append(f"- Standard for {m.get('name_ar', m.get('room_type', 'Room'))}: {json.dumps(m, ensure_ascii=False)}")
+
+    return "\n".join(context_lines)
+
+

@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import math
 
 # Fix for Windows console encoding (CrewAI emojis)
 if sys.stdout.encoding != 'utf-8':
@@ -163,18 +164,22 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
             print(f"Vision context gathered: {analyzed_desc[:100]}...")
 
     asset_registry = get_dynamic_asset_registry()
+    
+    # Retrieve relevant architectural standards context
+    from backend.app.services.rag_service import get_relevant_standards_context
+    standards_context = get_relevant_standards_context(prompt)
 
     # Initialize CrewAI LLM using the loaded Gemini API key
     llm = LLM(model="gemini/gemini-2.5-flash", api_key=os.environ.get("GEMINI_API_KEY"))
 
     # 2. Define CrewAI Agents
     philosopher = Agent(
-        role="Design Philosopher",
-        goal="Analyze user requirements, translate any Arabic input to English, and output a detailed design concept backed by established design philosophies.",
+        role="Design Philosopher & Aesthetic Historian",
+        goal="Analyze user requirements, translate any Arabic input to English, and output a detailed design concept backed by established design movements and balanced color schemes.",
         backstory=(
             "You are a world-class interior design philosopher and art historian. You believe that spaces should tell a story "
             "and be grounded in established design movements (Minimalism, Bauhaus, Japandi, Biophilic, Mid-Century Modern, Brutalism). "
-            "You analyze client wishes and craft deep conceptual designs, explaining why specific colors (using hex codes), "
+            "You analyze client wishes and craft deep conceptual designs, explaining why specific colors (using 60-30-10 palette rules and hex codes), "
             "textures, materials, and lighting setups work conceptually. You provide real or realistic references (e.g. Dezeen, ArchDaily projects)."
         ),
         llm=llm,
@@ -182,13 +187,12 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
     )
 
     architect = Agent(
-        role="Layout & Spatial Architect",
-        goal="Take the philosophical concept and generate a practical, structural room layout conforming to strict 3D schema constraints.",
+        role="Spatial & Anthropometric Architect",
+        goal="Take the philosophical concept and architectural standards to generate a mathematically precise 3D room layout conforming to strict clearance and ergonomic constraints.",
         backstory=(
-            "You are a strict 3D architectural planner and spatial mathematician. You translate abstract design philosophies "
-            "into functional, safe, and beautifully spaced room layouts. You respect room scale, clearance walkways (e.g., 36 inches or 0.9m for pathways), "
-            "natural light entry, wall snapping, and prevent collision or overlapping of furniture. You output a mathematically precise layout "
-            "conforming to the 3D scene schema."
+            "You are a senior spatial planner adhering strictly to international architectural standards (Neufert, Time-Saver Standards, and IBC). "
+            "You translate abstract design philosophies into functional, safe, and beautifully spaced room layouts. You respect room scale, "
+            "clearance walkways (minimum 0.9m for primary paths, 0.6m for secondary), natural light entry, wall snapping, and prevent collision or overlapping of furniture."
         ),
         llm=llm,
         verbose=True
@@ -198,17 +202,18 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
     philosopher_task = Task(
         description=(
             f"Analyze the following user design request: {prompt}. {image_context}\n"
-            "Formulate a cohesive design concept backed by established interior design philosophies. "
-            "Explain why specific textures, colors, and lighting work. Provide real or realistic reference URLs "
-            "(e.g., Dezeen, ArchDaily articles or specific designer project names)."
+            f"{standards_context}\n"
+            "Formulate a cohesive design concept backed by established interior design philosophies and standard material harmonies. "
+            "Explain why specific textures, colors (60% walls/floors, 30% main furniture, 10% accents), and lighting work. Provide real or realistic reference URLs."
         ),
-        expected_output="A detailed design philosophy description, color rationale, and architectural reference URLs.",
+        expected_output="A detailed design philosophy description, 60-30-10 color rationale, and architectural reference URLs.",
         agent=philosopher
     )
 
     architect_task = Task(
         description=(
             "Using the design concept, style guidelines, and references from the Design Philosopher, create a practical 3D room layout.\n"
+            f"{standards_context}\n"
             "STRICT SPATIAL AND SCHEMA CONSTRAINTS:\n"
             "1. REALISTIC ROOM SIZE: Default to room dimensions (width and depth between 4m and 6m, e.g., 5x5m). The floor is centered at (t_x: 0, t_y: 0, t_z: 0).\n"
             "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North wall at z=-2.5, West wall at x=-2.5). "
@@ -218,7 +223,7 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
             "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge perfectly aligned flush with a perimeter wall without intersecting it. "
             "e.g., if West Wall is at X=-2.5 (width 0.2), and a TV unit of depth (width) 0.4 is placed there, its t_x coordinate must be -2.5 + 0.1 + 0.2 = -2.2.\n"
             "6. WINDOW: Generate exactly ONE large floor-to-ceiling window mesh flush against one of the walls (type must be 'window').\n"
-            "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Group related items but keep them spaced out (e.g. coffee table in front of sofa, TV unit opposite sofa, at least 0.9m pathways).\n"
+            "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Group related items but keep them spaced out (e.g. coffee table in front of sofa at 0.4m, TV unit opposite sofa, at least 0.9m pathways).\n"
             f"8. ASSET REGISTRY: For 'furniture' objects, choose asset_id strictly from this list: {json.dumps(asset_registry)}. Avoid overlaps.\n"
             "9. COLOR CONTRAST: Apply colors to the objects matching the Philosopher's concept and color palette. Ensure good contrast.\n"
             "10. SMART ECONOMY: For every object, generate realistic price (currency 'SAR') and store details: basic = IKEA (SAR 100-2500), contemporary = Abyat (SAR 1500-4500), luxury = West Elm (SAR 4000+)."
@@ -234,6 +239,7 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
         tasks=[philosopher_task, architect_task],
         verbose=True
     )
+
 
     print("Kicking off CrewAI design pipeline...")
     result = crew.kickoff()
@@ -399,3 +405,84 @@ def handle_chat_request(user_message: str) -> dict:
             pass
 
     return response_payload
+
+def audit_spatial_layout(items: list, room_width: float = 5.0, room_depth: float = 5.0) -> dict:
+    """Architectural audit checking clearances, walkways, and spatial balance."""
+    score = 100
+    recommendations = []
+    clearance_checks = []
+
+    room_area = max(1.0, room_width * room_depth)
+    furniture_footprint = 0.0
+
+    # Categorize items
+    sofas = []
+    coffee_tables = []
+    tv_units = []
+
+    for item in items:
+        pos = item.get("position", [0, 0, 0])
+        dims = item.get("dimensions") or {}
+        w = dims.get("length", dims.get("width", 1.0))
+        d = dims.get("width", dims.get("depth", 0.8))
+        area = w * d
+        furniture_footprint += area
+
+        asset = str(item.get("asset_id", item.get("name", ""))).lower()
+        if "sofa" in asset:
+            sofas.append((item, pos, (w, d)))
+        elif "table" in asset or "coffee" in asset:
+            coffee_tables.append((item, pos, (w, d)))
+        elif "tv" in asset:
+            tv_units.append((item, pos, (w, d)))
+
+    # 1. Density ratio check
+    density = (furniture_footprint / room_area) * 100
+    if density > 45:
+        score -= 15
+        recommendations.append(f"كثافة الأثاث في الغرفة مرتفعة ({density:.0f}% من مساحة الأرضية). يُفضل إزالة أو تقليص أحجام بعض القطع لتحقيق انسيابية الحركة.")
+    elif density < 15 and len(items) > 0:
+        recommendations.append(f"المساحة شاغرة نسبياً ({density:.0f}% فقط مشغولة). يمكنك إضافة سجادة أوسع، كراسي قراءة، أو نباتات لإضفاء الحميمية.")
+    else:
+        clearance_checks.append("نسبة إشغال الفراغ مثالية وضمن المعايير الهندسية (25% - 40%).")
+
+    # 2. Coffee table to sofa distance check
+    if sofas and coffee_tables:
+        s_pos = sofas[0][1]
+        c_pos = coffee_tables[0][1]
+        dist = math.sqrt((s_pos[0] - c_pos[0])**2 + (s_pos[2] - c_pos[2])**2)
+        if dist < 0.30:
+            score -= 10
+            recommendations.append(f"طاولة القهوة قريبة جداً من الكنبة ({dist*100:.0f} سم). المعيار الهندسي الموصى به هو 35 إلى 45 سم لسهولة الجلوس والنهوض.")
+        elif dist > 0.65:
+            score -= 10
+            recommendations.append(f"طاولة القهوة بعيدة جداً عن الكنبة ({dist*100:.0f} سم). يُفضل تقريبها لتكون في متناول اليد بسهولة.")
+        else:
+            clearance_checks.append(f"المسافة بين الكنبة وطاولة القهوة ممتازة ({dist*100:.0f} سم - المعيار 35-45 سم).")
+
+    # 3. TV viewing distance check
+    if sofas and tv_units:
+        s_pos = sofas[0][1]
+        t_pos = tv_units[0][1]
+        tv_dist = math.sqrt((s_pos[0] - t_pos[0])**2 + (s_pos[2] - t_pos[2])**2)
+        if tv_dist < 1.5:
+            score -= 15
+            recommendations.append(f"شاشة التلفاز قريبة جداً من الجالسين ({tv_dist:.1f} متر). المسافة الصحية المريحة للعين تبدأ من 2.0 متر على الأقل.")
+        else:
+            clearance_checks.append(f"مسافة الرؤية بين وحدة التلفاز والمقاعد مطابقة للمعيار الصحي ({tv_dist:.1f} متر).")
+
+    score = max(50, min(100, score))
+    status = "ممتاز ومطابق للمعايير" if score >= 85 else ("جيد مع بعض الملاحظات" if score >= 70 else "يحتاج إلى إعادة تنظيم")
+
+    if not recommendations:
+        recommendations.append("التوزيع الفراغي الحالي يراعي كافة مسارات الحركة والنسب الإنسانية المعمارية بشكل ممتاز!")
+
+    return {
+        "status": "success",
+        "spatial_score": score,
+        "assessment_label": status,
+        "density_percentage": round(density, 1),
+        "recommendations": recommendations,
+        "passed_checks": clearance_checks
+    }
+

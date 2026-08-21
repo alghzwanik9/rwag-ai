@@ -15,6 +15,7 @@ interface StudioToolbarProps {
   setIsMaterialPaletteOpen: (b: boolean) => void;
   setIsARModalOpen: (b: boolean) => void;
   setIsChatbotOpen: (b: boolean) => void;
+  setIsAuditModalOpen?: (b: boolean) => void;
   resetCamera: () => void;
 }
 
@@ -26,8 +27,10 @@ export function StudioToolbar({
   setIsMaterialPaletteOpen,
   setIsARModalOpen,
   setIsChatbotOpen,
+  setIsAuditModalOpen,
   resetCamera
 }: StudioToolbarProps) {
+
   const [isTemplatesMenuOpen, setIsTemplatesMenuOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   
@@ -119,7 +122,14 @@ export function StudioToolbar({
         <span className="material-symbols-outlined transition-transform group-hover:scale-110">smart_toy</span>
         <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">المساعد الذكي (AI)</div>
       </button>
+      {setIsAuditModalOpen && (
+        <button onClick={() => setIsAuditModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-all" title="الفحص المعماري">
+          <span className="material-symbols-outlined transition-transform group-hover:scale-110">verified_user</span>
+          <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">الفحص المعماري (Neufert)</div>
+        </button>
+      )}
       <div className="w-8 h-px bg-outline-variant"></div>
+
       <button 
         onClick={() => {
           setViewMode(viewMode === 'orbit' ? 'fpv' : 'orbit');

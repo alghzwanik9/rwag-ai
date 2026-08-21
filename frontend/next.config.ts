@@ -42,6 +42,14 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/api/v1/studio/:path*`,
       },
       {
+        source: "/api/v1/spatial-audit",
+        destination: `${backendUrl}/api/v1/spatial-audit`,
+      },
+      {
+        source: "/api/v1/architectural-standards",
+        destination: `${backendUrl}/api/v1/architectural-standards`,
+      },
+      {
         source: "/api/server-ip",
         destination: `${backendUrl}/api/server-ip`,
       },

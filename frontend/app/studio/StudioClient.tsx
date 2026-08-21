@@ -4,9 +4,8 @@ import React, { useState, Suspense, useRef, useEffect, useMemo, useCallback } fr
 import { useSearchParams } from "next/navigation";
 
 import { Canvas, useFrame, useThree, ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, PointerLockControls, useGLTF, Environment, ContactShadows, Sparkles } from "@react-three/drei";
+import { OrbitControls, PointerLockControls, useGLTF, Environment, ContactShadows } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
-import { UserButton } from "@clerk/nextjs";
 import * as THREE from 'three';
 import { EffectComposer, Bloom, DepthOfField } from '@react-three/postprocessing';
 import AdaptiveARViewer from "@/components/AdaptiveARViewer";
@@ -14,59 +13,54 @@ import CopilotSuggestions from "@/components/CopilotSuggestions";
 import MaterialPalette from "@/components/MaterialPalette";
 import ProjectsModal from "@/components/ProjectsModal";
 import PrintReport from "@/components/PrintReport";
-import { useSceneStore, useFormattedTotalCost, useFormattedBudgetLimit } from "@/lib/useSceneStore";
-import type { WindowSize, CurtainStyle } from "@/lib/useSceneStore";
+import { useSceneStore, useFormattedTotalCost } from "@/lib/useSceneStore";
 import { TemplateType } from "@/lib/templates";
 import RealRoom from "./components/RealRoom";
 import RealFurnitureLoader from "./components/RealFurnitureLoader";
 import { ChatbotPanel } from "./components/ChatbotPanel";
+import { SpatialAuditModal } from "./components/SpatialAuditModal";
 import { useAssets } from "@/lib/useAssets";
 import { IkeaAssetsLibrary } from "@/components/IkeaAssetsLibrary";
-
-export interface AIResponseItem {
-  instance_id: string;
-  asset_id: string;
-  position?: [number, number, number];
-  rotation?: [number, number, number];
-  dimensions?: { width: number; height: number; depth: number };
-  economy?: {
-    sku?: string;
-    brand?: string;
-    price?: number;
-    currency?: string;
-  };
-}
+import { REGION, Z } from "./config/regions";
+import type { StudioRequest, StudioUiState } from "./config/pipeline";
+import { fixtureRequest, isStudioUiState } from "./config/stateFixtures";
+import { useAIGeneration } from "./hooks/useAIGeneration";
+import StudioHeader from "./components/StudioHeader";
+import ConversationPanel from "./components/ConversationPanel";
+import SceneDetailsDrawer from "./components/SceneDetailsDrawer";
+import SceneToolbar from "./components/SceneToolbar";
 
 
 const AMBIENT_PRESETS = {
   morning: {
-    bg: new THREE.Color('#FDFBF7'),
+    bg: new THREE.Color('#EDE8E1'),
     ambientColor: new THREE.Color('#ffffff'),
-    ambientIntensity: 0.6,
-    dirColor: new THREE.Color('#ffebd6'),
-    dirIntensity: 1.6,
-    dirPos: new THREE.Vector3(8, 12, -6),
-    fogColor: new THREE.Color('#FDFBF7'),
+    ambientIntensity: 0.65,
+    dirColor: new THREE.Color('#FFF5E4'),
+    dirIntensity: 1.4,
+    dirPos: new THREE.Vector3(6, 9, 5),
+    fogColor: new THREE.Color('#EDE8E1'),
   },
   rainy: {
-    bg: new THREE.Color('#8c9fb3'),
-    ambientColor: new THREE.Color('#c8d4dc'),
-    ambientIntensity: 0.5,
-    dirColor: new THREE.Color('#b0bcc8'),
-    dirIntensity: 0.5,
-    dirPos: new THREE.Vector3(0, 10, 0),
-    fogColor: new THREE.Color('#8c9fb3'),
+    bg: new THREE.Color('#2C3540'),
+    ambientColor: new THREE.Color('#8899A6'),
+    ambientIntensity: 0.45,
+    dirColor: new THREE.Color('#A4B8C6'),
+    dirIntensity: 0.6,
+    dirPos: new THREE.Vector3(0, 8, 4),
+    fogColor: new THREE.Color('#2C3540'),
   },
   midnight: {
-    bg: new THREE.Color('#0f172a'),
-    ambientColor: new THREE.Color('#1e293b'),
-    ambientIntensity: 0.15,
-    dirColor: new THREE.Color('#38bdf8'),
-    dirIntensity: 0.2,
-    dirPos: new THREE.Vector3(-5, 5, 5),
-    fogColor: new THREE.Color('#0f172a'),
+    bg: new THREE.Color('#0D1117'),
+    ambientColor: new THREE.Color('#161B22'),
+    ambientIntensity: 0.2,
+    dirColor: new THREE.Color('#58A6FF'),
+    dirIntensity: 0.4,
+    dirPos: new THREE.Vector3(-4, 6, 4),
+    fogColor: new THREE.Color('#0D1117'),
   }
 };
+
 
 function AmbientController() {
   const ambientMode = useSceneStore((s) => s.ambientMode);
@@ -475,22 +469,18 @@ export default function StudioClient() {
   const searchParams = useSearchParams();
   const activeReference = searchParams.get("reference");
 
-  const [prompt, setPrompt]               = useState("");
-  const [isLoading, setIsLoading]         = useState(false);
   const [isToastVisible, setIsToastVisible] = useState(false);
   const [toastMessage, setToastMessage]   = useState("");
   const [isModalOpen, setIsModalOpen]     = useState(false);
   const [isARModalOpen, setIsARModalOpen] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+
   const [isMaterialPaletteOpen, setIsMaterialPaletteOpen] = useState(false);
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
-  const [isTemplatesMenuOpen, setIsTemplatesMenuOpen] = useState(false);
-  const [isSettingsMenuOpen, setIsSettingsMenuOpen]   = useState(false);
   const [isTransitioning, setIsTransitioning]         = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'ambient'|'studio'|'room'|'materials'|'windows'>('ambient');
-  // activeCategory removed
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Collapsed by default; auto-opens when a generation settles. */
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const {
     assets: catalogAssets,
@@ -500,42 +490,20 @@ export default function StudioClient() {
   } = useAssets();
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null);
 
+  // Lighting, dimensions, finishes and window controls now read the store
+  // directly inside SceneSettingsPanel — StudioClient was only re-exposing them.
   const sceneItems       = useSceneStore((s) => s.sceneItems);
   const isBudgetExceeded = useSceneStore((s) => s.isBudgetExceeded);
   const isDragging       = useSceneStore((s) => s.isDragging);
   const clearScene       = useSceneStore((s) => s.clearScene);
   const addSceneItem     = useSceneStore((s) => s.addSceneItem);
   const ambientMode      = useSceneStore((s) => s.ambientMode);
-  const setAmbientMode   = useSceneStore((s) => s.setAmbientMode);
-  const coveLightIntensity = useSceneStore((s) => s.coveLightIntensity);
-  const setCoveLightIntensity = useSceneStore((s) => s.setCoveLightIntensity);
-  const coveLightColor   = useSceneStore((s) => s.coveLightColor);
-  const setCoveLightColor = useSceneStore((s) => s.setCoveLightColor);
-  const spotlightToggle  = useSceneStore((s) => s.spotlightToggle);
-  const toggleSpotlight  = useSceneStore((s) => s.toggleSpotlight);
-  const floorColor       = useSceneStore((s) => s.floorColor);
-  const setFloorColor    = useSceneStore((s) => s.setFloorColor);
-  const wallColor        = useSceneStore((s) => s.wallColor);
-  const setWallColor     = useSceneStore((s) => s.setWallColor);
-  const roomWidth        = useSceneStore((s) => s.roomWidth);
-  const setRoomWidth     = useSceneStore((s) => s.setRoomWidth);
-  const roomDepth        = useSceneStore((s) => s.roomDepth);
-  const setRoomDepth     = useSceneStore((s) => s.setRoomDepth);
-  const wallHeight       = useSceneStore((s) => s.wallHeight);
-  const setWallHeight    = useSceneStore((s) => s.setWallHeight);
-  const roomArea         = roomWidth * roomDepth;
   const undo             = useSceneStore((s) => s.undo);
   const redo             = useSceneStore((s) => s.redo);
   const viewMode         = useSceneStore((s) => s.viewMode);
   const setViewMode      = useSceneStore((s) => s.setViewMode);
   const resetToDefaults  = useSceneStore((s) => s.resetToDefaults);
   const formattedTotal   = useFormattedTotalCost();
-  const formattedBudget  = useFormattedBudgetLimit();
-  // Window state
-  const windows          = useSceneStore((s) => s.windows);
-  const addWindow        = useSceneStore((s) => s.addWindow);
-  const removeWindow     = useSceneStore((s) => s.removeWindow);
-  const updateWindow     = useSceneStore((s) => s.updateWindow);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -551,6 +519,47 @@ export default function StudioClient() {
     window.addEventListener('show-toast', handleShowToast);
     return () => window.removeEventListener('show-toast', handleShowToast);
   }, [showToast]);
+
+  const onSettled = useCallback((state: StudioUiState) => {
+    // Both `success` and `partial` produce a scene worth inspecting.
+    if (state === 'success' || state === 'partial') setIsDrawerOpen(true);
+  }, []);
+
+  const {
+    prompt,
+    setPrompt,
+    imageBase64,
+    setImageBase64,
+    isLoading,
+    requests,
+    uiState,
+    handleGenerate,
+    handleRetry,
+    clearRequests,
+  } = useAIGeneration({
+    showToast,
+    catalogAssets,
+    styleReference: activeReference,
+    onBeforeBuild: () => setModelUrl(null),
+    onSettled,
+  });
+
+  /**
+   * Dev-only state override: /studio?state=partial renders a fixture so every
+   * state — especially `partial` — is reviewable without a working backend.
+   * Stripped in production builds.
+   */
+  const stateOverride = searchParams.get("state");
+  const { viewRequests, viewUiState } = useMemo(() => {
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (!isDev || !isStudioUiState(stateOverride)) {
+      return { viewRequests: requests, viewUiState: uiState };
+    }
+    return {
+      viewRequests: stateOverride === 'idle' ? ([] as StudioRequest[]) : [fixtureRequest(stateOverride)],
+      viewUiState: stateOverride,
+    };
+  }, [requests, stateOverride, uiState]);
 
   // Global Undo/Redo Shortcuts
   useEffect(() => {
@@ -585,116 +594,44 @@ export default function StudioClient() {
   }, [formattedTotal, isBudgetExceeded, showToast]);
 
   const resetCamera = () => {
+    // controlsRef is only attached to OrbitControls, so this is a no-op while
+    // walkthrough mode is active. Toggling back out of FPV calls it again.
     if (controlsRef.current) {
       controlsRef.current.reset();
-      controlsRef.current.object.position.set(12, 8, 12);
+      controlsRef.current.object.position.set(8.5, 6, 8.5);
       controlsRef.current.target.set(0, 1, 0);
       controlsRef.current.update();
     }
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() && !imageBase64) return;
-    setIsLoading(true);
-    setToastMessage("جاري التوليد بذكاء رواق...");
-    setIsToastVisible(true);
-
-    try {
-      const finalPrompt = activeReference 
-        ? `[Style Reference: ${activeReference}] ${prompt}` 
-        : prompt;
-
-      const res = await fetch("/api/generate-room", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: finalPrompt || "تصميم الغرفة الموجودة في الصورة", imageBase64 }),
-      });
-
-
-      if (res.ok) {
-        const data = await res.json();
-        
-        if (data.items && data.items.length > 0) {
-          clearScene();
-          setModelUrl(null); // Clear the monolithic room if present
-          
-          data.items.forEach((item: AIResponseItem) => {
-             const targetId = item.economy?.sku || item.asset_id;
-             let matchingAsset = catalogAssets.find(a => a.id === targetId);
-
-             // If exact match not found, fallback to a real 3D model from the catalog so we NEVER show a cube
-             if (!matchingAsset && catalogAssets.length > 0) {
-                const searchKeyword = item.asset_id.toLowerCase().split('_')[0];
-                matchingAsset = catalogAssets.find(a => (a.category?.toLowerCase().includes(searchKeyword) || a.name.toLowerCase().includes(searchKeyword)) && a.modelUrl) 
-                             || catalogAssets.find(a => a.modelUrl);
-             }
-
-             if (matchingAsset) {
-                addSceneItem({
-                    ...matchingAsset,
-                    instanceId: item.instance_id,
-                    position: item.position,
-                    rotation: item.rotation
-                });
-             } else {
-                // Ultimate fallback for missing assets if DB is totally empty
-                addSceneItem({
-                    instanceId: item.instance_id,
-                    id: targetId || item.asset_id,
-                    name: item.asset_id.replace("_", " "),
-                    brand: item.economy?.brand || "Rwaq AI",
-                    price: item.economy?.price || 0,
-                    currency: item.economy?.currency || "SAR",
-                    category: "seating",
-                    modelUrl: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb", // Use actual fallback chair instead of cube
-                    thumbnailUrl: "",
-                    dimensions: item.dimensions || { width: 1, height: 1, depth: 1 },
-                    position: item.position || [0,0,0],
-                    rotation: item.rotation || [0,0,0]
-                });
-             }
-          });
-          
-          if (data.room_dimensions) {
-            setRoomWidth(data.room_dimensions.width);
-            setRoomDepth(data.room_dimensions.depth);
-          }
-          if (data.ambient_mode) setAmbientMode(data.ambient_mode);
-          if (data.floor_color) setFloorColor(data.floor_color);
-          if (data.wall_color) setWallColor(data.wall_color);
-          
-          setToastMessage("تم بنجاح!");
-          showToast("✅ اكتمل توليد الغرفة بالذكاء الاصطناعي!");
-        } else {
-          setToastMessage("❌ فشل التوليد، حاول مرة أخرى");
-          showToast("❌ فشل التوليد، حاول مرة أخرى");
-        }
-        
-        setPrompt("");
-        setImageBase64(null);
-      } else if (res.status === 429) {
-        setToastMessage("تجاوزت الحد المسموح — انتظر دقيقة وأعد المحاولة");
-      } else {
-        setToastMessage("حدث خطأ في الاتصال بالخادم");
-      }
-    } catch {
-      setToastMessage("تعذّر الاتصال بالخادم — تحقق من تشغيله");
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => setIsToastVisible(false), 5000);
+  const handleToggleViewMode = () => {
+    const goingToWalkthrough = viewMode === 'orbit';
+    setViewMode(goingToWalkthrough ? 'fpv' : 'orbit');
+    if (goingToWalkthrough) {
+      showToast("🚶‍♂️ وضع التجول مفعل (استخدم W, A, S, D للحركة والماوس للنظر)");
+    } else {
+      showToast("🔄 وضع الدوران مفعل");
+      resetCamera();
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageBase64(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  /**
+   * The promoted primary action. The button that used to carry this label sat
+   * at the bottom of the global sidebar with no onClick at all.
+   */
+  const handleNewProject = () => {
+    clearScene();
+    clearRequests();
+    setModelUrl(null);
+    setSceneId("default");
+    resetToDefaults();
+    setPrompt("");
+    setImageBase64(null);
+    setIsDrawerOpen(false);
+    showToast("🆕 تم بدء مشروع جديد");
   };
+
+
 
   const handleLoadTemplate = (type: TemplateType) => {
     setModelUrl(null);
@@ -758,7 +695,6 @@ export default function StudioClient() {
     
     if (itemsToAdd.length === 0) {
       showToast("⚠️ لم يتم العثور على أثاث متاح في قاعدة البيانات");
-      setIsTemplatesMenuOpen(false);
       return;
     }
     
@@ -767,7 +703,6 @@ export default function StudioClient() {
     });
     
     showToast(`✅ تم تحميل قالب ${type} بنجاح!`);
-    setIsTemplatesMenuOpen(false);
     setIsTransitioning(true);
     setTimeout(() => setIsTransitioning(false), 800);
   };
@@ -835,497 +770,48 @@ export default function StudioClient() {
     <>
       <div className="print:hidden bg-surface text-on-surface overflow-hidden" dir="rtl">
 
-        <nav className="fixed left-4 top-1/2 -translate-y-1/2 w-16 max-h-[90vh] overflow-y-auto no-scrollbar bg-surface/60 backdrop-blur-xl rounded-2xl border border-outline-variant/30 shadow-2xl flex flex-col items-center gap-2 py-4 z-40 transition-all hover:bg-surface/80 hover:shadow-[0_8px_32px_rgba(0,0,0,0.1)]">
-          
-          <button onClick={() => setIsProjectsModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-primary hover:bg-primary hover:text-on-primary transition-all duration-300" title="حفظ المشروع">
-            <span className="material-symbols-outlined transition-transform group-hover:scale-110">save</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">حفظ المشروع</div>
-          </button>
-          
-          <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
+        <StudioHeader
+          onNewProject={handleNewProject}
+          onOpenProjects={() => setIsProjectsModalOpen(true)}
+        />
 
-          <button onClick={() => { undo(); showToast("↩️ تراجع"); }} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
-            <span className="material-symbols-outlined transition-transform group-hover:-translate-x-1">undo</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">تراجع (Ctrl+Z)</div>
-          </button>
-          
-          <button onClick={() => { redo(); showToast("↪️ إعادة"); }} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
-            <span className="material-symbols-outlined transition-transform group-hover:translate-x-1">redo</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إعادة (Ctrl+Y)</div>
-          </button>
+        <ConversationPanel
+          uiState={viewUiState}
+          requests={viewRequests}
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={handleGenerate}
+          onRetry={handleRetry}
+          imagePreview={imageBase64}
+          onAttachImage={setImageBase64}
+          onClearImage={() => setImageBase64(null)}
+        />
 
-          <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
-          
-          <button onClick={resetCamera} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
-            <span className="material-symbols-outlined transition-transform group-hover:scale-110">3d_rotation</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إعادة ضبط الكاميرا</div>
-          </button>
-          
-          <button 
-            onClick={() => {
-              if (controlsRef.current && controlsRef.current.object) {
-                const camera = controlsRef.current.object;
-                const target = controlsRef.current.target;
-                const direction = camera.position.clone().sub(target).normalize();
-                camera.position.addScaledVector(direction, -2);
-                controlsRef.current.update();
-              }
-            }}
-            className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300"
-          >
-            <span className="material-symbols-outlined transition-transform group-hover:scale-110">zoom_in</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">تقريب الكاميرا</div>
-          </button>
+        <SceneDetailsDrawer
+          isOpen={isDrawerOpen}
+          onToggle={() => setIsDrawerOpen((open) => !open)}
+          showToast={showToast}
+          onOpenFurnitureLibrary={() => setIsModalOpen(true)}
+          onOpenMaterialPalette={() => setIsMaterialPaletteOpen(true)}
+          onOpenAudit={() => setIsAuditModalOpen(true)}
+          onOpenAR={() => setIsARModalOpen(true)}
+          onLoadTemplate={handleLoadTemplate}
+          modelUrl={modelUrl}
+        />
 
-          <button 
-            onClick={() => {
-              if (controlsRef.current && controlsRef.current.object) {
-                const camera = controlsRef.current.object;
-                const target = controlsRef.current.target;
-                const direction = camera.position.clone().sub(target).normalize();
-                camera.position.addScaledVector(direction, 2);
-                controlsRef.current.update();
-              }
-            }}
-            className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300"
-          >
-            <span className="material-symbols-outlined transition-transform group-hover:scale-110">zoom_out</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إبعاد الكاميرا</div>
-          </button>
-
-          <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
-          
-          {/* Settings Menu Button */}
-          <div className="relative group/menu">
-            <button 
-              onClick={() => { setIsSettingsMenuOpen(!isSettingsMenuOpen); setIsTemplatesMenuOpen(false); }} 
-              className={`relative w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-300 ${isSettingsMenuOpen ? 'bg-primary text-on-primary shadow-lg shadow-primary/30' : 'text-on-surface-variant hover:bg-secondary-container/80'}`}
-            >
-              <span className="material-symbols-outlined">tune</span>
-              {isSettingsMenuOpen && <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-full"></div>}
-            </button>
-            <div className="absolute left-full ml-3 opacity-0 group-hover/menu:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">إعدادات البيئة والغرفة</div>
-            
-            {/* Tabbed Settings Popover */}
-            {isSettingsMenuOpen && (
-              <div className="absolute top-1/2 -translate-y-1/2 left-[72px] w-[340px] bg-surface/95 backdrop-blur-2xl border border-outline-variant/40 rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.15)] flex flex-col z-50 overflow-hidden transform origin-left animate-in fade-in zoom-in-95 duration-200">
-                
-                {/* Header */}
-                <div className="flex justify-between items-center px-4 py-3 bg-surface/50 border-b border-outline-variant/30">
-                  <h2 className="font-label-lg font-bold text-on-surface flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-[20px]">tune</span>
-                    إعدادات البيئة
-                  </h2>
-                  <div className="flex items-center gap-1">
-                    <button 
-                      onClick={() => { resetToDefaults(); showToast("🔄 تم استعادة الإعدادات الافتراضية"); }} 
-                      className="text-primary hover:text-secondary w-8 h-8 flex items-center justify-center rounded-lg hover:bg-primary/10 transition-colors"
-                      title="إعادة ضبط على الافتراضي"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">device_reset</span>
-                    </button>
-                    <button onClick={() => setIsSettingsMenuOpen(false)} className="text-on-surface-variant hover:text-error w-8 h-8 flex items-center justify-center rounded-lg hover:bg-error/10 transition-colors">
-                      <span className="material-symbols-outlined text-[18px]">close</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Tabs Navigation */}
-                <div className="flex px-2 pt-2 gap-1 border-b border-outline-variant/20 bg-surface-variant/10">
-                  {[
-                    { id: 'ambient',   icon: 'routine',     label: 'الأجواء'     },
-                    { id: 'studio',    icon: 'highlight',   label: 'الإضاءة'     },
-                    { id: 'room',      icon: 'straighten',  label: 'الأبعاد'     },
-                    { id: 'materials', icon: 'texture',     label: 'التشطيبات'  },
-                    { id: 'windows',   icon: 'window',      label: 'النوافذ'     },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setSettingsTab(tab.id as 'ambient' | 'studio' | 'room' | 'materials' | 'windows')}
-                      className={`flex-1 flex flex-col items-center justify-center gap-1 pb-2 pt-1 border-b-2 transition-all ${settingsTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 rounded-t-lg'}`}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
-                      <span className="text-[10px] font-bold">{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Tab Content Area */}
-                <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                  
-                  {/* Tab: Ambient */}
-                  {settingsTab === 'ambient' && (
-                    <div className="flex flex-col gap-2 animate-in slide-in-from-right-4 fade-in duration-300">
-                      <button 
-                        onClick={() => setAmbientMode('morning')}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition-all border ${ambientMode === 'morning' ? 'bg-primary/10 border-primary text-primary' : 'border-outline-variant/30 text-on-surface hover:bg-surface-variant/50 hover:border-outline-variant'}`}
-                      >
-                        <span className="material-symbols-outlined text-[24px]">light_mode</span>
-                        <div className="text-right">
-                          <div className="font-bold text-sm">الصباح الباكر</div>
-                          <div className="text-[10px] opacity-70">إضاءة شمس دافئة وطبيعية</div>
-                        </div>
-                      </button>
-                      <button 
-                        onClick={() => setAmbientMode('rainy')}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition-all border ${ambientMode === 'rainy' ? 'bg-primary/10 border-primary text-primary' : 'border-outline-variant/30 text-on-surface hover:bg-surface-variant/50 hover:border-outline-variant'}`}
-                      >
-                        <span className="material-symbols-outlined text-[24px]">rainy</span>
-                        <div className="text-right">
-                          <div className="font-bold text-sm">يوم ماطر</div>
-                          <div className="text-[10px] opacity-70">أجواء غائمة بظلال ناعمة</div>
-                        </div>
-                      </button>
-                      <button 
-                        onClick={() => setAmbientMode('midnight')}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition-all border ${ambientMode === 'midnight' ? 'bg-primary/10 border-primary text-primary' : 'border-outline-variant/30 text-on-surface hover:bg-surface-variant/50 hover:border-outline-variant'}`}
-                      >
-                        <span className="material-symbols-outlined text-[24px]">dark_mode</span>
-                        <div className="text-right">
-                          <div className="font-bold text-sm">المساء الهادئ</div>
-                          <div className="text-[10px] opacity-70">إضاءة ليلية دراماتيكية</div>
-                        </div>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Tab: Studio */}
-                  {settingsTab === 'studio' && (
-                    <div className="flex flex-col gap-5 animate-in slide-in-from-right-4 fade-in duration-300">
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="text-sm font-bold text-on-surface">الإضاءة المخفية (Cove)</label>
-                          <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">{coveLightIntensity}%</span>
-                        </div>
-                        <input 
-                          type="range" min="0" max="100" 
-                          value={coveLightIntensity}
-                          onChange={(e) => setCoveLightIntensity(parseInt(e.target.value))}
-                          className="w-full h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="text-sm font-bold text-on-surface">حرارة اللون</label>
-                          <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">{coveLightColor}K</span>
-                        </div>
-                        <input 
-                          type="range" min="3000" max="6000" step="100"
-                          value={coveLightColor}
-                          onChange={(e) => setCoveLightColor(parseInt(e.target.value))}
-                          className="w-full h-2 bg-linear-to-r from-[#ffebd6] via-[#ffffff] to-[#d6ebff] rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 bg-surface-variant/20 rounded-xl border border-outline-variant/30">
-                        <label className="text-sm font-bold text-on-surface flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-primary">highlight</span>
-                          مسار الإضاءة (Spotlights)
-                        </label>
-                        <button 
-                          onClick={() => toggleSpotlight(!spotlightToggle)}
-                          className={`w-11 h-6 rounded-full relative transition-colors duration-300 ${spotlightToggle ? 'bg-primary' : 'bg-outline-variant/50'}`}
-                        >
-                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 ${spotlightToggle ? 'left-[26px]' : 'left-1'}`} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tab: Room Dimensions */}
-                  {settingsTab === 'room' && (
-                    <div className="flex flex-col gap-4 animate-in slide-in-from-right-4 fade-in duration-300">
-                      {[
-                        { label: 'العرض (X)', value: roomWidth, setter: setRoomWidth, min: 3, max: 20 },
-                        { label: 'العمق (Z)', value: roomDepth, setter: setRoomDepth, min: 3, max: 20 },
-                        { label: 'الارتفاع (Y)', value: wallHeight, setter: setWallHeight, min: 2.5, max: 6, step: 0.1 }
-                      ].map((dim, i) => (
-                        <div key={i} className="bg-surface-variant/10 p-3 rounded-xl border border-outline-variant/20">
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="text-sm font-bold text-on-surface">{dim.label}</label>
-                            <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded">{dim.value}m</span>
-                          </div>
-                          <input 
-                            type="range" min={dim.min} max={dim.max} step={dim.step || 0.5}
-                            value={dim.value}
-                            onChange={(e) => dim.setter(parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary"
-                          />
-                        </div>
-                      ))}
-                      <div className="mt-2 p-3 bg-primary/5 rounded-xl border border-primary/20 flex justify-between items-center">
-                        <span className="text-xs font-bold text-on-surface-variant">المساحة الإجمالية</span>
-                        <span className="text-lg font-black text-primary">{roomArea.toFixed(1)} <span className="text-xs">م²</span></span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tab: Materials */}
-                  {settingsTab === 'materials' && (
-                    <div className="flex flex-col gap-5 animate-in slide-in-from-right-4 fade-in duration-300">
-                      <div>
-                        <label className="text-sm font-bold text-on-surface mb-3 block">تشطيب الأرضية (Floor)</label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            { id: 'wood_light', hex: '#d4b595', label: 'خشب فاتح' },
-                            { id: 'marble_white', hex: '#f0f0f0', label: 'رخام أبيض' },
-                            { id: 'concrete', hex: '#8a8d8f', label: 'خرسانة' },
-                            { id: 'slate', hex: '#2f353b', label: 'سليت داكن' }
-                          ].map(swatch => (
-                            <button 
-                              key={swatch.id}
-                              onClick={() => setFloorColor(swatch.hex)}
-                              className={`aspect-square rounded-xl border-2 transition-all hover:scale-105 hover:shadow-md relative ${floorColor === swatch.hex ? 'border-primary scale-105 shadow-sm' : 'border-transparent'}`}
-                              style={{ backgroundColor: swatch.hex }}
-                              title={swatch.label}
-                            >
-                              {floorColor === swatch.hex && <span className="absolute inset-0 flex items-center justify-center material-symbols-outlined text-white drop-shadow-md text-[18px]">check</span>}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="h-px bg-outline-variant/20"></div>
-
-                      <div>
-                        <label className="text-sm font-bold text-on-surface mb-3 block">ألوان الجدران (Walls)</label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            { id: 'white', hex: '#fafafa', label: 'أبيض نقي' },
-                            { id: 'beige', hex: '#e8e5df', label: 'بيج دافئ' },
-                            { id: 'sage', hex: '#b2bfa5', label: 'أخضر مريمية' },
-                            { id: 'navy', hex: '#2c3e50', label: 'أزرق داكن' }
-                          ].map(swatch => (
-                            <button 
-                              key={swatch.id}
-                              onClick={() => setWallColor(swatch.hex)}
-                              className={`aspect-square rounded-xl border-2 transition-all hover:scale-105 hover:shadow-md relative ${wallColor === swatch.hex ? 'border-primary scale-105 shadow-sm' : 'border-transparent'}`}
-                              style={{ backgroundColor: swatch.hex }}
-                              title={swatch.label}
-                            >
-                              {wallColor === swatch.hex && <span className="absolute inset-0 flex items-center justify-center material-symbols-outlined text-white mix-blend-difference drop-shadow-md text-[18px]">check</span>}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tab: Windows */}
-                  {settingsTab === 'windows' && (
-                    <div className="flex flex-col gap-4 animate-in slide-in-from-right-4 fade-in duration-300">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => addWindow('back')}
-                          className="flex-1 flex items-center justify-center gap-2 bg-secondary-container/60 text-on-surface text-xs font-bold py-2.5 rounded-xl border border-outline-variant/40 hover:bg-secondary/20 transition-all"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">add</span>
-                          نافذة خلفية
-                        </button>
-                        <button
-                          onClick={() => addWindow('left')}
-                          className="flex-1 flex items-center justify-center gap-2 bg-secondary-container/60 text-on-surface text-xs font-bold py-2.5 rounded-xl border border-outline-variant/40 hover:bg-secondary/20 transition-all"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">add</span>
-                          نافذة جانبية
-                        </button>
-                      </div>
-
-                      {windows.length === 0 && (
-                        <div className="text-center py-8 text-on-surface-variant">
-                          <span className="material-symbols-outlined text-4xl opacity-30 block mb-2">window</span>
-                          <p className="text-xs">لا توجد نوافذ بعد. أضف نافذة أعلاه!</p>
-                        </div>
-                      )}
-
-                      {windows.map((win, idx) => (
-                        <div key={win.id} className="bg-surface-variant/10 rounded-2xl border border-outline-variant/30 overflow-hidden">
-                          <div className="flex items-center justify-between px-3 py-2 bg-surface-variant/20 border-b border-outline-variant/20">
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[16px] text-secondary">window</span>
-                              <span className="text-xs font-bold text-on-surface">
-                                نافذة {idx + 1} · {win.wall === 'back' ? 'خلفية' : 'جانبية'}
-                              </span>
-                            </div>
-                            <button onClick={() => removeWindow(win.id)} className="text-error/60 hover:text-error w-6 h-6 flex items-center justify-center rounded-lg hover:bg-error/10 transition-colors">
-                              <span className="material-symbols-outlined text-[14px]">delete</span>
-                            </button>
-                          </div>
-
-                          <div className="p-3 flex flex-col gap-3">
-                            {/* Size */}
-                            <div>
-                              <p className="text-[10px] font-bold text-on-surface-variant mb-1.5">الحجم</p>
-                              <div className="flex gap-1">
-                                {(['small', 'medium', 'large'] as WindowSize[]).map((s) => (
-                                  <button key={s} onClick={() => updateWindow(win.id, { size: s })}
-                                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all border ${win.size === s ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:bg-surface-variant/30'}`}
-                                  >
-                                    {s === 'small' ? 'صغيرة' : s === 'medium' ? 'متوسطة' : 'كبيرة'}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Position */}
-                            <div>
-                              <div className="flex justify-between mb-1">
-                                <p className="text-[10px] font-bold text-on-surface-variant">الموضع على الجدار</p>
-                                <span className="text-[10px] font-mono text-primary">{Math.round(win.positionOffset * 100)}%</span>
-                              </div>
-                              <input type="range" min="-1" max="1" step="0.05" value={win.positionOffset}
-                                onChange={(e) => updateWindow(win.id, { positionOffset: parseFloat(e.target.value) })}
-                                className="w-full h-1.5 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary"
-                              />
-                            </div>
-
-                            {/* Height */}
-                            <div>
-                              <div className="flex justify-between mb-1">
-                                <p className="text-[10px] font-bold text-on-surface-variant">ارتفاع النافذة</p>
-                                <span className="text-[10px] font-mono text-primary">{Math.round(win.height * 100)}%</span>
-                              </div>
-                              <input type="range" min="0.3" max="0.85" step="0.05" value={win.height}
-                                onChange={(e) => updateWindow(win.id, { height: parseFloat(e.target.value) })}
-                                className="w-full h-1.5 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer accent-primary"
-                              />
-                            </div>
-
-                            {/* Curtain Type */}
-                            <div>
-                              <p className="text-[10px] font-bold text-on-surface-variant mb-1.5">نوع الستارة</p>
-                              <div className="grid grid-cols-2 gap-1">
-                                {([
-                                  { id: 'none', label: 'بدون ستارة', icon: 'block' },
-                                  { id: 'sheer', label: 'شفافة', icon: 'texture' },
-                                  { id: 'blackout', label: 'حجب ضوء', icon: 'dark_mode' },
-                                  { id: 'draped', label: 'منسدلة', icon: 'curtains' },
-                                ] as { id: CurtainStyle; label: string; icon: string }[]).map((c) => (
-                                  <button key={c.id} onClick={() => updateWindow(win.id, { curtain: c.id })}
-                                    className={`flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold rounded-lg transition-all border ${win.curtain === c.id ? 'bg-secondary text-white border-secondary' : 'border-outline-variant/40 text-on-surface-variant hover:bg-surface-variant/30'}`}
-                                  >
-                                    <span className="material-symbols-outlined text-[12px]">{c.icon}</span>
-                                    {c.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Curtain Color + Open/Close */}
-                            {win.curtain !== 'none' && (
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  <p className="text-[10px] font-bold text-on-surface-variant">اللون</p>
-                                  <div className="flex gap-1">
-                                    {['#f0ece4','#d4ccc0','#8fa8b2','#c5a882','#6b7b8d','#b8936a'].map((clr) => (
-                                      <button key={clr} onClick={() => updateWindow(win.id, { curtainColor: clr })}
-                                        className={`w-5 h-5 rounded-full border-2 transition-all ${win.curtainColor === clr ? 'border-primary scale-110' : 'border-transparent'}`}
-                                        style={{ backgroundColor: clr }}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
-                                <button onClick={() => updateWindow(win.id, { isOpen: !win.isOpen })}
-                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${win.isOpen ? 'bg-primary/10 text-primary border-primary/30' : 'border-outline-variant/40 text-on-surface-variant'}`}
-                                >
-                                  <span className="material-symbols-outlined text-[12px]">{win.isOpen ? 'curtains' : 'curtains_closed'}</span>
-                                  {win.isOpen ? 'مفتوحة' : 'مغلقة'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="relative group/menu">
-            <button 
-              onClick={() => { setIsTemplatesMenuOpen(!isTemplatesMenuOpen); setIsSettingsMenuOpen(false); }} 
-              className={`relative w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-300 ${isTemplatesMenuOpen ? 'bg-primary text-on-primary shadow-lg shadow-primary/30' : 'text-on-surface-variant hover:bg-secondary-container/80'}`}
-            >
-              <span className="material-symbols-outlined">dashboard_customize</span>
-              {isTemplatesMenuOpen && <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-full"></div>}
-            </button>
-            <div className="absolute left-full ml-3 opacity-0 group-hover/menu:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">قوالب التصميم جاهزة</div>
-            
-            {isTemplatesMenuOpen && (
-              <div className="absolute top-1/2 -translate-y-1/2 left-[72px] w-56 bg-surface/95 backdrop-blur-2xl border border-outline-variant/40 rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.15)] p-2 flex flex-col gap-1 z-50 transform origin-left animate-in fade-in zoom-in-95 duration-200">
-                <p className="px-3 py-2 text-xs font-bold text-on-surface-variant border-b border-outline-variant/30 mb-2">اختر نموذجاً للبدء</p>
-                <button onClick={() => { handleLoadTemplate("LivingRoom"); setIsTemplatesMenuOpen(false); }} className="flex items-center gap-3 text-right px-3 py-2.5 text-sm rounded-xl hover:bg-primary/10 hover:text-primary text-on-surface transition-colors font-bold"><span className="material-symbols-outlined text-[20px]">weekend</span>غرفة معيشة</button>
-                <button onClick={() => { handleLoadTemplate("Bedroom"); setIsTemplatesMenuOpen(false); }} className="flex items-center gap-3 text-right px-3 py-2.5 text-sm rounded-xl hover:bg-primary/10 hover:text-primary text-on-surface transition-colors font-bold"><span className="material-symbols-outlined text-[20px]">bed</span>غرفة نوم</button>
-                <button onClick={() => { handleLoadTemplate("Kitchen"); setIsTemplatesMenuOpen(false); }} className="flex items-center gap-3 text-right px-3 py-2.5 text-sm rounded-xl hover:bg-primary/10 hover:text-primary text-on-surface transition-colors font-bold"><span className="material-symbols-outlined text-[20px]">countertops</span>مطبخ و طعام</button>
-              </div>
-            )}
-          </div>
-
-          <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
-          
-          <button onClick={() => setIsProjectsModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
-            <span className="material-symbols-outlined transition-transform group-hover:scale-110">folder_open</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">مشاريعي</div>
-          </button>
-          
-          <button onClick={() => setIsModalOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl bg-primary text-on-primary hover:bg-primary/90 shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all duration-300 hover:-translate-y-0.5">
-            <span className="material-symbols-outlined">chair</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity text-primary font-bold">إضافة أثاث</div>
-          </button>
-          <button onClick={() => setIsMaterialPaletteOpen(true)} className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-secondary-container/80 transition-all duration-300">
-            <span className="material-symbols-outlined transition-transform group-hover:scale-110">palette</span>
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">مكتبة الألوان</div>
-          </button>
-          <button onClick={() => window.dispatchEvent(new CustomEvent('rwaq-snapshot'))} className="w-12 h-12 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-secondary-container/50 transition-all" title="لقطة شاشة">
-            <span className="material-symbols-outlined">camera_alt</span>
-          </button>
-          <button onClick={() => setIsARModalOpen(true)} className="w-12 h-12 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-secondary-container/50 transition-all" title="الواقع المعزز">
-            <span className="material-symbols-outlined">view_in_ar</span>
-          </button>
-          <div className="w-8 h-px bg-outline-variant"></div>
-          <button 
-            onClick={() => {
-              setViewMode(viewMode === 'orbit' ? 'fpv' : 'orbit');
-              if (viewMode === 'orbit') {
-                showToast("🚶‍♂️ وضع التجول مفعل (استخدم W, A, S, D للحركة و الماوس للنظر)");
-              } else {
-                showToast("🔄 وضع الدوران مفعل");
-                resetCamera();
-              }
-            }} 
-            className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${viewMode === 'fpv' ? 'bg-secondary-container text-on-secondary-container scale-105' : 'text-on-surface-variant hover:bg-secondary-container/50'}`} 
-            title={viewMode === 'fpv' ? "إلغاء التجول" : "تجول (Walkthrough)"}
-          >
-            <span className="material-symbols-outlined">{viewMode === 'fpv' ? "cancel" : "directions_walk"}</span>
-          </button>
-          <div className="w-8 h-px bg-outline-variant"></div>
-          <button onClick={resetCamera} className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high transition-all" title="إعادة المنظور">
-            <span className="material-symbols-outlined">my_location</span>
-          </button>
-          
-          <div className="w-8 h-px bg-outline-variant/30 my-1"></div>
-
-          {/* Clerk User Button */}
-          <div className="group relative w-12 h-12 flex items-center justify-center rounded-xl">
-            <UserButton appearance={{ elements: { userButtonAvatarBox: "w-10 h-10 shadow-sm" } }} />
-            <div className="absolute left-full ml-3 opacity-0 group-hover:opacity-100 bg-surface text-on-surface px-2 py-1 rounded shadow-lg text-xs whitespace-nowrap pointer-events-none transition-opacity">الحساب الشخصي</div>
-          </div>
-        </nav>
-
-        <main className="fixed inset-0 overflow-hidden bg-background">
-          <div className="w-full h-full relative bg-white overflow-hidden group">
+        <main className={`${REGION.canvas} overflow-hidden bg-background`}>
+          {/* No bare `group` here: nothing uses it, and it silently triggered
+              every `group-hover:` variant nested anywhere inside the canvas. */}
+          <div className="relative h-full w-full overflow-hidden bg-surface-container-high">
             <div className="absolute inset-0 z-0">
               <Canvas 
                 shadows 
                 dpr={[1, 2]} 
                 gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, outputColorSpace: THREE.SRGBColorSpace, preserveDrawingBuffer: true }}
-                camera={{ position: [12, 8, 12], fov: 45 }}
+                camera={{ position: [8.5, 6, 8.5], fov: 40 }}
               >
-                <color attach="background" args={['#f4f4f6']} />
+                <color attach="background" args={['#EDE8E1']} />
+
                 <SnapshotManager />
                 <AmbientController />
                 <LightingRig />
@@ -1395,80 +881,23 @@ export default function StudioClient() {
                 <p className="font-label-md text-label-md">يتم الآن المعالجة بذكاء أستوديو التصميم...</p>
               </div>
             )}
+            <SceneToolbar
+              onUndo={() => { undo(); showToast("↩️ تراجع"); }}
+              onRedo={() => { redo(); showToast("↪️ إعادة"); }}
+              viewMode={viewMode}
+              onToggleViewMode={handleToggleViewMode}
+              onResetView={resetCamera}
+              onScreenshot={() => window.dispatchEvent(new CustomEvent("rwaq-snapshot"))}
+            />
           </div>
         </main>
 
-        {/* AI Prompt Input (Bottom Center) */}
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-[800px] z-50 px-container-padding pointer-events-none flex flex-col items-center">
-          {activeReference && (
-            <div className="relative pointer-events-auto bg-[#4A90E2]/10 border border-[#4A90E2]/30 rounded-xl px-4 py-1.5 shadow-xs flex items-center gap-2 self-start mb-2 ml-6 text-xs text-[#4A90E2] font-bold">
-              <span className="material-symbols-outlined text-[14px]">brush</span>
-              <span>النمط المعماري النشط: {activeReference}</span>
-              <button 
-                onClick={() => {
-                  window.location.search = "";
-                }}
-                className="hover:text-red-500 rounded-full w-4 h-4 flex items-center justify-center transition-colors"
-                title="إزالة النمط"
-              >
-                <span className="material-symbols-outlined text-[12px]">close</span>
-              </button>
-            </div>
-          )}
-          {imageBase64 && (
-
-            <div className="relative pointer-events-auto bg-surface-container-lowest border border-outline-variant rounded-xl p-2 shadow-sm self-end mb-2 mr-6">
-              <button 
-                onClick={() => setImageBase64(null)}
-                className="absolute -top-2 -right-2 bg-error text-on-error rounded-full w-6 h-6 flex items-center justify-center shadow-sm hover:scale-105 transition-transform"
-              >
-                <span className="material-symbols-outlined text-[14px]">close</span>
-              </button>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageBase64} alt="Upload Preview" className="h-16 w-16 object-cover rounded-lg border border-outline-variant" />
-            </div>
-          )}
-          <div className="pointer-events-auto w-full bg-surface/80 backdrop-blur-2xl border border-white/30 shadow-[0_8px_32px_rgba(0,0,0,0.1)] rounded-full flex items-center px-6 py-3 gap-stack-md focus-within:ring-2 ring-primary/30 transition-all hover:shadow-[0_12px_48px_rgba(0,0,0,0.15)]">
-            <span className="material-symbols-outlined text-secondary" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <input 
-              className="grow bg-transparent border-none focus:ring-0 font-body-lg text-body-lg placeholder-on-surface-variant text-primary" 
-              dir="rtl" 
-              placeholder="اكتب طلبك هنا، مثال: غرفة جلوس مودرن، أو ارفع صورة..." 
-              type="text"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
-            />
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={fileInputRef} 
-              onChange={handleImageUpload} 
-              className="hidden" 
-            />
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high"
-              title="إرفاق صورة"
-            >
-              <span className="material-symbols-outlined">attach_file</span>
-            </button>
-            <button 
-              onClick={handleGenerate}
-              disabled={isLoading}
-              className={`${isLoading ? "bg-surface-tint" : "bg-primary"} text-on-primary rounded-full px-8 py-2 font-label-md text-label-md transition-all active:scale-95 flex items-center gap-2`}
-            >
-              <span>{isLoading ? "جاري..." : "توليد"}</span>
-              {!isLoading && <span className="material-symbols-outlined text-sm">send</span>}
-            </button>
-          </div>
-        </div>
 
 
 
       {/* ── مودال الأثاث ── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center" id="furniture-modal">
+        <div className={`fixed inset-0 ${Z.modal} flex items-center justify-center`} id="furniture-modal">
           <div className="absolute inset-0 bg-primary/20 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
           <div className="relative bg-surface w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-xl border border-outline-variant shadow-2xl flex flex-col z-10">
             <div className="flex items-center justify-between p-stack-lg border-b border-outline-variant bg-surface">
@@ -1489,7 +918,7 @@ export default function StudioClient() {
 
       {/* ── مودال الواقع المعزز ── */}
       {isARModalOpen && (
-        <div className="fixed inset-0 z-110 flex items-center justify-center p-4">
+        <div className={`fixed inset-0 ${Z.modal} flex items-center justify-center p-4`}>
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsARModalOpen(false)} />
           <div className="relative w-full max-w-5xl h-[85vh] bg-surface rounded-2xl overflow-hidden shadow-2xl flex flex-col z-10 border border-outline-variant">
             <div className="absolute top-4 left-4 z-50">
@@ -1529,8 +958,16 @@ export default function StudioClient() {
         setSceneId={setSceneId}
       />
 
+      {/* ── الفحص المعماري الذكي (Spatial & Neufert Audit) ── */}
+      <SpatialAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        showToast={showToast}
+      />
+
+
         {/* ── Transition Overlay ── */}
-        <div className={`fixed inset-0 z-90 pointer-events-none transition-opacity duration-700 ${isTransitioning ? "opacity-100" : "opacity-0"}`}>
+        <div className={`fixed inset-0 ${Z.notification} pointer-events-none transition-opacity duration-700 ${isTransitioning ? "opacity-100" : "opacity-0"}`}>
           <div className="absolute inset-0 bg-linear-to-b from-primary/40 via-surface/60 to-surface/80 backdrop-blur-sm" />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4">
             <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
@@ -1544,7 +981,7 @@ export default function StudioClient() {
         {assetsError && (
           <div
             role="alert"
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-110 flex items-center gap-3 rounded-full border border-error/40 bg-error-container px-5 py-2.5 text-on-error-container shadow-lg"
+            className={`fixed top-20 left-1/2 -translate-x-1/2 ${Z.notification} flex items-center gap-3 rounded-full border border-error/40 bg-error-container px-5 py-2.5 text-on-error-container shadow-lg`}
           >
             <span className="material-symbols-outlined text-[20px]">cloud_off</span>
             <span className="text-sm font-medium">{assetsError}</span>
@@ -1561,7 +998,7 @@ export default function StudioClient() {
         )}
 
         {/* ── إشعار Toast ── */}
-        <div className={`fixed bottom-32 left-1/2 -translate-x-1/2 bg-primary-container text-on-primary px-6 py-3 rounded-full shadow-lg z-100 transition-opacity duration-500 ${isToastVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 bg-primary-container text-on-primary px-6 py-3 rounded-full shadow-lg ${Z.notification} transition-opacity duration-500 ${isToastVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
           {toastMessage}
         </div>
       </div>

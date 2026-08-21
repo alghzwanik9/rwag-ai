@@ -28,3 +28,15 @@ class ProjectStateV1(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+
+class StudioGenerateRequest(BaseModel):
+    prompt: str
+    base_image_url: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+
+class SpatialAuditRequest(BaseModel):
+    items: List[Dict[str, Any]]
+    room_width: float = 5.0
+    room_depth: float = 5.0
+
+

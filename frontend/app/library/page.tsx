@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSceneStore } from "@/lib/useSceneStore";
 
 interface ArchitecturalStyle {
   id: string;
@@ -15,6 +17,26 @@ interface ArchitecturalStyle {
   core_materials: string[];
   characteristics: string[];
   examples: string[];
+}
+
+interface RoomStandard {
+  id: string;
+  room_type: string;
+  name_ar: string;
+  description: string;
+  anthropometrics: Record<string, any>;
+  spatial_rules: string[];
+  lighting_standards: {
+    recommended_lux: number;
+    color_temperature_k: number[];
+    layers: Record<string, string>;
+  };
+  material_balance: {
+    dominant_60: string;
+    secondary_30: string;
+    accent_10: string;
+  };
+  default_dims?: { width: number; depth: number };
 }
 
 const ARCHITECTURAL_STYLES: ArchitecturalStyle[] = [
@@ -125,57 +147,186 @@ const ARCHITECTURAL_STYLES: ArchitecturalStyle[] = [
   }
 ];
 
+const ROOM_STANDARDS: RoomStandard[] = [
+  {
+    id: "std_living_room",
+    room_type: "living_room",
+    name_ar: "الصالات وغرف المعيشة والمجالس",
+    description: "معايير تصميم وتأثيث غرف المعيشة والصالات المفتوحة والمجالس وفق المعايير المعمارية العالمية (Neufert & Time-Saver Standards).",
+    default_dims: { width: 5.5, depth: 5.0 },
+    anthropometrics: {
+      "الممر الرئيسي": "≥ 0.90 متر (90 سم)",
+      "الممر الثانوي": "≥ 0.60 متر (60 سم)",
+      "مسافة طاولة القهوة للكنب": "0.35 إلى 0.45 متر",
+      "مسافة التلفاز الموصى بها": "بوصة الشاشة × 0.03 (مثلاً: 65 بوصة = 2.0 إلى 2.5م)",
+      "ارتفاع الطاولة الجانبية": "مطابق لمسند ذراع الكنبة أو أقل بـ 5 سم"
+    },
+    spatial_rules: [
+      "يجب ألا يقطع ممر الحركة الرئيسي مثلث المحادثة أو خط الرؤية بين الجالسين والتلفاز.",
+      "يجب ترك مسافة لا تقل عن 10 إلى 15 سم بين أطراف السجادة والجدران لتأطير الفراغ.",
+      "يجب أن تكون الأرجل الأمامية لجميع المقاعد والكنب موضوعة فوق السجادة الرئيسية لتوحيد الكتلة الفراغية.",
+      "تجنب إلصاق جميع قطع الأثاث بالجدران (Floating Furniture) لإعطاء شعور بالفخامة والاتساع."
+    ],
+    lighting_standards: {
+      recommended_lux: 150,
+      color_temperature_k: [2700, 3000],
+      layers: {
+        "العامة (Ambient)": "إضاءة سقفية مخفية (Cove Lighting) بلون دافئ 2700-3000K لتهدئة الأجواء.",
+        "الوظيفية (Task)": "إضاءة قراءة موجهة بجانب كراسي القراءة الفردية بـ 300 Lux.",
+        "الجمالية (Accent)": "Spotlights بزاوية 30 درجة لإبراز اللوحات الفنية أو الجدران الديكورية."
+      }
+    },
+    material_balance: {
+      dominant_60: "الجدران والأرضيات (بيج دافئ، رمادي فاتح، أخشاب بلوط).",
+      secondary_30: "أقمشة الكنب، السجاد، والستائر (كتان، بوكليه، جلد ناعم).",
+      accent_10: "الوسائد، الطاولات الجانبية، الإكسسوارات المعدنية (برونز مطفي، رخام طبيعي)."
+    }
+  },
+  {
+    id: "std_bedroom",
+    room_type: "bedroom",
+    name_ar: "غرف النوم الرئيسية والأجنحة",
+    description: "معايير تخطيط وتأثيث غرف النوم لتحقيق أقصى درجات الراحة النفسية والهدوء البصري وسلاسة الحركة.",
+    default_dims: { width: 4.8, depth: 4.5 },
+    anthropometrics: {
+      "الممر حول جانبي السرير": "≥ 0.75 متر (75 سم)",
+      "الممر أمام خزانة الملابس": "≥ 0.90 متر لفتح الأبواب بحرية",
+      "المسافة بين السرير وشاشة التلفاز": "≥ 1.20 متر",
+      "ارتفاع الكومودينو": "مطابق لسطح المرتبة أو أعلى بـ 2-5 سم",
+      "عمق خزانة الملابس القياسي": "0.60 متر (60 سم)"
+    },
+    spatial_rules: [
+      "السرير هو العنصر المحوري (Focal Point) ويجب أن يكون مرئياً بزاوية مريحة عند دخول الغرفة.",
+      "تجنب وضع ظهر السرير مباشرة تحت نافذة نشطة إلا عند استخدام عوازل وستائر معتمة كاملة.",
+      "استخدام السجاد أسفل السرير بحيث يمتد على الأقل 60-80 سم من جانبي السرير وأسفله لتوفير ملمس دافئ.",
+      "توفير مسافة لا تقل عن 90 سم أمام خزانة الملابس لفتح الأبواب والأدراج بحرية تامة."
+    ],
+    lighting_standards: {
+      recommended_lux: 100,
+      color_temperature_k: [2400, 2700],
+      layers: {
+        "العامة (Ambient)": "إضاءة غير مباشرة (Indirect Cove/Dimmed) تدعم الاسترخاء والنوم.",
+        "الوظيفية (Task)": "إضاءة قراءة جانبية على جانبي السرير قابلة للتحكم المستقل بـ 150-200 Lux.",
+        "الجمالية (Accent)": "إضاءة داخلية في الخزائن ومسار حركة ليلي خافت للأرضيات."
+      }
+    },
+    material_balance: {
+      dominant_60: "الجدران المهدئة (أوف وايت، بيج ترابي) وأرضيات خشبية دافئة.",
+      secondary_30: "مفارش السرير الكتانية، الستائر المعتمة المزدوجة، وظهر السرير المنجد.",
+      accent_10: "أباجورات نحاسية مطفية، نباتات تنقية الهواء (Sansevieria)، ومرايا زخرفية."
+    }
+  },
+  {
+    id: "std_kitchen",
+    room_type: "kitchen",
+    name_ar: "المطابخ المعمارية والمساحات المفتوحة",
+    description: "معايير تخطيط المطابخ المفتوحة ومثلث الحركة المريح لتحقيق كفاءة العمل وسلامة الاستخدام.",
+    default_dims: { width: 4.5, depth: 4.0 },
+    anthropometrics: {
+      "عمق سطح العمل القياسي": "0.60 متر (60 سم)",
+      "ارتفاع سطح العمل القياسي": "0.90 متر (90 سم)",
+      "الممر بين أسطح العمل": "1.05 إلى 1.20 متر",
+      "خلوص كراسي الجزيرة (Bar Stools)": "≥ 0.85 متر",
+      "محيط مثلث العمل الإجمالي": "4.0 إلى 7.9 متر كحد أقصى"
+    },
+    spatial_rules: [
+      "قاعدة مثلث العمل الذهبي (Work Triangle): مجموع المسافات بين الحوض والثلاجة والموقد يجب أن يكون بين 4.0 إلى 7.9م.",
+      "يجب ألا يقطع ممر الحركة الرئيسي للمنزل مثلث العمل داخل المطبخ.",
+      "يجب ترك مسافة أمان لا تقل عن 40 سم على جانبي الموقد لوضع أواني الطهي الساخنة بأمان.",
+      "في المطابخ المفتوحة، يجب ربط الجزيرة بصرياً مع غرفة المعيشة مع توفير شفاط عالي القدرة."
+    ],
+    lighting_standards: {
+      recommended_lux: 350,
+      color_temperature_k: [3500, 4000],
+      layers: {
+        "العامة (Ambient)": "إضاءة عامة متجانسة تمنع تكون الظلال على أسطح الطبخ.",
+        "الوظيفية (Task)": "شريط LED أسفل الخزائن العلوية بـ 400-500 Lux لإنارة أسطح التقطيع.",
+        "الجمالية (Accent)": "معلقات إنارة فنية فوق الجزيرة على ارتفاع 75-85 سم من سطح الجزيرة."
+      }
+    },
+    material_balance: {
+      dominant_60: "خزائن مقاومة للبصمات والحرارة وأرضيات بورسلين غير زلقة.",
+      secondary_30: "أسطح العمل من الكوارتز أو البورسلين الملبد (Sintered Stone).",
+      accent_10: "مقابض وخلاطات مياه نحاسية مطفية وأرفف خشبية مفتوحة."
+    }
+  },
+  {
+    id: "std_home_office",
+    room_type: "home_office",
+    name_ar: "المكاتب المنزلية ومساحات العمل الإبداعية",
+    description: "معايير تصميم وتجهيز المكاتب المنزلية لتعزيز التركيز والإنتاجية مع مراعاة بيئة العمل المريحة (Ergonomics).",
+    default_dims: { width: 4.0, depth: 3.5 },
+    anthropometrics: {
+      "عمق سطح المكتب الأدنى": "0.70 متر (70 سم)",
+      "عرض سطح المكتب الأدنى": "1.20 متر",
+      "مسافة رجوع الكرسي للخلف": "≥ 1.00 متر (100 سم)",
+      "الممر خلف الكرسي": "≥ 0.90 متر",
+      "مسافة الرؤية للشاشة": "50 إلى 75 سم"
+    },
+    spatial_rules: [
+      "وضع الشاشة عمودياً على مصدر الضوء الطبيعي لتجنب الوهج والانعكاسات الحادة.",
+      "توفير خلفية بصرية أنيقة ومرتبة خلف كرسي المكتب تناسب الاجتماعات المرئية.",
+      "توفير مسارات مخفية لتنظيم الكابلات للحفاظ على المظهر المعماري النظيف."
+    ],
+    lighting_standards: {
+      recommended_lux: 400,
+      color_temperature_k: [3500, 4500],
+      layers: {
+        "العامة (Ambient)": "إضاءة محايدة (4000K) تزيد من اليقظة والتركيز.",
+        "الوظيفية (Task)": "مصباح مكتب احترافي عالي النقاء (CRI > 90) بدون وميض.",
+        "الجمالية (Accent)": "إضاءة شريطية LED دافئة خلف الشاشة لتقليل إجهاد العين."
+      }
+    },
+    material_balance: {
+      dominant_60: "جدران مطفية وخزائن جدارية بلون رمادي أو خشبي هادئ.",
+      secondary_30: "سطح مكتب من الخشب الطبيعي وكرسي بيئة عمل عالي الجودة.",
+      accent_10: "نباتات مكتبية منقية للهواء ومجسمات هندسية تضفي لمسة إبداعية."
+    }
+  }
+];
+
 export default function ArchitecturalLibrary() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<"styles" | "standards" | "lighting" | "materials">("standards");
   const [search, setSearch] = useState("");
-  const [selectedEra, setSelectedEra] = useState("All");
-  const [selectedRegion, setSelectedRegion] = useState("All");
-  const [selectedMaterial, setSelectedMaterial] = useState("All");
   const [selectedStyle, setSelectedStyle] = useState<ArchitecturalStyle | null>(null);
+  const [selectedStandard, setSelectedStandard] = useState<RoomStandard | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Filter Categories
-  const eras = ["All", "حديث (Modern)", "منتصف القرن العشرين (Mid-Century)", "معاصر (Contemporary)"];
-  const regions = ["All", "عالمي (Global)", "أوروبا (Europe)", "أمريكا الشمالية (North America)"];
-  const materials = [
-    "All",
-    "خشب طبيعي فاتح",
-    "خشب الجوز (Walnut)",
-    "خرسانة ناعمة",
-    "نباتات حية كثيفة",
-    "حديد أسود صدئ",
-    "خشب الساج (Teak)",
-    "أنابيب صلب كروم"
-  ];
-
-  // Filter Logic
-  const filteredStyles = useMemo(() => {
-    return ARCHITECTURAL_STYLES.filter((style) => {
-      const matchesSearch =
-        style.title.toLowerCase().includes(search.toLowerCase()) ||
-        style.summary.toLowerCase().includes(search.toLowerCase()) ||
-        style.content.toLowerCase().includes(search.toLowerCase());
-
-      const matchesEra = selectedEra === "All" || style.era === selectedEra;
-      const matchesRegion = selectedRegion === "All" || style.region === selectedRegion;
-      const matchesMaterial =
-        selectedMaterial === "All" || style.core_materials.includes(selectedMaterial);
-
-      return matchesSearch && matchesEra && matchesRegion && matchesMaterial;
-    });
-  }, [search, selectedEra, selectedRegion, selectedMaterial]);
+  const setRoomWidth = useSceneStore((s) => s.setRoomWidth);
+  const setRoomDepth = useSceneStore((s) => s.setRoomDepth);
+  const setCoveLightColor = useSceneStore((s) => s.setCoveLightColor);
 
   const showToast = (message: string) => {
     setToastMessage(message);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3000);
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleShare = (slug: string) => {
-    const shareUrl = `${window.location.origin}/library?reference=${slug}`;
-    navigator.clipboard.writeText(shareUrl);
-    showToast("📋 تم نسخ رابط الفلسفة إلى الحافظة!");
+  const handleApplyStandardToStudio = (std: RoomStandard) => {
+    if (std.default_dims) {
+      setRoomWidth(std.default_dims.width);
+      setRoomDepth(std.default_dims.depth);
+    }
+    if (std.lighting_standards?.color_temperature_k?.[1]) {
+      setCoveLightColor(std.lighting_standards.color_temperature_k[1]);
+    }
+    showToast(`📐 تم تطبيق أبعاد ومعايير إضاءة (${std.name_ar}) على الاستوديو!`);
+    router.push("/studio");
   };
+
+  const filteredStyles = useMemo(() => {
+    return ARCHITECTURAL_STYLES.filter((style) =>
+      style.title.toLowerCase().includes(search.toLowerCase()) ||
+      style.summary.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [search]);
+
+  const filteredStandards = useMemo(() => {
+    return ROOM_STANDARDS.filter((std) =>
+      std.name_ar.toLowerCase().includes(search.toLowerCase()) ||
+      std.description.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [search]);
 
   return (
     <main className="fixed top-[64px] left-0 right-0 md:right-[280px] bottom-0 bg-[#F5F7FA] overflow-y-auto px-4 md:px-8 py-6 md:py-10" dir="rtl">
@@ -188,13 +339,13 @@ export default function ArchitecturalLibrary() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-200 pb-6 mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-200 pb-6 mb-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-[#1E1E1E] mb-2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#4A90E2] text-3xl">menu_book</span>
-            مكتبة الفلسفات والأنماط المعمارية
+            <span className="material-symbols-outlined text-[#4A90E2] text-3xl">architecture</span>
+            مركز المعرفة والمعايير المعمارية
           </h1>
-          <p className="text-gray-500 text-sm">تصفح المدارس الفنية وتصاميم الهوية المعمارية لتستلهم منها لتصاميمك القادمة.</p>
+          <p className="text-gray-500 text-sm">مرجع هندسي متكامل للمصممين يغذي وكلاء الذكاء الاصطناعي بمعايير الفراغات والإضاءة والخامات.</p>
         </div>
         <Link 
           href="/studio" 
@@ -205,149 +356,136 @@ export default function ArchitecturalLibrary() {
         </Link>
       </div>
 
-      {/* Search and Filters Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 bg-white p-4 rounded-2xl shadow-md border border-gray-100">
-        {/* Search */}
-        <div className="flex bg-[#F5F7FA] rounded-xl overflow-hidden border border-gray-200 focus-within:border-[#4A90E2] p-1">
-          <span className="material-symbols-outlined p-2 text-gray-400">search</span>
-          <input
-            type="text"
-            placeholder="ابحث عن نمط أو فلسفة..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-transparent border-none focus:ring-0 text-sm py-2 px-2"
-          />
-        </div>
-
-        {/* Era Filter */}
-        <div className="flex flex-col gap-1">
-          <select
-            value={selectedEra}
-            onChange={(e) => setSelectedEra(e.target.value)}
-            className="w-full bg-[#F5F7FA] border border-gray-200 rounded-xl p-3 text-sm focus:border-[#4A90E2] focus:ring-0"
+      {/* Main Tabs Navigation */}
+      <div className="flex gap-2 mb-6 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-none">
+        {[
+          { id: "standards", icon: "straighten", label: "معايير الفراغات والقياسات (Neufert)" },
+          { id: "styles", icon: "menu_book", label: "الفلسفات والمدارس المعمارية" },
+          { id: "lighting", icon: "lightbulb", label: "هندسة الإضاءة المعمارية (Lux)" },
+          { id: "materials", icon: "texture", label: "تناغم المواد وخامات PBR" }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shrink-0 ${
+              activeTab === tab.id
+                ? "bg-[#1E1E1E] text-white shadow-md"
+                : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/60"
+            }`}
           >
-            <option value="All">كل الحقبات الزمنية</option>
-            {eras.filter(e => e !== "All").map((e, idx) => (
-              <option key={idx} value={e}>{e}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Region Filter */}
-        <div className="flex flex-col gap-1">
-          <select
-            value={selectedRegion}
-            onChange={(e) => setSelectedRegion(e.target.value)}
-            className="w-full bg-[#F5F7FA] border border-gray-200 rounded-xl p-3 text-sm focus:border-[#4A90E2] focus:ring-0"
-          >
-            <option value="All">كل المناطق الجغرافية</option>
-            {regions.filter(r => r !== "All").map((r, idx) => (
-              <option key={idx} value={r}>{r}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Material Filter */}
-        <div className="flex flex-col gap-1">
-          <select
-            value={selectedMaterial}
-            onChange={(e) => setSelectedMaterial(e.target.value)}
-            className="w-full bg-[#F5F7FA] border border-gray-200 rounded-xl p-3 text-sm focus:border-[#4A90E2] focus:ring-0"
-          >
-            <option value="All">كل المواد والخامات الأساسية</option>
-            {materials.filter(m => m !== "All").map((m, idx) => (
-              <option key={idx} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
+            <span className="material-symbols-outlined text-lg">{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Grid of Styles */}
-      {filteredStyles.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-md flex flex-col items-center justify-center">
-          <span className="material-symbols-outlined text-gray-300 text-6xl mb-4">search_off</span>
-          <h3 className="font-bold text-lg text-gray-700 mb-2">لا توجد نتائج مطابقة لبحثك</h3>
-          <p className="text-gray-400 text-sm mb-4">جرب البحث بكلمات أخرى أو قم بإلغاء التصفية.</p>
-          <button
-            onClick={() => {
-              setSearch("");
-              setSelectedEra("All");
-              setSelectedRegion("All");
-              setSelectedMaterial("All");
-            }}
-            className="text-[#4A90E2] hover:text-[#357abd] font-bold text-sm underline flex items-center gap-1"
-          >
-            مسح التصفية
-          </button>
+      {/* Search Bar */}
+      <div className="mb-8 bg-white p-3 rounded-2xl shadow-sm border border-gray-200/80 flex items-center gap-2">
+        <span className="material-symbols-outlined text-gray-400 p-2">search</span>
+        <input
+          type="text"
+          placeholder="ابحث عن معيار فراغي، مدرسة فنية، أو مقاس هندسي..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full bg-transparent border-none focus:ring-0 text-sm py-2 px-1"
+        />
+      </div>
+
+      {/* ── TAB 1: SPATIAL STANDARDS (NEUFERT) ── */}
+      {activeTab === "standards" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredStandards.map((std) => (
+            <div key={std.id} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md hover:shadow-xl transition-all flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2.5 bg-[#4A90E2]/10 text-[#4A90E2] rounded-xl material-symbols-outlined text-xl">
+                      square_foot
+                    </span>
+                    <h3 className="text-xl font-black text-gray-900">{std.name_ar}</h3>
+                  </div>
+                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full">
+                    {std.default_dims ? `${std.default_dims.width}م × ${std.default_dims.depth}م` : "أبعاد متغيرة"}
+                  </span>
+                </div>
+                
+                <p className="text-gray-500 text-xs leading-relaxed mb-5">{std.description}</p>
+
+                {/* Anthropometrics Grid */}
+                <div className="bg-[#F5F7FA] rounded-2xl p-4 mb-5 border border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[#4A90E2] text-sm">accessibility_new</span>
+                    القياسات الإنسانية ومسارات الحركة (Anthropometrics):
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    {Object.entries(std.anthropometrics).map(([k, v], i) => (
+                      <div key={i} className="bg-white p-2.5 rounded-xl border border-gray-200/50 flex flex-col justify-between">
+                        <span className="text-gray-400 text-[10px] font-bold">{k}</span>
+                        <span className="font-bold text-gray-800 mt-0.5">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Key Spatial Rules */}
+                <div className="mb-5">
+                  <h4 className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-amber-500 text-sm">rule</span>
+                    أهم القواعد الفراغية:
+                  </h4>
+                  <ul className="text-xs text-gray-600 space-y-1.5 list-disc list-inside pr-1">
+                    {std.spatial_rules.slice(0, 3).map((rule, idx) => (
+                      <li key={idx} className="leading-relaxed">{rule}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-gray-100 flex justify-between items-center gap-3">
+                <button
+                  onClick={() => setSelectedStandard(std)}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">visibility</span>
+                  الدليل التفصيلي
+                </button>
+                <button
+                  onClick={() => handleApplyStandardToStudio(std)}
+                  className="bg-[#4A90E2] hover:bg-[#357abd] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">tune</span>
+                  تطبيق المعيار في 3D Studio
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
-      ) : (
+      )}
+
+      {/* ── TAB 2: ARCHITECTURAL STYLES ── */}
+      {activeTab === "styles" && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {filteredStyles.map((style) => (
-            <div
-              key={style.id}
-              className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-md hover:shadow-xl hover:scale-[1.02] transition-all flex flex-col"
-            >
-              {/* Card Image */}
+            <div key={style.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-md hover:shadow-xl transition-all flex flex-col">
               <div className="relative h-48 w-full overflow-hidden bg-gray-200">
-                <img
-                  src={style.hero_image_url}
-                  alt={style.title}
-                  className="object-cover w-full h-full hover:scale-110 transition-transform duration-500"
-                />
+                <img src={style.hero_image_url} alt={style.title} className="object-cover w-full h-full hover:scale-105 transition-transform duration-500" />
                 <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-gray-700 shadow-md">
                   {style.era}
                 </div>
               </div>
-
-              {/* Card Content */}
-              <div className="p-6 grow flex flex-col">
-                <h3 className="font-headline-md font-bold text-[#1E1E1E] mb-2">{style.title}</h3>
-                <p className="text-gray-500 text-sm line-clamp-3 mb-4">{style.summary}</p>
-                
-                {/* Tags */}
-                <div className="flex flex-wrap gap-1.5 mb-6">
-                  {style.core_materials.slice(0, 3).map((mat, idx) => (
-                    <span
-                      key={idx}
-                      className="bg-gray-100 text-gray-600 text-[11px] px-2 py-0.5 rounded-md font-medium"
-                    >
-                      {mat}
-                    </span>
-                  ))}
-                  {style.core_materials.length > 3 && (
-                    <span className="bg-gray-100 text-gray-500 text-[11px] px-2 py-0.5 rounded-md font-medium">
-                      +{style.core_materials.length - 3}
-                    </span>
-                  )}
+              <div className="p-6 grow flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-lg text-[#1E1E1E] mb-2">{style.title}</h3>
+                  <p className="text-gray-500 text-xs line-clamp-3 mb-4 leading-relaxed">{style.summary}</p>
                 </div>
-
-                {/* Actions */}
-                <div className="mt-auto pt-4 border-t border-gray-100 flex gap-2 justify-between">
-                  <button
-                    onClick={() => setSelectedStyle(style)}
-                    className="text-gray-700 hover:text-black font-bold text-xs bg-gray-100 hover:bg-gray-200 px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">visibility</span>
-                    التفاصيل الفلسفية
+                <div className="pt-4 border-t border-gray-100 flex justify-between gap-2">
+                  <button onClick={() => setSelectedStyle(style)} className="text-gray-700 hover:text-black font-bold text-xs bg-gray-100 px-4 py-2.5 rounded-xl transition-colors">
+                    التفاصيل
                   </button>
-                  
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleShare(style.slug)}
-                      className="text-gray-500 hover:text-black bg-gray-100 hover:bg-gray-200 p-2.5 rounded-lg transition-colors"
-                      title="نسخ الرابط ومشاركته"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">share</span>
-                    </button>
-                    
-                    <Link
-                      href={`/studio?reference=${style.slug}`}
-                      className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">brush</span>
-                      استخدم في الاستوديو
-                    </Link>
-                  </div>
+                  <Link href={`/studio?reference=${style.slug}`} className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1">
+                    استخدم بالاستوديو
+                  </Link>
                 </div>
               </div>
             </div>
@@ -355,114 +493,154 @@ export default function ArchitecturalLibrary() {
         </div>
       )}
 
-      {/* Style Details Modal */}
-      {selectedStyle && (
+      {/* ── TAB 3: LIGHTING STANDARDS ── */}
+      {activeTab === "lighting" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-gray-100 shadow-md">
+            <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-500 text-2xl">wb_incandescent</span>
+              توزيع شدة الإضاءة الموصى بها (Lux Requirements)
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+              {[
+                { room: "الصالات وغرف المعيشة", lux: "150 Lux", temp: "2700K - 3000K" },
+                { room: "القراءة والاسترخاء", lux: "300 Lux", temp: "3000K" },
+                { room: "غرف النوم العامة", lux: "100 Lux", temp: "2400K - 2700K" },
+                { room: "أسطح عمل المطابخ", lux: "500 Lux", temp: "4000K" },
+                { room: "المكاتب المنزلية", lux: "400 - 500 Lux", temp: "4000K" },
+                { room: "طاولات الطعام", lux: "250 Lux", temp: "2700K - 3000K" }
+              ].map((item, i) => (
+                <div key={i} className="bg-[#F5F7FA] p-4 rounded-2xl border border-gray-200/60 flex flex-col justify-between">
+                  <span className="text-xs text-gray-500 font-bold">{item.room}</span>
+                  <div className="mt-2">
+                    <p className="text-lg font-black text-[#4A90E2]">{item.lux}</p>
+                    <p className="text-[10px] text-gray-400 font-mono">{item.temp}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <h4 className="text-sm font-bold text-gray-800 mb-3">قاعدة الطبقات الضوئية الثلاث (Three-Layer Lighting):</h4>
+            <div className="space-y-2 text-xs text-gray-600">
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <span className="font-bold text-black ml-1">1. الإضاءة العامة (Ambient):</span> الأساس غير المباشر (Cove Lighting) لملء الفراغ بنعومة.
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <span className="font-bold text-black ml-1">2. الإضاءة الوظيفية (Task):</span> المسلطة لأداء نشاط محدد (القراءة، الطهي، العمل).
+              </div>
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <span className="font-bold text-black ml-1">3. الإضاءة الجمالية (Accent):</span> تسليط الضوء على اللوحات والتحف بنسبة شدة 3:1.
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md flex flex-col justify-between">
+            <div>
+              <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-orange-400">thermostat</span>
+                دليل درجات كلفن (Kelvin Scale)
+              </h3>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/50">
+                  <span className="font-bold text-amber-900 block mb-1">2400K - 2700K (دافئ جداً)</span>
+                  <span className="text-amber-700">غرف النوم وأجواء المساء للاسترخاء وإفراز الميلاتونين.</span>
+                </div>
+                <div className="p-3 bg-yellow-50 rounded-xl border border-yellow-200/50">
+                  <span className="font-bold text-yellow-900 block mb-1">3000K (دافئ ناعم - المعيار الذهبي)</span>
+                  <span className="text-yellow-700">الصالات وغرف المعيشة والمجالس (الدفء المعماري الفاخر).</span>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200/50">
+                  <span className="font-bold text-blue-900 block mb-1">4000K (أبيض محايد)</span>
+                  <span className="text-blue-700">المطابخ والمكاتب وغرف الملابس لرؤية دقيقة وتنبيه ذهني.</span>
+                </div>
+              </div>
+            </div>
+            <Link href="/studio" className="mt-6 w-full bg-[#1E1E1E] text-white text-center py-3 rounded-xl font-bold text-xs hover:bg-black transition-all">
+              تجربة الإضاءة في 3D Studio
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 4: MATERIALS & 60-30-10 HARMONY ── */}
+      {activeTab === "materials" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            {
+              title: "الياباني الإسكندنافي (Warm Japandi)",
+              dominant: "خشب البلوط الفاتح + دهان بيج جيري (#EFEBE4)",
+              secondary: "كتان طبيعي + حجر الترافرتين البيج (#D4C8B8)",
+              accent: "فخار غير مصقول + خشب الجوز الداكن (#4A3B32)"
+            },
+            {
+              title: "المودرن العضوي (Modern Organic)",
+              dominant: "خرسانة ناعمة دافئة + دهان أوف وايت (#F4F2ED)",
+              secondary: "قماش البوكليه العاجي + خشب أكاسيا (#C9B9A6)",
+              accent: "نحاس برونزي مطفي + جلد طبيعي (#8C5835)"
+            },
+            {
+              title: "الوحشية المعاصرة (Contemporary Brutalist)",
+              dominant: "ألواح خرسانية + أرضيات تيرازو (#E2E2DF)",
+              secondary: "حديد أسود مصنفر + صوف ثقيل (#2B2B2B)",
+              accent: "خشب الساج المعتق + نباتات شاهقة (#3E5336)"
+            }
+          ].map((pal, idx) => (
+            <div key={idx} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md flex flex-col justify-between">
+              <div>
+                <h3 className="text-lg font-black text-gray-900 mb-3">{pal.title}</h3>
+                <div className="space-y-3 text-xs mb-6">
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/60">
+                    <span className="text-[10px] font-bold text-gray-400 block mb-0.5">60% الأساس المحيط (الجدران والأرضيات)</span>
+                    <span className="font-bold text-gray-800">{pal.dominant}</span>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/60">
+                    <span className="text-[10px] font-bold text-gray-400 block mb-0.5">30% الأثاث الرئيسي والكتل</span>
+                    <span className="font-bold text-gray-800">{pal.secondary}</span>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/60">
+                    <span className="text-[10px] font-bold text-gray-400 block mb-0.5">10% نقاط الجذب واللمسات</span>
+                    <span className="font-bold text-gray-800">{pal.accent}</span>
+                  </div>
+                </div>
+              </div>
+              <Link href="/studio" className="w-full bg-[#4A90E2] text-white text-center py-3 rounded-xl font-bold text-xs hover:bg-[#357abd] transition-all">
+                تطبيق هذه الباليت في الاستوديو
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Standard Detail Modal */}
+      {selectedStandard && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-150 animate-fade-in">
           <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col animate-slide-up border border-gray-100">
-            {/* Image Header */}
-            <div className="relative h-64 bg-gray-200 shrink-0">
-              <img
-                src={selectedStyle.hero_image_url}
-                alt={selectedStyle.title}
-                className="object-cover w-full h-full"
-              />
-              <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
-                <div>
-                  <div className="bg-[#4A90E2] text-white text-xs font-bold px-3 py-1 rounded-full inline-block mb-2 shadow-md">
-                    {selectedStyle.era} • {selectedStyle.region}
-                  </div>
-                  <h2 className="text-2xl font-black text-white">{selectedStyle.title}</h2>
-                </div>
+            <div className="p-6 border-b border-gray-100 bg-[#F5F7FA] flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#4A90E2] text-2xl">square_foot</span>
+                <h3 className="font-black text-xl text-gray-900">{selectedStandard.name_ar}</h3>
               </div>
-              <button
-                onClick={() => setSelectedStyle(null)}
-                className="absolute top-4 left-4 bg-white/80 hover:bg-white text-gray-700 hover:text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
+              <button onClick={() => setSelectedStandard(null)} className="material-symbols-outlined text-gray-500 hover:text-black">close</button>
             </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto grow flex flex-col gap-6 custom-scrollbar text-right">
-              {/* Philosophy Content */}
+            <div className="p-6 overflow-y-auto grow space-y-5 text-xs text-gray-700">
               <div>
-                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">psychology</span>
-                  فلسفة ونشأة التصميم
-                </h4>
-                <p className="text-gray-600 text-sm leading-relaxed">{selectedStyle.content}</p>
+                <h4 className="font-bold text-sm text-gray-900 mb-2">الوصف الهندسي:</h4>
+                <p className="leading-relaxed text-gray-600">{selectedStandard.description}</p>
               </div>
-
-              {/* Characteristics */}
               <div>
-                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">featured_play_list</span>
-                  أبرز الخصائص والسمات الفنية
-                </h4>
-                <ul className="list-disc list-inside text-gray-600 text-sm flex flex-col gap-1.5 pr-2">
-                  {selectedStyle.characteristics.map((char, index) => (
-                    <li key={index} className="leading-relaxed">{char}</li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Materials */}
-              <div>
-                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">texture</span>
-                  الخامات والمواد المستخدمة
-                </h4>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {selectedStyle.core_materials.map((mat, index) => (
-                    <span
-                      key={index}
-                      className="bg-gray-100 text-gray-700 text-xs px-3 py-1.5 rounded-xl border border-gray-200/50 font-bold"
-                    >
-                      {mat}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Notable Examples */}
-              <div>
-                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">foundation</span>
-                  أبرز الأمثلة والمراجع المعمارية
-                </h4>
-                <ul className="list-disc list-inside text-gray-600 text-sm flex flex-col gap-1.5 pr-2">
-                  {selectedStyle.examples.map((ex, index) => (
-                    <li key={index} className="leading-relaxed">{ex}</li>
+                <h4 className="font-bold text-sm text-gray-900 mb-2">القواعد الفراغية والمعمارية:</h4>
+                <ul className="space-y-1.5 list-disc list-inside text-gray-600 pr-1">
+                  {selectedStandard.spatial_rules.map((r, i) => (
+                    <li key={i} className="leading-relaxed">{r}</li>
                   ))}
                 </ul>
               </div>
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between gap-4 shrink-0">
-              <button
-                onClick={() => handleShare(selectedStyle.slug)}
-                className="text-gray-500 hover:text-black font-bold text-xs bg-white border border-gray-200 px-4 py-3 rounded-xl transition-all flex items-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-sm">share</span>
-                مشاركة الرابط
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between gap-3">
+              <button onClick={() => setSelectedStandard(null)} className="bg-gray-200 text-gray-700 px-5 py-2.5 rounded-xl font-bold">إغلاق</button>
+              <button onClick={() => { handleApplyStandardToStudio(selectedStandard); setSelectedStandard(null); }} className="bg-[#4A90E2] text-white px-6 py-2.5 rounded-xl font-bold shadow-md">
+                تطبيق في الاستوديو 3D
               </button>
-              
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedStyle(null)}
-                  className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 font-bold text-xs px-5 py-3 rounded-xl transition-all"
-                >
-                  إغلاق النافذة
-                </button>
-                <Link
-                  href={`/studio?reference=${selectedStyle.slug}`}
-                  className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-sm">brush</span>
-                  استخدم في الاستوديو 3D
-                </Link>
-              </div>
             </div>
           </div>
         </div>

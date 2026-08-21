@@ -1,94 +1,340 @@
-import { useState } from "react";
-import { useSceneStore } from "@/lib/useSceneStore";
-import { IProductTemplate } from "@/app/studio/config/catalogTemplates";
+"use client";
 
-export function useAIGeneration(showToast: (msg: string) => void, catalogAssets: IProductTemplate[]) {
+import { useCallback, useMemo, useState } from "react";
+import { useSceneStore } from "@/lib/useSceneStore";
+import type { IProductTemplate } from "@/app/studio/config/catalogTemplates";
+import {
+  arabicNumber,
+  countMatches,
+  describeBuild,
+  describeCost,
+  describeMatch,
+  PLACEHOLDER_MODEL_URL,
+  resolveItem,
+  type ResolvedItem,
+} from "@/app/studio/config/matching";
+import {
+  createPendingStages,
+  withRemainingSkipped,
+  withStage,
+  type AIResponseItem,
+  type PipelineStage,
+  type StageId,
+  type StageStatus,
+  type StudioRequest,
+  type StudioUiState,
+} from "@/app/studio/config/pipeline";
+
+const HALT_NOTE = 'توقف بسبب فشل التحليل';
+
+interface GenerateRoomResponse {
+  items?: AIResponseItem[];
+  room_dimensions?: { width: number; depth: number };
+  ambient_mode?: 'morning' | 'rainy' | 'midnight';
+  floor_color?: string;
+  wall_color?: string;
+}
+
+type FetchOutcome = { ok: true; data: GenerateRoomResponse } | { ok: false; reason: string };
+
+/**
+ * Lets React paint the stage transition we just committed before the next stage
+ * starts. This is a render yield, NOT a synthetic delay: every status it exposes
+ * reflects work that has actually finished. Without it React batches the whole
+ * post-fetch run into one commit and the intermediate stages are never shown.
+ */
+function yieldToPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      resolve();
+    }
+  });
+}
+
+async function fetchRoomLayout(
+  rawPrompt: string,
+  image: string | null,
+  styleReference: string | null | undefined
+): Promise<FetchOutcome> {
+  const finalPrompt = styleReference
+    ? `[Style Reference: ${styleReference}] ${rawPrompt}`
+    : rawPrompt;
+
+  try {
+    const res = await fetch("/api/generate-room", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: finalPrompt || "تصميم الغرفة الموجودة في الصورة",
+        imageBase64: image,
+      }),
+    });
+
+    if (res.status === 429) {
+      return { ok: false, reason: 'تجاوزت الحد المسموح — انتظر دقيقة وأعد المحاولة' };
+    }
+    if (!res.ok) {
+      return { ok: false, reason: `تعذّر تحليل الطلب — استجاب الخادم بالرمز ${res.status}` };
+    }
+
+    return { ok: true, data: (await res.json()) as GenerateRoomResponse };
+  } catch {
+    return { ok: false, reason: 'تعذّر الاتصال بالخادم — تحقق من تشغيله' };
+  }
+}
+
+/** Writes the resolved items and room settings into the scene store. */
+function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
+  const store = useSceneStore.getState();
+  store.clearScene();
+
+  for (const { item, resolution } of resolved) {
+    // The catalog normaliser hardcodes price: 0 (lib/useAssets.ts:40) because
+    // prices live in the AI's `economy` block, not the asset catalog. Preferring
+    // the economy price is what stops the cost card reading ٠ ر.س.
+    const economyPrice = item.economy?.price ?? 0;
+
+    if (resolution.kind === 'placeholder') {
+      store.addSceneItem({
+        instanceId: item.instance_id,
+        id: item.economy?.sku || item.asset_id,
+        name: item.asset_id.replace(/_/g, " "),
+        brand: item.economy?.brand || "Rwaq AI",
+        price: economyPrice,
+        currency: item.economy?.currency || "SAR",
+        category: "seating",
+        modelUrl: PLACEHOLDER_MODEL_URL,
+        thumbnailUrl: "",
+        dimensions: item.dimensions || { width: 1, height: 1, depth: 1 },
+        position: item.position || [0, 0, 0],
+        rotation: item.rotation || [0, 0, 0],
+      });
+    } else {
+      store.addSceneItem({
+        ...resolution.asset,
+        instanceId: item.instance_id,
+        price: economyPrice || resolution.asset.price,
+        currency: item.economy?.currency || resolution.asset.currency,
+        position: item.position,
+        rotation: item.rotation,
+      });
+    }
+  }
+
+  if (data.room_dimensions) {
+    store.setRoomWidth(data.room_dimensions.width);
+    store.setRoomDepth(data.room_dimensions.depth);
+  }
+  if (data.ambient_mode) store.setAmbientMode(data.ambient_mode);
+  if (data.floor_color) store.setFloorColor(data.floor_color);
+  if (data.wall_color) store.setWallColor(data.wall_color);
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+export interface UseAIGenerationOptions {
+  showToast: (msg: string) => void;
+  catalogAssets: IProductTemplate[];
+  /** `?reference=` style hint, prepended to the prompt when present. */
+  styleReference?: string | null;
+  /** Called before items are written to the store (StudioClient clears the GLB room). */
+  onBeforeBuild?: () => void;
+  /** Called when a run finishes, with its final state, so the drawer can auto-open. */
+  onSettled?: (state: StudioUiState) => void;
+}
+
+export interface UseAIGenerationResult {
+  prompt: string;
+  setPrompt: (value: string) => void;
+  imageBase64: string | null;
+  setImageBase64: (value: string | null) => void;
+  isLoading: boolean;
+  requests: StudioRequest[];
+  uiState: StudioUiState;
+  handleGenerate: () => Promise<void>;
+  handleRetry: (request: StudioRequest) => Promise<void>;
+  clearRequests: () => void;
+}
+
+export function useAIGeneration({
+  showToast,
+  catalogAssets,
+  styleReference,
+  onBeforeBuild,
+  onSettled,
+}: UseAIGenerationOptions): UseAIGenerationResult {
   const [prompt, setPrompt] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [requests, setRequests] = useState<StudioRequest[]>([]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageBase64(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  const patch = useCallback((id: string, apply: (r: StudioRequest) => StudioRequest) => {
+    setRequests((prev) => prev.map((r) => (r.id === id ? apply(r) : r)));
+  }, []);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() && !imageBase64) return;
-    setIsLoading(true);
-    showToast("جاري التوليد بذكاء رواق...");
+  const setStage = useCallback(
+    (id: string, stageId: StageId, status: StageStatus, note?: string) => {
+      patch(id, (r) => ({ ...r, stages: withStage(r.stages, stageId, status, note) }));
+    },
+    [patch]
+  );
 
-    try {
-      const res = await fetch("/api/generate-room", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt || "تصميم الغرفة الموجودة في الصورة", imageBase64 }),
-      });
+  const applyStage = useCallback(
+    (id: string, stage: PipelineStage) => setStage(id, stage.id, stage.status, stage.note),
+    [setStage]
+  );
 
-      if (res.ok) {
-        const data = await res.json();
-        
-        if (data.items && data.items.length > 0) {
-          const state = useSceneStore.getState();
-          state.clearScene();
-          // Clear monolithic room if present (assume handled by state or component later)
-          
-          data.items.forEach((item: { asset_id: string; instance_id: string; position?: [number, number, number]; rotation?: [number, number, number]; }) => {
-             const matchingAsset = catalogAssets.find(a => a.id === item.asset_id);
-             if (matchingAsset) {
-                state.addSceneItem({
-                    ...matchingAsset,
-                    instanceId: item.instance_id,
-                    position: item.position,
-                    rotation: item.rotation
-                });
-             } else {
-                // Fallback for missing assets
-                state.addSceneItem({
-                    instanceId: item.instance_id,
-                    id: item.asset_id,
-                    name: item.asset_id.replace("_", " "),
-                    brand: "Rwaq AI",
-                    price: 0,
-                    currency: "SAR",
-                    category: "seating" as const,
-                    modelUrl: "",
-                    thumbnailUrl: "",
-                    dimensions: { width: 1000, height: 1000, depth: 1000 },
-                    position: item.position,
-                    rotation: item.rotation
-                });
-             }
-          });
-          
-          if (data.room_dimensions) {
-            state.setRoomWidth(data.room_dimensions.width);
-            state.setRoomDepth(data.room_dimensions.depth);
-          }
-          
-          showToast("✅ اكتمل توليد الغرفة بالذكاء الاصطناعي!");
-        } else {
-          showToast("❌ فشل التوليد، حاول مرة أخرى");
-        }
-        
-        setPrompt("");
-        setImageBase64(null);
-      } else if (res.status === 429) {
-        showToast("تجاوزت الحد المسموح — انتظر دقيقة وأعد المحاولة");
-      } else {
-        showToast("حدث خطأ في الاتصال بالخادم");
-      }
-    } catch {
-      showToast("تعذّر الاتصال بالخادم — تحقق من تشغيله");
-    } finally {
+  /** Halts the run at `stageId`, skipping everything after it. */
+  const failAt = useCallback(
+    (id: string, stageId: StageId, reason: string) => {
+      patch(id, (r) => ({
+        ...r,
+        state: 'failed',
+        failureReason: reason,
+        stages: withRemainingSkipped(
+          withStage(r.stages, stageId, 'failed', reason),
+          stageId,
+          HALT_NOTE
+        ),
+      }));
+      showToast(`❌ ${reason}`);
       setIsLoading(false);
-    }
-  };
+    },
+    [patch, showToast]
+  );
+
+  const run = useCallback(
+    async (rawPrompt: string, image: string | null) => {
+      const id = crypto.randomUUID();
+
+      setRequests((prev) => [
+        ...prev,
+        {
+          id,
+          prompt: rawPrompt,
+          imagePreview: image,
+          createdAt: Date.now(),
+          state: 'generating',
+          stages: createPendingStages(),
+          itemCount: 0,
+          matchedCount: 0,
+          fallbackCount: 0,
+          totalCost: 0,
+          currency: 'SAR',
+        },
+      ]);
+      setIsLoading(true);
+
+      // ── Stage 1: analyze ──────────────────────────────────────────────
+      // Wraps the entire opaque backend call: the pipeline reports no
+      // intermediate progress, so this is the finest honest granularity.
+      setStage(id, 'analyze', 'running');
+
+      const outcome = await fetchRoomLayout(rawPrompt, image, styleReference);
+      if (!outcome.ok) {
+        failAt(id, 'analyze', outcome.reason);
+        return;
+      }
+
+      const items = outcome.data.items ?? [];
+      if (items.length === 0) {
+        failAt(id, 'analyze', 'تعذّر تحليل الطلب — لم يُرجع النموذج أي قطع أثاث');
+        return;
+      }
+
+      setStage(id, 'analyze', 'done', 'تم تحليل المساحة والأسلوب المطلوب');
+      await yieldToPaint();
+
+      // ── Stage 2: match ────────────────────────────────────────────────
+      setStage(id, 'match', 'running');
+      await yieldToPaint();
+
+      const resolved: ResolvedItem[] = items.map((item) => ({
+        item,
+        resolution: resolveItem(item, catalogAssets),
+      }));
+      const { matchedCount, fallbackCount } = countMatches(resolved);
+
+      applyStage(id, describeMatch(matchedCount, items.length, fallbackCount));
+      patch(id, (r) => ({ ...r, itemCount: items.length, matchedCount, fallbackCount }));
+      await yieldToPaint();
+
+      // ── Stage 3: build ────────────────────────────────────────────────
+      setStage(id, 'build', 'running');
+      await yieldToPaint();
+
+      onBeforeBuild?.();
+      applyToScene(resolved, outcome.data);
+
+      applyStage(id, describeBuild(items.length));
+      await yieldToPaint();
+
+      // ── Stage 4: cost ─────────────────────────────────────────────────
+      setStage(id, 'cost', 'running');
+      await yieldToPaint();
+
+      // Read the store's own total so this card and the drawer's cost card can
+      // never disagree. Items in a non-primary currency are excluded there.
+      const settled = useSceneStore.getState();
+      const totalCost = settled.currentTotalCost();
+      const currency = settled.primaryCurrency;
+
+      applyStage(id, describeCost(totalCost, matchedCount));
+
+      const finalState: StudioUiState = matchedCount === items.length ? 'success' : 'partial';
+      patch(id, (r) => ({ ...r, state: finalState, totalCost, currency }));
+
+      showToast(
+        finalState === 'success'
+          ? '✅ اكتمل توليد الغرفة بالذكاء الاصطناعي'
+          : `⚠️ تم بناء الفراغ — ${arabicNumber(matchedCount)} من ${arabicNumber(items.length)} قطع مطابقة للمكتبة`
+      );
+
+      setIsLoading(false);
+      onSettled?.(finalState);
+    },
+    [
+      applyStage,
+      catalogAssets,
+      failAt,
+      onBeforeBuild,
+      onSettled,
+      patch,
+      setStage,
+      showToast,
+      styleReference,
+    ]
+  );
+
+  const handleGenerate = useCallback(async () => {
+    if (isLoading) return;
+    if (!prompt.trim() && !imageBase64) return;
+
+    const submittedPrompt = prompt;
+    const submittedImage = imageBase64;
+    setPrompt("");
+    setImageBase64(null);
+
+    await run(submittedPrompt, submittedImage);
+  }, [imageBase64, isLoading, prompt, run]);
+
+  const handleRetry = useCallback(
+    async (request: StudioRequest) => {
+      if (isLoading) return;
+      await run(request.prompt, request.imagePreview ?? null);
+    },
+    [isLoading, run]
+  );
+
+  const clearRequests = useCallback(() => setRequests([]), []);
+
+  const uiState: StudioUiState = useMemo(() => {
+    if (isLoading) return 'generating';
+    const last = requests[requests.length - 1];
+    return last ? last.state : 'idle';
+  }, [isLoading, requests]);
 
   return {
     prompt,
@@ -96,7 +342,10 @@ export function useAIGeneration(showToast: (msg: string) => void, catalogAssets:
     imageBase64,
     setImageBase64,
     isLoading,
-    handleImageUpload,
+    requests,
+    uiState,
     handleGenerate,
+    handleRetry,
+    clearRequests,
   };
 }

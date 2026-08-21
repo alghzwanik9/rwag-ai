@@ -169,20 +169,21 @@ export const useSceneStore = create<SceneStore>()(
       // ── Initial state ──────────────────────────────────────────────────────
       ambientMode: 'morning',
       viewMode: 'orbit',
-      coveLightIntensity: 10,
-      coveLightColor: 3700,
+      coveLightIntensity: 35,
+      coveLightColor: 3000,
       spotlightToggle: false,
       activeSceneId: null,
-      floorColor: '#4f3c2b', // Default warm dark wood
-      wallColor: '#d6cdbd', // Default warm beige walls
-      roomWidth: 10,
-      roomDepth: 10,
-      wallHeight: 4,
+      floorColor: '#C8B29B', // Warm French Oak / Travertine
+      wallColor: '#EDE8E0', // Warm off-white limestone plaster
+      roomWidth: 5.5,
+      roomDepth: 4.8,
+      wallHeight: 3.0,
       sceneItems: [],
       history: [[]],
       historyIndex: 0,
       budgetLimit: 20000, // default 20,000 SAR
       primaryCurrency: 'SAR',
+
       recommendations: [],
       selectedObjectId: null,
       selectedAssetId: null,
@@ -328,12 +329,13 @@ export const useSceneStore = create<SceneStore>()(
         coveLightIntensity: 10,
         coveLightColor: 3700,
         spotlightToggle: false,
-        floorColor: '#4f3c2b',
-        wallColor: '#d6cdbd',
-        roomWidth: 10,
-        roomDepth: 10,
-        wallHeight: 4,
+        floorColor: '#C8B29B',
+        wallColor: '#EDE8E0',
+        roomWidth: 5.5,
+        roomDepth: 4.8,
+        wallHeight: 3.0,
       }),
+
       setIsDragging: (dragging) => set({ isDragging: dragging }),
       setViewMode: (mode) => set({ viewMode: mode }),
 

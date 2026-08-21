@@ -49,3 +49,7 @@ htmlcov/
 *.swp
 *.swo
 
+
+# Agent Skills (Local auto-injected from Central Hub)
+.agents/skills/
+.claude/skills/

@@ -27,17 +27,8 @@ export default function Header() {
         <span className="font-headline-md text-headline-md font-bold text-on-surface">{getPageTitle()}</span>
       </div>
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-4">
-          <button className="text-on-surface-variant hover:text-on-surface transition-colors">
-            <span className="material-symbols-outlined" data-icon="notifications">notifications</span>
-          </button>
-          <button className="text-on-surface-variant hover:text-on-surface transition-colors">
-            <span className="material-symbols-outlined" data-icon="history">history</span>
-          </button>
-          <button className="text-on-surface-variant hover:text-on-surface transition-colors">
-            <span className="material-symbols-outlined" data-icon="help">help</span>
-          </button>
-        </div>
+        {/* The notifications / history / help buttons that used to sit here had
+            no onClick and no destination. Removed rather than left as decoration. */}
         <div className="h-9 w-9 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden border border-outline-variant">
           {user?.imageUrl ? (
             <Image alt="User" className="h-full w-full object-cover" src={user.imageUrl} width={36} height={36} />

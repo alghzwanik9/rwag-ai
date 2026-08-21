@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react';
 import PdfExportTemplate from './PdfExportTemplate';
 import { FileDown, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 export default function Sidebar() {
   const { user } = useUser();
@@ -24,7 +23,6 @@ export default function Sidebar() {
   const [pdfImageBase64, setPdfImageBase64] = useState<string | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [quoteNumber, setQuoteNumber] = useState("");
   const [currentDate, setCurrentDate] = useState("");
 
@@ -91,17 +89,9 @@ export default function Sidebar() {
     }`;
   };
 
-  const isStudioPage = pathname === '/studio';
-
   return (
     <>
-      <aside 
-        className={`hidden md:flex fixed top-0 flex-col z-50 transition-all duration-500 ease-in-out ${
-          isStudioPage 
-            ? `right-4 top-4 h-[calc(100vh-32px)] bg-primary-container dark:bg-tertiary-container rounded-3xl shadow-2xl border border-outline-variant ${isCollapsed ? 'translate-x-[calc(100%+32px)]' : 'translate-x-0'} w-[280px] p-stack-md` 
-            : `right-0 h-full w-[280px] bg-primary-container dark:bg-tertiary-container border-l border-outline-variant p-stack-md`
-        }`}
-      >
+      <aside className="hidden md:flex fixed top-0 right-0 h-full w-[280px] flex-col z-50 bg-primary-container dark:bg-tertiary-container border-l border-outline-variant p-stack-md">
       <div className="mb-10 px-4">
         <h1 className="font-headline-md text-headline-md text-on-primary leading-tight font-bold">رواق</h1>
         <p className="font-label-md text-label-md text-on-primary-container opacity-80">للتصميم الداخلي</p>
@@ -210,27 +200,9 @@ export default function Sidebar() {
           <p className="text-[10px] text-on-primary-container">مصمم رئيسي</p>
         </div>
       </div>
-      <div className="pt-2 border-t border-on-primary-container/20">
-        <button className="w-full flex items-center justify-center gap-2 bg-secondary text-on-secondary py-3 rounded-lg font-label-md text-label-md hover:opacity-90 transition-all">
-          <span className="material-symbols-outlined" data-icon="add">add</span>
-          مشروع جديد
-        </button>
-      </div>
+      {/* The «مشروع جديد» button that used to sit here had no onClick at all.
+          The studio's own header now carries it as a real primary action. */}
     </aside>
-    
-    {isStudioPage && (
-      <button 
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        className={`fixed top-8 z-50 w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-all duration-500 hover:scale-105 active:scale-95 border-2 ${
-          isCollapsed 
-            ? 'right-6 bg-primary border-primary/50 text-white shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:shadow-primary/40' 
-            : 'right-[300px] bg-white border-outline-variant/50 text-on-surface hover:bg-surface-variant hover:text-primary'
-        }`}
-        title={isCollapsed ? "إظهار القائمة" : "إخفاء القائمة"}
-      >
-        {isCollapsed ? <ChevronLeft className="w-6 h-6 stroke-[2.5px]" /> : <ChevronRight className="w-6 h-6 stroke-[2.5px]" />}
-      </button>
-    )}
     </>
   );
 }

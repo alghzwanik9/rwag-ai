@@ -12,10 +12,23 @@ from backend.app.schemas import (
     RoomLayoutRequest,
     RecommendationRequest,
     ChatRequest,
+    StudioGenerateRequest,
+    SpatialAuditRequest,
 )
-from backend.app.services.rag_service import get_ikea_catalog_data
-from backend.app.services.ai_service import generate_room_layout, process_chat_message
+from backend.app.services.rag_service import (
+    get_ikea_catalog_data,
+    find_budget_alternatives,
+    get_all_standards_catalog
+)
+from backend.app.services.ai_service import (
+    generate_room_layout,
+    process_chat_message,
+    audit_room_layout
+)
 from backend.app.services.scraper_service import get_ingestion_pipeline
+from backend.app.services.image_gen_service import generate_studio_image
+
+
 
 router = APIRouter()
 ingestion_pipeline = get_ingestion_pipeline()
@@ -146,4 +159,74 @@ def generate_room(request: RoomLayoutRequest, api_request: Request):
 
 @router.post("/api/recommendations/alternatives")
 async def recommend_alternatives(request: RecommendationRequest):
-    return {"status": "success", "alternatives": []}
+    """Find smart budget alternatives from LanceDB for the current item."""
+    try:
+        alternatives = find_budget_alternatives(
+            current_item_id=request.current_item_id,
+            budget_left=request.budget_left
+        )
+        return {"status": "success", "alternatives": alternatives}
+    except Exception as e:
+        traceback.print_exc()
+        return {"status": "error", "alternatives": [], "detail": str(e)}
+
+@router.post("/api/v1/studio/generate")
+async def studio_generate(request: StudioGenerateRequest):
+    """Generate high-end 2D interior visualization via Fal.ai Flux Schnell."""
+    try:
+        result = await generate_studio_image(
+            prompt=request.prompt,
+            base_image_url=request.base_image_url,
+            settings=request.settings
+        )
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/v1/db-check")
+async def db_check():
+    """Health check for LanceDB and catalog index."""
+    try:
+        from backend.app.config import LANCEDB_DIR
+        import lancedb
+        db = lancedb.connect(str(LANCEDB_DIR))
+        tables = db.table_names()
+        table_stats = {}
+        for t in tables:
+            tbl = db.open_table(t)
+            table_stats[t] = tbl.count_rows()
+        return {
+            "status": "healthy",
+            "lancedb_dir": str(LANCEDB_DIR),
+            "tables": tables,
+            "counts": table_stats
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+@router.post("/api/v1/spatial-audit")
+def spatial_audit_endpoint(request: SpatialAuditRequest):
+    """Run an architectural clearance, density, and anthropometric audit on the active 3D scene."""
+    try:
+        result = audit_room_layout(
+            items=request.items,
+            room_width=request.room_width,
+            room_depth=request.room_depth
+        )
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/v1/architectural-standards")
+def architectural_standards_catalog():
+    """Return the structured architectural design standards catalog."""
+    try:
+        standards = get_all_standards_catalog()
+        return {"status": "success", "standards": standards, "total": len(standards)}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+

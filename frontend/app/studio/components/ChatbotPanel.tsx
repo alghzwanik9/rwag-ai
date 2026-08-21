@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSceneStore } from "@/lib/useSceneStore";
 import { useAssets } from "@/lib/useAssets";
-import { AIResponseItem } from "../StudioClient";
+import type { AIResponseItem } from "../config/pipeline";
 
 interface Message {
   role: "user" | "ai";
