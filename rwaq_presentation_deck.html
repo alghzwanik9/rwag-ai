@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>رواق | Rwaq AI - العرض التقديمي للمسابقة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #090d16;
+      --bg-card: #111827;
+      --bg-card-subtle: #1a2234;
+      --primary: #0284c7;
+      --primary-glow: #38bdf8;
+      --accent: #10b981;
+      --accent-glow: #34d399;
+      --amber: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-light: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(56, 189, 248, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    body {
+      font-family: 'Cairo', 'IBM Plex Sans Arabic', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+    }
+
+    /* Presentation Slide System (16:9) */
+    .slide {
+      width: 1920px;
+      height: 1080px;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 80px 100px;
+      background: radial-gradient(circle at 85% 15%, #152238 0%, var(--bg-main) 70%);
+      box-sizing: border-box;
+    }
+
+    /* Print Setup */
+    @page {
+      size: 1920px 1080px;
+      margin: 0;
+    }
+
+    @media print {
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      .slide {
+        width: 1920px;
+        height: 1080px;
+        border: none;
+      }
+    }
+
+    /* Header Bar */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 24px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .brand-tag {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #0284c7, #10b981);
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 22px;
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
+    }
+
+    .brand-name {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(to left, #fff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .slide-category {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--primary-glow);
+      background: rgba(2, 132, 199, 0.12);
+      border: 1px solid var(--border-accent);
+      padding: 6px 18px;
+      border-radius: 999px;
+    }
+
+    /* Slide Title Area */
+    .title-block {
+      margin-top: 20px;
+      margin-bottom: 24px;
+    }
+
+    .slide-title {
+      font-size: 52px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 8px;
+      letter-spacing: -1px;
+    }
+
+    .slide-subtitle {
+      font-size: 24px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Slide Content Container */
+    .slide-content {
+      flex: 1;
+      display: flex;
+      gap: 40px;
+      align-items: stretch;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Card System */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      padding: 36px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card.highlight {
+      border-color: var(--border-accent);
+      background: linear-gradient(145deg, #131d31, #0f172a);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-light);
+    }
+
+    .card-title {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    .card-desc {
+      font-size: 20px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Slide Footer */
+    .slide-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border-light);
+      padding-top: 20px;
+      color: #64748b;
+      font-size: 16px;
+      font-weight: 500;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Decorative Backdrops */
+    .glow-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Grids */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; width: 100%; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; width: 100%; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; width: 100%; }
+
+    /* Custom Tables */
+    .comp-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+    }
+
+    .comp-table th, .comp-table td {
+      padding: 22px 28px;
+      text-align: right;
+      font-size: 20px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .comp-table th {
+      background: #1e293b;
+      color: #fff;
+      font-weight: 800;
+      font-size: 22px;
+    }
+
+    .comp-table td.highlight-cell {
+      background: rgba(2, 132, 199, 0.15);
+      color: #38bdf8;
+      font-weight: 700;
+      border-right: 2px solid #0284c7;
+    }
+
+    /* Metric Badges */
+    .stat-number {
+      font-size: 64px;
+      font-weight: 900;
+      line-height: 1;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #38bdf8, #10b981);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat-label {
+      font-size: 20px;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    /* Step Timeline */
+    .step-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      padding: 32px 28px;
+      position: relative;
+    }
+    .step-num {
+      font-size: 22px;
+      font-weight: 900;
+      color: #0284c7;
+      margin-bottom: 16px;
+      display: inline-block;
+      background: rgba(2, 132, 199, 0.15);
+      padding: 4px 14px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== SLIDE 1: COVER ==================== -->
+  <section class="slide" style="justify-content: center; align-items: center; text-align: center;">
+    <div class="glow-orb" style="width: 650px; height: 650px; background: rgba(2, 132, 199, 0.18); top: 20%; left: 35%;"></div>
+    
+    <div style="z-index: 2; max-width: 1200px;">
+      <div style="display: inline-flex; align-items: center; gap: 18px; margin-bottom: 30px; background: rgba(255,255,255,0.04); padding: 12px 32px; border-radius: 999px; border: 1px solid var(--border-light);">
+        <div class="logo-badge" style="width: 42px; height: 42px; font-size: 20px;">ر</div>
+        <span style="font-size: 24px; font-weight: 800; color: #fff;">منصة رواق | RWAQ AI</span>
+        <span style="background: #10b981; color: #064e3b; font-size: 14px; font-weight: 800; padding: 4px 12px; border-radius: 999px;">AI + 3D ENGINE</span>
+      </div>
+
+      <h1 style="font-size: 78px; font-weight: 900; color: #fff; line-height: 1.15; margin-bottom: 24px; letter-spacing: -1.5px;">
+        الجيل القادم لتصميم المساحات الداخلية<br>
+        <span style="background: linear-gradient(135deg, #38bdf8, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          بالذكاء الاصطناعي التوليدي والتقنيات ثلاثية الأبعاد
+        </span>
+      </h1>
+
+      <p style="font-size: 28px; color: #94a3b8; max-width: 950px; margin: 0 auto 48px; font-weight: 400; line-height: 1.6;">
+        تحويل الوصف النصي المباشر إلى فضاءات تفاعلية حقيقية، بأثاث واقعي قابل للشراء ومحاكاة فورية في المتصفح.
+      </p>
+
+      <div style="display: flex; justify-content: center; gap: 32px; font-size: 20px; color: #cbd5e1;">
+        <span style="display: flex; align-items: center; gap: 10px;">⚡ توليد فوري في ثوانٍ</span>
+        <span>•</span>
+        <span style="display: flex; align-items: center; gap: 10px;">🛋️ كتالوج أثاث حقيقي موثوق</span>
+        <span>•</span>
+        <span style="display: flex; align-items: center; gap: 10px;">🌐 بيئة WebGL 3D تفاعلية</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 2: THE PROBLEM ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">المشكلة والتحدي السوقي</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">معضلة التصميم الداخلي وتأثيث المساحات</h2>
+      <p class="slide-subtitle">فجوة كبرى بين خيال العميل وواقع القطع قبل اتخاذ قرار الشراء والتنفيذ</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon" style="color: #ef4444;">🧠</div>
+          <div class="card-title">عجز التصور المكاني (78%)</div>
+          <div class="card-desc">
+            أغلب المشترين يعجزون تماماً عن تخيل تناسق الأبعاد، الألوان، وارتفاعات الأثاث في منازلهم بمجرد النظر لصور الكتالوج المسطحة ثنائية الأبعاد (2D).
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #f59e0b;">⏳</div>
+          <div class="card-title">تكلفة وبطء الرندرة التقليدية</div>
+          <div class="card-desc">
+            الاستعانة بمصممين محترفين يتطلب أسابيع من الانتظار وتكلفة باهظة تبدأ من آلاف الريالات، مع صعوبة إجراء التعديلات البسيطة في أوقات سريعة.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #0284c7;">📦</div>
+          <div class="card-title">خسائر المتاجر ومعدل الإرجاع</div>
+          <div class="card-desc">
+            تردد طويل قبل الشراء، وخسائر تشغيلية سنوية ضخمة لمتاجر الأثاث بسبب إرجاع القطع التي لا تتطابق مقاساتها مع الواقع الفعلي للغرف.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>02 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 3: THE SOLUTION ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">الحل والقيمة المضافة</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">رواق (Rwaq AI): الذكاء الاصطناعي المعماري الفوري</h2>
+      <p class="slide-subtitle">من الأمر النصي البسيط إلى عالم ثلاثي الأبعاد قابل للتجول والتعديل الفوري</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-3">
+        <div class="card highlight">
+          <div class="card-icon" style="color: #38bdf8;">✨</div>
+          <div class="card-title">توليد نصي ذكي (Prompt-to-3D)</div>
+          <div class="card-desc">
+            أدخل وصفك: "صمم غرفة معيشة نيوكلاسيك بإضاءة صباحية هادئة"، ليقوم النظام بتحليل المساحة وتوزيع الكتل المعمارية بذكاء متقدم.
+          </div>
+        </div>
+
+        <div class="card highlight">
+          <div class="card-icon" style="color: #10b981;">🎮</div>
+          <div class="card-title">تفاعل حي كامل (WebGL / Three.js)</div>
+          <div class="card-desc">
+            تحكم كامل بزوايا الكاميرا (360° Orbit)، تجربة محاكاة الطقس وأوقات اليوم (مشمس، ممطر، ليلي)، وتغيير ألوان الجدران والأرضيات بضغطة زر.
+          </div>
+        </div>
+
+        <div class="card highlight">
+          <div class="card-icon" style="color: #f59e0b;">🛋️</div>
+          <div class="card-title">أثاث واقعي قابل للشراء الفوري</div>
+          <div class="card-desc">
+            النظام لا يولد أشكالاً وهمية، بل يطابق تلقائياً قطع أثاث حقيقية مفهرسة من كبرى المتاجر عبر قاعدة بيانات متجهات متقدمة (LanceDB).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>03 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 4: USER EXPERIENCE ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">رحلة وتجربة المستخدم</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">رحلة مستخدم بديهية في 4 خطوات سلسة</h2>
+      <p class="slide-subtitle">تجربة مصممة لتمكين أي شخص من الحصول على مساحة أحلامه دون أي خبرة هندسية</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-4">
+        <div class="step-card">
+          <div class="step-num">المرحلة 01</div>
+          <div class="card-title">التعبير عن الاحتياج</div>
+          <div class="card-desc">
+            كتابة متطلبات الغرفة أو النمط المرغوب في شريط المحادثة الذكي، أو إرفاق مخطط الغرفة.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">المرحلة 02</div>
+          <div class="card-title">التوليد والتوزيع</div>
+          <div class="card-desc">
+            معالجة سريعة لإنتاج توزيع مثالي للأثاث مع مراعاة الممرات، النوافذ، ونقاط الإضاءة.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">المرحلة 03</div>
+          <div class="card-title">المعاينة والتخصيص</div>
+          <div class="card-desc">
+            التجول الحر في البيئة ثلاثية الأبعاد، تبديل القطع، وتجربة الخامات والإضاءة في المتصفح.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">المرحلة 04</div>
+          <div class="card-title">الشراء والتصدير</div>
+          <div class="card-desc">
+            الحصول على قائمة تسوق دقيقة بأسعار قطع الأثاث وروابط شرائها مباشرة، مع تصدير ملفات 3D.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>04 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 5: TECHNICAL ARCHITECTURE ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">النموذج التقني والمعماري</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">الهندسة التقنية المتكاملة (System Architecture)</h2>
+      <p class="slide-subtitle">خط أنابيب هجين فائق السرعة يجمع الذكاء التوليدي، البحث المتجهي، ومحرك الرندرة</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-3">
+        <div class="card">
+          <div style="font-size: 16px; color: #38bdf8; font-weight: 700; margin-bottom: 8px;">طبقة الواجهة والعرض (Frontend)</div>
+          <div class="card-title">Next.js 15 & Three.js</div>
+          <div class="card-desc">
+            • مبني بـ React Three Fiber (R3F) للبث التفاعلي الفوري بدون زمن استجابة.<br>
+            • واجهة عربية كاملة (RTL) متوافقة مع Tailwind CSS v4 وإدارة حالة مرنة عبر Zustand.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-size: 16px; color: #10b981; font-weight: 700; margin-bottom: 8px;">طبقة الذكاء والاسترجاع (Core AI)</div>
+          <div class="card-title">FastAPI & LanceDB & Gemini</div>
+          <div class="card-desc">
+            • خادم معالجة فوري (FastAPI) يفكك الطلبات ويرسلها لنموذج الاستنتاج.<br>
+            • قاعدة بيانات متجهات سريعة (LanceDB) للبحث الدلالي عن الأثاث المطابق ثلاثي الأبعاد.
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-size: 16px; color: #f59e0b; font-weight: 700; margin-bottom: 8px;">محرك الرندرة والتوليد (3D Pipeline)</div>
+          <div class="card-title">Headless Blender & GLB</div>
+          <div class="card-desc">
+            • أتمتة برمجية كاملة عبر Blender Python Scripting لتجميع المشهد الهندسي.<br>
+            • تصدير ملفات GLB خفيفة ومضغوطة للبث المباشر في المتصفح بأعلى دقة فيزيائية.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>05 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 6: SPATIAL CONSTRAINTS & ACCURACY ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">الدقة الهندسية</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">محرك القيود الهندسية والتصحيح الذاتي</h2>
+      <p class="slide-subtitle">حل معضلة هلوسة النماذج التوليدية وضمان واقعية التصميم المعماري</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon" style="color: #38bdf8;">📐</div>
+          <div class="card-title">مخطط التحقق الصارم (Strict Schema)</div>
+          <div class="card-desc">
+            فرض قيود موضعية دقيقة على الكائنات؛ حيث يُلزم النظام جميع قطع الأثاث بمعيار الالتصاق بالأرضية (<code style="color: #38bdf8;">t_y = 0</code>) لمنع الأثاث الطافي أو غير المتزن.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #10b981;">🛡️</div>
+          <div class="card-title">وكيل التصحيح التلقائي (Self-Correction)</div>
+          <div class="card-desc">
+            في حال حدوث أي شذوذ هندسي أو تعارض في الإحداثيات أثناء التوليد، يتدخل وكيل الـ Orchestrator لتصحيح المشهد وإعادة ضبطه برمجياً قبل التصدير.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #f59e0b;">🎨</div>
+          <div class="card-title">معايرة الخامات والفيزياء (PBR Materials)</div>
+          <div class="card-desc">
+            تحويل الألوان الديناميكية تلقائياً من نظام Hex Colors إلى فضاء ألوان Linear RGB، لإنتاج إضاءة وظلال واقعية تحاكي انعكاسات العالم الطبيعي.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>06 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 7: COMPETITIVE ADVANTAGE ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">الميزة التنافسية</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">لماذا نتفوق على الحلول التقليدية؟</h2>
+      <p class="slide-subtitle">مقارنة تثبت الفجوة التنافسية الكبرى التي يسدها رواق في السوق</p>
+    </div>
+
+    <div class="slide-content" style="align-items: center;">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>المعيار التنافسي</th>
+            <th>مكاتب التصميم التقليدية</th>
+            <th>مولدات الذكاء الاصطناعي (Midjourney)</th>
+            <th style="background: #0284c7; color: #fff;">منصة رواق (Rwaq AI)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>زمن التسليم والإنتاج</strong></td>
+            <td>من 3 إلى 14 يوماً</td>
+            <td>ثوانٍ معدودة</td>
+            <td class="highlight-cell"><strong>أقل من دقيقة (فوري)</strong></td>
+          </tr>
+          <tr>
+            <td><strong>طبيعة المخرج البصري</strong></td>
+            <td>صور ثابتة (2D Renders)</td>
+            <td>صورة مسطحة (2D Image)</td>
+            <td class="highlight-cell"><strong>مشهد 3D تفاعلي كامل بالمتصفح</strong></td>
+          </tr>
+          <tr>
+            <td><strong>التعديل والتخصيص الحي</strong></td>
+            <td>مكلف ويتطلب أياماً جديدة</td>
+            <td>مستحيل (يولد صورة مختلفة كلياً)</td>
+            <td class="highlight-cell"><strong>تعديل الخامات والإضاءة بنقرة واحدة</strong></td>
+          </tr>
+          <tr>
+            <td><strong>الربط بأثاث حقيقي للشراء</strong></td>
+            <td>بحث يدوي مجهد للمقاسات</td>
+            <td>غير متوفر (أشكال خيالية غير حقيقية)</td>
+            <td class="highlight-cell"><strong>مطابقة فورية مع كتالوج المتاجر الفعلي</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>07 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 8: BUSINESS MODEL ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">نموذج العمل والربحية</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">نموذج عمل مستدام ومتعدد القنوات (B2B & B2C)</h2>
+      <p class="slide-subtitle">تحقيق الدخل عبر الاشتراكات والحلول المؤسسية وعمولات التجارة الإلكترونية</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon" style="color: #38bdf8;">💼</div>
+          <div class="card-title">اشتراكات المحترفين (Pro SaaS)</div>
+          <div class="card-desc">
+            رسوم اشتراك شهرية وسنوية للمصممين الداخليين والمكاتب الهندسية، تمنحهم توليداً غير محدود، وتصديراً لملفات CAD و Blender بدقة عالية.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #10b981;">🏢</div>
+          <div class="card-title">حلول قطاع التجزئة (Enterprise API)</div>
+          <div class="card-desc">
+            تزويد شركات ومتاجر الأثاث (مثل إيكيا وهوم سنتر) بإمكانية دمج محرك رواق داخل متاجرهم الإلكترونية لتمكين عملائهم من تجربة الأثاث فورياً.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #f59e0b;">🛒</div>
+          <div class="card-title">عمولات المبيعات (E-Commerce Affiliate)</div>
+          <div class="card-desc">
+            تحصيل نسبة عمولة متفق عليها عن كل عملية شراء تتم لقطع الأثاث المختارة مباشرة من خلال المشاهد التي يولدها رواق.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>08 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 9: TRACTION & ROADMAP ==================== -->
+  <section class="slide">
+    <div class="slide-header">
+      <div class="brand-tag">
+        <div class="logo-badge">ر</div>
+        <div class="brand-name">رواق AI</div>
+      </div>
+      <div class="slide-category">الإنجاز وخارطة الطريق</div>
+    </div>
+
+    <div class="title-block">
+      <h2 class="slide-title">سجل الإنجاز والخطوات المستقبلية</h2>
+      <p class="slide-subtitle">انتقال مدروس من إثبات المفهوم التقني إلى التوسع التجاري الكامل</p>
+    </div>
+
+    <div class="slide-content">
+      <div class="grid-2">
+        <div class="card" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3);">
+          <div style="font-size: 20px; font-weight: 800; color: #10b981; margin-bottom: 16px;">✅ ما تم إنجازه واختباره بنجاح:</div>
+          <div class="card-desc" style="font-size: 20px; line-height: 1.8; color: #e2e8f0;">
+            • بناء الواجهة التفاعلية الكاملة بـ Next.js 15 و Three.js مع دعم RTL كامل.<br>
+            • بناء خط أنابيب الـ Orchestrator لتوليد مشاهد Blender وتصدير GLB آلياً.<br>
+            • تفعيل خوارزميات محاكاة الطقس وأوقات اليوم وتعديل الخامات حياً.<br>
+            • فهرسة قواعد البيانات المتجهية لأصول الأثاث ثلاثية الأبعاد عبر LanceDB.
+          </div>
+        </div>
+
+        <div class="card" style="background: rgba(2, 132, 199, 0.08); border-color: rgba(2, 132, 199, 0.3);">
+          <div style="font-size: 20px; font-weight: 800; color: #38bdf8; margin-bottom: 16px;">🚀 المستهدف في المرحلة القادمة:</div>
+          <div class="card-desc" style="font-size: 20px; line-height: 1.8; color: #e2e8f0;">
+            • إطلاق واجهة المحادثة التوليدية الكاملة بنماذج Gemini المتقدمة.<br>
+            • دعم ميزة مسح المخططات المعمارية بالذكاء الاصطناعي (Floor Plan Scanner).<br>
+            • توقيع أول شراكة استراتيجية مع متجر أثاث محلي لدمج كتالوج المنتجات.<br>
+            • طرح النسخة التجريبية العامة (Beta Launch) للمصممين والمستخدمين.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <span>Rwaq AI — Pitch Deck</span>
+      <span>09 / 10</span>
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 10: CLOSING ==================== -->
+  <section class="slide" style="justify-content: center; align-items: center; text-align: center;">
+    <div class="glow-orb" style="width: 700px; height: 700px; background: rgba(16, 185, 129, 0.15); bottom: 15%; right: 30%;"></div>
+    
+    <div style="z-index: 2; max-width: 1100px;">
+      <div class="logo-badge" style="width: 64px; height: 64px; font-size: 32px; margin: 0 auto 28px;">ر</div>
+
+      <h2 style="font-size: 68px; font-weight: 900; color: #fff; line-height: 1.2; margin-bottom: 24px;">
+        نعيد تعريف تجربة التصميم الداخلي<br>
+        <span style="background: linear-gradient(135deg, #38bdf8, #10b981); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          لنصنع مساحات المستقبل معاً
+        </span>
+      </h2>
+
+      <p style="font-size: 26px; color: #94a3b8; max-width: 850px; margin: 0 auto 48px; line-height: 1.6;">
+        رواق هو الجسر التقني المفقود بين الخيال والتنفيذ. جاهزون للإجابة على استفساراتكم وبدء تجربة العرض الحي.
+      </p>
+
+      <div style="display: inline-flex; gap: 40px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-light); padding: 20px 48px; border-radius: 20px;">
+        <div>
+          <div style="font-size: 14px; color: #94a3b8; margin-bottom: 4px;">الموقع الإلكتروني</div>
+          <div style="font-size: 22px; font-weight: 700; color: #fff;">rwaq-ai.com</div>
+        </div>
+        <div style="border-right: 1px solid var(--border-light);"></div>
+        <div>
+          <div style="font-size: 14px; color: #94a3b8; margin-bottom: 4px;">البريد الرسمي</div>
+          <div style="font-size: 22px; font-weight: 700; color: #38bdf8;">contact@rwaq-ai.com</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>
