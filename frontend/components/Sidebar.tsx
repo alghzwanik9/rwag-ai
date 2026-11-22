@@ -132,7 +132,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
         : pathname === path || pathname.startsWith(`${path}/`);
     return `flex items-center gap-3 px-4 py-2.5 transition-all duration-200 rounded-lg ${
       isActive
-        ? 'text-on-secondary bg-secondary-container border-r-2 border-secondary font-bold scale-[0.99]'
+        ? 'text-on-secondary-container bg-secondary-container border-r-2 border-secondary font-bold scale-[0.99]'
         : 'text-on-primary-container hover:bg-white/10'
     }`;
   };

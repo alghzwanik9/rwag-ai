@@ -261,21 +261,27 @@ export default function Studio2D() {
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] rounded-2xl p-3 text-sm flex flex-col gap-2 ${msg.role === 'user' ? 'bg-[#1E1E1E] text-white rounded-tr-none' : 'bg-gray-100 text-[#1E1E1E] border border-gray-200 rounded-tl-none'}`}>
                 <span>{msg.text}</span>
-                  <div className="relative w-full h-48 cursor-pointer hover:opacity-90 transition-opacity"
-                    onClick={() => setSelectedImage({
-                      id: `img_${idx}`,
-                      image_url: msg.image_url!,
-                      prompt_used: msg.text,
-                      created_at: ""
-                    })}>
+                {msg.image_url && (
+                  <div
+                    className="relative w-full h-48 cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() =>
+                      setSelectedImage({
+                        id: `img_${idx}`,
+                        image_url: msg.image_url!,
+                        prompt_used: msg.text,
+                        created_at: "",
+                      })
+                    }
+                  >
                     <Image
-                      src={msg.image_url!}
+                      src={msg.image_url}
                       alt="Generated Preview"
                       fill
                       className="rounded-lg object-cover"
                       unoptimized
                     />
                   </div>
+                )}
               </div>
             </div>
           ))}
