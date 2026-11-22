@@ -1,8 +1,12 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import type { NextConfig } from "next";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: "../",
+    root: path.resolve(currentDir, ".."),
   },
   async rewrites() {
     // Determine backend URL based on environment (Vercel uses NEXT_PUBLIC_API_URL)
@@ -32,10 +36,6 @@ const nextConfig: NextConfig = {
       {
         source: "/api/v1/assets/:path*",
         destination: `${backendUrl}/api/v1/assets/:path*`,
-      },
-      {
-        source: "/api/v1/projects/:path*",
-        destination: `${backendUrl}/api/v1/projects/:path*`,
       },
       {
         source: "/api/v1/chat",

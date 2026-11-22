@@ -13,10 +13,13 @@ app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
 app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 # CORS setup
+cors_origins = CORS_ORIGINS if CORS_ORIGINS else ["http://localhost:3000", "http://127.0.0.1:3000"]
+allow_credentials = False if "*" in cors_origins else True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS if CORS_ORIGINS else ["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

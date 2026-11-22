@@ -30,7 +30,7 @@ export interface CatalogAsset {
  * Maps a raw API CatalogAsset to the IProductTemplate shape used throughout
  * the studio page so the rest of the UI doesn't need a dual type.
  */
-const FALLBACK_MODEL_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb";
+const FALLBACK_MODEL_URL = "/assets/armchair_wood.glb";
 
 function toProductTemplate(a: CatalogAsset): IProductTemplate {
   return {

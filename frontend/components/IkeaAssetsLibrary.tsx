@@ -34,7 +34,7 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
   const [realAssets, setRealAssets] = useState<RawAsset[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const DEFAULT_MODEL_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb";
+  const DEFAULT_MODEL_URL = "/assets/armchair_wood.glb";
 
   React.useEffect(() => {
     const fetchCatalog = async () => {

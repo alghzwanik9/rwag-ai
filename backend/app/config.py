@@ -21,7 +21,12 @@ ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 LANCEDB_DIR.mkdir(parents=True, exist_ok=True)
 
 # Environment variables
-CORS_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",") if origin.strip()]
+DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
+    if origin.strip()
+] or ["http://localhost:3000", "http://127.0.0.1:3000"]
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 FAL_KEY = os.getenv("FAL_KEY", "")

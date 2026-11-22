@@ -10,8 +10,7 @@ import type { IProductTemplate } from "./catalogTemplates";
 import type { AIResponseItem, PipelineStage } from "./pipeline";
 
 /** Used only when the catalog is completely empty, so we never render a bare cube. */
-export const PLACEHOLDER_MODEL_URL =
-  "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb";
+export const PLACEHOLDER_MODEL_URL = "/assets/armchair_wood.glb";
 
 /**
  * How one AI item was resolved against the catalog.

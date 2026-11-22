@@ -15,17 +15,6 @@ class RecommendationRequest(BaseModel):
     current_item_id: str
     budget_left: float
 
-class ProjectSaveRequest(BaseModel):
-    name: str
-    sceneId: str
-    glbUrl: str
-    sceneItems: List[Dict[str, Any]]
-    customMaterials: Dict[str, Any]
-    totalCost: float
-
-class ProjectStateV1(BaseModel):
-    roomItems: List[Dict[str, Any]]
-
 class ChatRequest(BaseModel):
     message: str
 

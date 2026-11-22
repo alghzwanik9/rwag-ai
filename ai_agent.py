@@ -43,10 +43,31 @@ class Economy(BaseModel):
     brand: str = Field(description="Brand name (e.g. IKEA, Abyat, West Elm)")
     sku: str = Field(description="SKU or item ID reference")
 
+CANONICAL_ASSET_IDS = [
+    "sofa",
+    "armchair",
+    "coffee_table",
+    "coffee_table_art",
+    "bookshelf",
+    "tv_unit",
+    "drawer_cabinet",
+    "dining_chair",
+    "deck_chair",
+    "outdoor_set",
+    "vase_flowers",
+    "plant",
+]
+
+
 class Object3D(BaseModel):
     id: str = Field(description="Unique string identifier for this instance (e.g. sofa_main)")
     type: str = Field(description="Type of object. Must be one of: 'furniture', 'window', 'wall'")
-    asset_id: str = Field(description="Asset ID. For 'furniture', must be one of: sofa, coffee_table, tv_unit, plant, armchair, bookshelf, rug")
+    asset_id: str = Field(
+        description=(
+            "Asset ID. For 'furniture', must be one of: "
+            + ", ".join(CANONICAL_ASSET_IDS)
+        )
+    )
     hex_color: str = Field(description="Hex color code (e.g., #FFFFFF)")
     dimensions: Dimensions
     transform: Transform
@@ -69,11 +90,11 @@ def get_dynamic_asset_registry():
     try:
         pipeline = IngestionPipeline()
         assets = pipeline.get_all()
-        registry = [a["asset_id"] for a in assets]
-        return registry if registry else ["sofa", "coffee_table", "tv_unit", "plant", "armchair", "bookshelf", "rug"]
+        registry = [a["asset_id"] for a in assets if a.get("asset_id")]
+        return registry if registry else list(CANONICAL_ASSET_IDS)
     except Exception as e:
         print(f"Failed to load dynamic registry: {e}")
-        return ["sofa", "coffee_table", "tv_unit", "plant", "armchair", "bookshelf", "rug"]
+        return list(CANONICAL_ASSET_IDS)
 # Initialize the modern google-genai client
 _client = genai.Client(api_key=api_key) if api_key else None
 
@@ -89,7 +110,7 @@ def refine_prompt_with_groq(user_prompt: str) -> str:
             "Guidelines:\n"
             "1. Translate any Arabic request to English.\n"
             "2. Expand the design logically: specify exact furniture items, color choices (following the 60-30-10 rule: 60% dominant neutral wall/floor, 30% furniture, 10% accents), lighting mood, and relative spatial layout (e.g. coffee table in front of sofa, TV unit opposite the sofa).\n"
-            "3. Limit the items to our allowed asset registry: sofa, coffee_table, tv_unit, plant, armchair, bookshelf, rug, window.\n"
+            f"3. Limit the items to our allowed asset registry: {', '.join(CANONICAL_ASSET_IDS)}, window.\n"
             "4. Describe the color palette in Hex codes so the executor can apply it precisely.\n"
             "5. Do NOT output any code or JSON. Just output a clean, descriptive paragraph in English describing the layout, dimensions, colors, and positioning details for the generator."
         )
@@ -249,20 +270,20 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
                 {
                     "id": "coffee_table_main",
                     "type": "furniture",
-                    "asset_id": "table",
+                    "asset_id": "coffee_table",
                     "hex_color": "#4A3B32",
                     "dimensions": {"length": 0.9, "width": 0.55, "height": 0.45},
                     "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -0.7, "yaw_y": 0.0, "scale": 1.0},
                     "economy": {"price": 195.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-TABLE-01"}
                 },
                 {
-                    "id": "rug_main",
+                    "id": "armchair_accent",
                     "type": "furniture",
-                    "asset_id": "rug",
+                    "asset_id": "armchair",
                     "hex_color": "#D4C8B8",
-                    "dimensions": {"length": 2.4, "width": 1.7, "height": 0.02},
-                    "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -1.1, "yaw_y": 0.0, "scale": 1.0},
-                    "economy": {"price": 1250.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-RUG-01"}
+                    "dimensions": {"length": 0.82, "width": 0.96, "height": 1.01},
+                    "transform": {"t_x": 1.4, "t_y": 0.0, "t_z": -1.0, "yaw_y": -90.0, "scale": 1.0},
+                    "economy": {"price": 1195.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-CHAIR-01"}
                 },
                 {
                     "id": "plant_corner",
@@ -351,20 +372,32 @@ def handle_chat_request(user_message: str) -> dict:
                     item_obj["transform"] = {"t_x": 0, "t_y": 0, "t_z": 0, "yaw_y": 0, "scale": 1.0}
                     
                     cat_lower = str(best.get("category", "")).lower()
-                    if "sofa" in cat_lower or "seating" in cat_lower or "مقاعد" in cat_lower:
+                    name_lower = str(name).lower()
+                    text_lower = f"{cat_lower} {name_lower}"
+                    if "sofa" in text_lower or "couch" in text_lower or "كنب" in text_lower or "أريكة" in text_lower:
                         item_obj["asset_id"] = "sofa"
-                    elif "table" in cat_lower or "طاولات" in cat_lower:
-                        item_obj["asset_id"] = "coffee_table"
-                    elif "tv" in cat_lower or "تلفزيون" in cat_lower:
-                        item_obj["asset_id"] = "tv_unit"
-                    elif "rug" in cat_lower or "سجاد" in cat_lower:
-                        item_obj["asset_id"] = "rug"
-                    elif "chair" in cat_lower or "كرسي" in cat_lower or "armchair" in cat_lower:
+                    elif ("dining" in text_lower and ("chair" in text_lower or "كرسي" in text_lower)) or "stool" in text_lower:
+                        item_obj["asset_id"] = "dining_chair"
+                    elif "deck" in text_lower or "lounge" in text_lower:
+                        item_obj["asset_id"] = "deck_chair"
+                    elif "chair" in text_lower or "كرسي" in text_lower or "armchair" in text_lower or "seating" in text_lower or "مقاعد" in text_lower:
                         item_obj["asset_id"] = "armchair"
-                    elif "bed" in cat_lower or "سرير" in cat_lower:
-                        item_obj["asset_id"] = "bed"
+                    elif "shelf" in text_lower or "bookcase" in text_lower or "bookshelf" in text_lower or "رف" in text_lower:
+                        item_obj["asset_id"] = "bookshelf"
+                    elif "tv" in text_lower or "تلفزيون" in text_lower or "تلفاز" in text_lower:
+                        item_obj["asset_id"] = "tv_unit"
+                    elif "cabinet" in text_lower or "drawer" in text_lower or "storage" in text_lower or "خزانة" in text_lower:
+                        item_obj["asset_id"] = "drawer_cabinet"
+                    elif "outdoor" in text_lower or "garden" in text_lower or "حديقة" in text_lower:
+                        item_obj["asset_id"] = "outdoor_set"
+                    elif "table" in text_lower or "طاولات" in text_lower or "طاولة" in text_lower:
+                        item_obj["asset_id"] = "coffee_table"
+                    elif "vase" in text_lower or "flower" in text_lower or "مزهرية" in text_lower:
+                        item_obj["asset_id"] = "vase_flowers"
+                    elif "plant" in text_lower or "نبات" in text_lower or "decor" in text_lower or "ديكور" in text_lower:
+                        item_obj["asset_id"] = "plant"
                     else:
-                        item_obj["asset_id"] = "sofa"
+                        item_obj["asset_id"] = "armchair"
                         
                     response_payload["items"].append(item_obj)
                 else:

@@ -100,7 +100,7 @@ def test_generate_layout_fallback_on_api_error(monkeypatch):
     assert res["stage"] == 1
     assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
     assert len(res["objects"]) >= 4
-    assert any(obj["asset_id"] == "table" for obj in res["objects"])
+    assert any(obj["asset_id"] == "coffee_table" for obj in res["objects"])
 
 
 def test_generate_layout_fallback_when_client_unconfigured(monkeypatch):
@@ -168,7 +168,7 @@ def test_generate_layout_fallback_on_schema_mismatch(monkeypatch, bad_json):
     assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
     assert isinstance(res["objects"], list)
     assert len(res["objects"]) >= 4
-    assert any(obj["asset_id"] == "table" for obj in res["objects"])
+    assert any(obj["asset_id"] == "coffee_table" for obj in res["objects"])
 
 
 def test_handle_chat_request_non_dict_json_fallback(monkeypatch):

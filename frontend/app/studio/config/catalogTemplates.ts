@@ -12,27 +12,37 @@ export interface IProductTemplate {
   sku?: string;
 }
 
-// Real, textured GLB models in frontend/public/assets/. Every file here is a
-// genuine mesh over 1 MB — the 16-70 KB stubs (sofa/armchair/table/tv_unit/
-// rug/plant) and the Khronos test samples are deliberately absent, since an
-// entry pointing at one of them renders as an empty scene.
-const LOCAL_GLB: Record<string, string> = {
+// Verified local GLB models in frontend/public/assets/ (every file is >= 1 MB).
+export const LOCAL_GLB = {
   // AR-Code furniture (CC0)
-  deck_chair:     "/assets/deck_chair.glb",
-  dining_chair:   "/assets/dining_chair.glb",
+  deck_chair: "/assets/deck_chair.glb",
+  dining_chair: "/assets/dining_chair.glb",
   drawer_cabinet: "/assets/drawer_cabinet.glb",
-  coffee_table_art:  "/assets/coffee_table_art.glb",
-  display_shelf:  "/assets/display_shelf.glb",
+  coffee_table_art: "/assets/coffee_table_art.glb",
+  display_shelf: "/assets/display_shelf.glb",
   coffee_table_round: "/assets/coffee_table_round.glb",
-  armchair_wood:  "/assets/armchair_wood.glb",
-  outdoor_set:    "/assets/outdoor_set.glb",
-  // Khronos glTF assets
-  sofa_khronos:   "/assets/sofa_khronos.glb",
-  vase_flowers:   "/assets/vase_flowers.glb",
-};
+  armchair_wood: "/assets/armchair_wood.glb",
+  outdoor_set: "/assets/outdoor_set.glb",
+  // Khronos glTF furniture & decor assets
+  sofa_khronos: "/assets/sofa_khronos.glb",
+  vase_flowers: "/assets/vase_flowers.glb",
+} as const;
+
+export const DEFAULT_FALLBACK_GLB = LOCAL_GLB.armchair_wood;
 
 export const IKEA_TEMPLATES: IProductTemplate[] = [
   // ── مقاعد (Seating) ──
+  {
+    id: "sofa",
+    name: "أريكة معاصرة 3 مقاعد",
+    brand: "Rwaq",
+    price: 2950,
+    currency: "SAR",
+    category: "seating",
+    modelUrl: LOCAL_GLB.sofa_khronos,
+    dimensions: { width: 2200, height: 850, depth: 950 },
+    thumbnailUrl: ""
+  },
   {
     id: "kivik_sofa",
     name: "أريكة 3 مقاعد KIVIK",
@@ -42,6 +52,17 @@ export const IKEA_TEMPLATES: IProductTemplate[] = [
     category: "seating",
     modelUrl: LOCAL_GLB.sofa_khronos,
     dimensions: { width: 2280, height: 830, depth: 950 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "armchair",
+    name: "كرسي بذراعين خشبي",
+    brand: "Rwaq",
+    price: 1350,
+    currency: "SAR",
+    category: "seating",
+    modelUrl: LOCAL_GLB.armchair_wood,
+    dimensions: { width: 750, height: 950, depth: 800 },
     thumbnailUrl: ""
   },
   {
@@ -80,6 +101,17 @@ export const IKEA_TEMPLATES: IProductTemplate[] = [
 
   // ── طاولات (Tables) ──
   {
+    id: "coffee_table",
+    name: "طاولة قهوة دائرية",
+    brand: "Rwaq",
+    price: 890,
+    currency: "SAR",
+    category: "tables",
+    modelUrl: LOCAL_GLB.coffee_table_round,
+    dimensions: { width: 900, height: 450, depth: 900 },
+    thumbnailUrl: ""
+  },
+  {
     id: "lack_table",
     name: "طاولة قهوة LACK",
     brand: "IKEA",
@@ -114,6 +146,28 @@ export const IKEA_TEMPLATES: IProductTemplate[] = [
   },
 
   // ── تخزين (Storage) ──
+  {
+    id: "bookshelf",
+    name: "مكتبة ورفوف عرض",
+    brand: "Rwaq",
+    price: 649,
+    currency: "SAR",
+    category: "storage",
+    modelUrl: LOCAL_GLB.display_shelf,
+    dimensions: { width: 800, height: 1200, depth: 300 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "tv_unit",
+    name: "وحدة تلفزيون منخفضة",
+    brand: "Rwaq",
+    price: 1450,
+    currency: "SAR",
+    category: "storage",
+    modelUrl: LOCAL_GLB.drawer_cabinet,
+    dimensions: { width: 1800, height: 450, depth: 400 },
+    thumbnailUrl: ""
+  },
   {
     id: "drawer_cabinet",
     name: "خزانة أدراج",

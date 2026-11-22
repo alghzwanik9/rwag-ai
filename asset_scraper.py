@@ -59,6 +59,7 @@ _ROOT          = Path(__file__).parent
 _LANCEDB_PATH  = str(_ROOT / ".lancedb")
 _LOCAL_GLB_DIR = _ROOT / "frontend" / "public" / "assets"
 _TABLE_NAME    = "furniture_assets"
+_MIN_GLB_BYTES = 1_000_000  # Only ingest real textured furniture GLBs >= 1 MB
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
 
@@ -202,6 +203,14 @@ class LanceDBAssetStore:
             for r in rows
         ]
 
+    def clear(self) -> None:
+        """Drop and recreate the furniture_assets table for a clean re-seed."""
+        if _TABLE_NAME in self._db.table_names():
+            self._db.drop_table(_TABLE_NAME)
+        empty = pa.table({name: pa.array([], type=field.type)
+                          for name, field in zip(ASSET_SCHEMA.names, ASSET_SCHEMA)})
+        self._table = self._db.create_table(_TABLE_NAME, data=empty, schema=ASSET_SCHEMA)
+
     def count(self) -> int:
         try:
             return len(self._table.to_pandas())
@@ -296,6 +305,14 @@ class SyntheticFileScanner:
             metadata = json.load(f)
 
         for glb_path in sorted(synthetic_dir.glob("*.glb")):
+            if glb_path.stat().st_size < _MIN_GLB_BYTES:
+                result.log(
+                    f"SKIP {glb_path.name} — below minimum size ({glb_path.stat().st_size} < {_MIN_GLB_BYTES} bytes)",
+                    "warning",
+                )
+                result.skipped += 1
+                continue
+
             stem = glb_path.stem  # e.g. "table_1"
             meta_key = f"synthetic_{stem}" # As defined in blender_factory.py
             
@@ -339,38 +356,74 @@ class SyntheticFileScanner:
 # Source 1: Local File System Scanner
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Known dimension & category metadata for the 6 local assets already on disk.
+# Canonical asset registry mapped exclusively to verified local >1 MB furniture GLBs.
 _LOCAL_SEED: dict[str, dict] = {
     "sofa": {
-        "name": "أريكة KIVIK", "category": "seating", "source": "IKEA",
+        "file": "sofa_khronos.glb",
+        "name": "أريكة 3 مقاعد KIVIK", "category": "seating", "source": "IKEA",
         "w": 2280.0, "h": 830.0, "d": 950.0,
     },
     "armchair": {
-        "name": "كرسي STRANDMON", "category": "seating", "source": "IKEA",
+        "file": "armchair_wood.glb",
+        "name": "كرسي بمسندين STRANDMON", "category": "seating", "source": "IKEA",
         "w": 820.0, "h": 1010.0, "d": 960.0,
     },
-    "table": {
-        "name": "طاولة قهوة LACK", "category": "tables", "source": "IKEA",
-        "w": 900.0, "h": 450.0, "d": 550.0,
+    "coffee_table": {
+        "file": "coffee_table_round.glb",
+        "name": "طاولة قهوة دائرية LACK", "category": "tables", "source": "IKEA",
+        "w": 800.0, "h": 450.0, "d": 800.0,
+    },
+    "coffee_table_art": {
+        "file": "coffee_table_art.glb",
+        "name": "طاولة قهوة مودرن", "category": "tables", "source": "Rwaq",
+        "w": 1000.0, "h": 450.0, "d": 600.0,
+    },
+    "bookshelf": {
+        "file": "display_shelf.glb",
+        "name": "رف عرض وكتب", "category": "storage", "source": "Rwaq",
+        "w": 800.0, "h": 1200.0, "d": 300.0,
     },
     "tv_unit": {
-        "name": "وحدة تلفاز BESTÅ", "category": "tables", "source": "IKEA",
+        "file": "drawer_cabinet.glb",
+        "name": "وحدة تلفاز وتخزين BESTÅ", "category": "storage", "source": "IKEA",
         "w": 1800.0, "h": 600.0, "d": 400.0,
     },
-    "rug": {
-        "name": "سجادة STOCKHOLM", "category": "rugs", "source": "IKEA",
-        "w": 1700.0, "h": 10.0, "d": 2400.0,
+    "drawer_cabinet": {
+        "file": "drawer_cabinet.glb",
+        "name": "خزانة أدراج", "category": "storage", "source": "Rwaq",
+        "w": 600.0, "h": 800.0, "d": 400.0,
+    },
+    "dining_chair": {
+        "file": "dining_chair.glb",
+        "name": "كرسي طعام", "category": "seating", "source": "Rwaq",
+        "w": 450.0, "h": 850.0, "d": 500.0,
+    },
+    "deck_chair": {
+        "file": "deck_chair.glb",
+        "name": "كرسي استرخاء", "category": "seating", "source": "Rwaq",
+        "w": 580.0, "h": 900.0, "d": 600.0,
+    },
+    "outdoor_set": {
+        "file": "outdoor_set.glb",
+        "name": "طقم حديقة خارجي", "category": "tables", "source": "Rwaq",
+        "w": 1500.0, "h": 750.0, "d": 1500.0,
+    },
+    "vase_flowers": {
+        "file": "vase_flowers.glb",
+        "name": "مزهرية زهور ديكور", "category": "decor", "source": "Rwaq",
+        "w": 250.0, "h": 450.0, "d": 250.0,
     },
     "plant": {
-        "name": "نبتة ديكور FEJKA", "category": "decor", "source": "IKEA",
+        "file": "vase_flowers.glb",
+        "name": "نبتة ومزهرية ديكور FEJKA", "category": "decor", "source": "IKEA",
         "w": 300.0, "h": 900.0, "d": 300.0,
     },
 }
 
 class LocalFileScanner:
     """
-    Scans frontend/public/assets/ for .glb files and injects them with
-    dimension metadata from the seed dictionary above.
+    Scans frontend/public/assets/ for verified furniture .glb files (>= 1 MB)
+    and ingests them using canonical asset_id keys from _LOCAL_SEED.
     """
 
     def run(
@@ -384,24 +437,33 @@ class LocalFileScanner:
             result.log(f"Local asset dir not found: {glb_dir}", "warning")
             return
 
-        for glb_path in sorted(glb_dir.glob("*.glb")):
-            stem = glb_path.stem  # e.g. "sofa", "table"
-            seed = _LOCAL_SEED.get(stem)
-
-            if seed is None:
+        for asset_id, seed in _LOCAL_SEED.items():
+            glb_path = glb_dir / seed["file"]
+            if not glb_path.exists():
                 result.log(
-                    f"SKIP {glb_path.name} — no seed metadata entry; "
-                    "add it to _LOCAL_SEED to ingest.", "warning"
+                    f"SKIP {asset_id} — GLB file not found: {glb_path.name}", "warning"
                 )
                 result.skipped += 1
                 continue
 
+            file_size = glb_path.stat().st_size
+            if file_size < _MIN_GLB_BYTES:
+                result.log(
+                    f"SKIP {asset_id} ({glb_path.name}) — below minimum size "
+                    f"({file_size} < {_MIN_GLB_BYTES} bytes)",
+                    "warning",
+                )
+                result.skipped += 1
+                continue
+
+            model_url = f"/assets/{glb_path.name}"
             record = AssetRecord(
-                asset_id      = stem,
+                asset_id      = asset_id,
                 name          = seed["name"],
                 category      = seed["category"],
                 source        = seed["source"],
-                model_url     = f"/assets/{glb_path.name}",
+                model_url     = model_url,
+                model_3d_url  = model_url,
                 thumbnail_url = "",
                 dim_width_mm  = seed["w"],
                 dim_height_mm = seed["h"],
@@ -409,45 +471,30 @@ class LocalFileScanner:
             )
 
             if dry_run:
-                result.log(f"[DRY-RUN] Would ingest: {record.asset_id}")
+                result.log(f"[DRY-RUN] Would ingest: {record.asset_id} -> {model_url}")
             else:
                 try:
                     store.upsert(record)
-                    result.log(f"Ingested local asset: {record.name} ({record.asset_id})")
+                    result.log(f"Ingested local asset: {record.name} ({record.asset_id} -> {model_url})")
                     result.ingested += 1
                 except Exception as exc:
-                    result.log(f"ERROR persisting {stem}: {exc}", "error")
+                    result.log(f"ERROR persisting {asset_id}: {exc}", "error")
                     result.errors += 1
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Source 2: Khronos glTF-Sample-Assets (GitHub API)
+# Source 2: Khronos Scraper (Disabled — local >1 MB furniture GLBs only)
 # ─────────────────────────────────────────────────────────────────────────────
-
-_GITHUB_API = "https://api.github.com/repos/KhronosGroup/glTF-Sample-Assets/contents/Models"
-_KHRONOS_RAW = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models"
-
-# Curated category + dimension overrides for specific Khronos model names
-# (the repo has no furniture-grade dimension metadata, so we map by intent)
-_KHRONOS_META: dict[str, dict] = {
-    "SheenChair":           {"category": "seating", "w": 820,  "h": 1010, "d": 960,  "source": "Khronos"},
-    "ChairDamaskPurple":    {"category": "seating", "w": 750,  "h": 900,  "d": 800,  "source": "Khronos"},
-    "ABeautifulGame":       {"category": "decor",   "w": 600,  "h": 600,  "d": 600,  "source": "Khronos"},
-    "AntiqueCamera":        {"category": "decor",   "w": 200,  "h": 300,  "d": 150,  "source": "Khronos"},
-    "GlassVaseFlowers":     {"category": "decor",   "w": 150,  "h": 300,  "d": 150,  "source": "Khronos"},
-    "MaterialsVariantsShoe":{"category": "decor",   "w": 310,  "h": 120,  "d": 100,  "source": "Khronos"},
-}
 
 class KhronosGitHubScraper:
     """
-    Fetches the Khronos glTF-Sample-Assets model index from the GitHub
-    Contents API and ingests models that have a known metadata mapping.
+    Deprecated remote Khronos sample scraper.
 
-    Rate limit: GitHub allows 60 unauthenticated requests/hour; we stay well
-    inside that with a configurable delay between items.
+    External remote GitHub sample URLs and non-furniture test samples are
+    disabled; verified local >1 MB furniture GLBs are ingested via LocalFileScanner.
     """
 
     def __init__(self, delay: float = 0.4, max_models: int = 20):
-        self.delay     = delay
+        self.delay      = delay
         self.max_models = max_models
 
     def run(
@@ -456,77 +503,10 @@ class KhronosGitHubScraper:
         result: IngestionResult,
         dry_run: bool = False,
     ) -> None:
-        result.log("Fetching Khronos glTF-Sample-Assets index from GitHub API…")
-
-        try:
-            with httpx.Client(timeout=15, follow_redirects=True) as client:
-                resp = client.get(_GITHUB_API, headers={"Accept": "application/vnd.github.v3+json"})
-                resp.raise_for_status()
-                entries = resp.json()
-        except Exception as exc:
-            result.log(f"ERROR fetching GitHub index: {exc}", "error")
-            result.errors += 1
-            return
-
-        models_processed = 0
-        for entry in entries:
-            if models_processed >= self.max_models:
-                break
-            if entry.get("type") != "dir":
-                continue
-
-            model_name = entry["name"]
-            meta = _KHRONOS_META.get(model_name)
-            if meta is None:
-                result.log(f"SKIP {model_name} — not in Khronos metadata map", "debug")
-                result.skipped += 1
-                continue
-
-            # Build deterministic GLB URL:  Models/<Name>/glTF-Binary/<Name>.glb
-            glb_url = f"{_KHRONOS_RAW}/{model_name}/glTF-Binary/{model_name}.glb"
-
-            # Verify the GLB actually exists before inserting
-            try:
-                with httpx.Client(timeout=10, follow_redirects=True) as client:
-                    head = client.head(glb_url)
-                    if head.status_code not in (200, 302, 304):
-                        result.log(
-                            f"SKIP {model_name} — GLB HEAD returned {head.status_code}", "warning"
-                        )
-                        result.skipped += 1
-                        time.sleep(self.delay)
-                        continue
-            except Exception as exc:
-                result.log(f"SKIP {model_name} — GLB HEAD failed: {exc}", "warning")
-                result.skipped += 1
-                time.sleep(self.delay)
-                continue
-
-            record = AssetRecord(
-                asset_id      = f"khronos_{model_name.lower()}",
-                name          = model_name.replace("_", " "),
-                category      = meta["category"],
-                source        = meta["source"],
-                model_url     = glb_url,
-                thumbnail_url = "",
-                dim_width_mm  = float(meta["w"]),
-                dim_height_mm = float(meta["h"]),
-                dim_depth_mm  = float(meta["d"]),
-            )
-
-            if dry_run:
-                result.log(f"[DRY-RUN] Would ingest: {record.asset_id} ({glb_url})")
-            else:
-                try:
-                    store.upsert(record)
-                    result.log(f"Ingested Khronos: {model_name}")
-                    result.ingested += 1
-                except Exception as exc:
-                    result.log(f"ERROR persisting {model_name}: {exc}", "error")
-                    result.errors += 1
-
-            models_processed += 1
-            time.sleep(self.delay)
+        result.log(
+            "KhronosGitHubScraper is disabled; use source='local' for verified >1 MB local furniture GLBs.",
+            "warning",
+        )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Source 3: Generic HTML Page Scraper (pluggable adapter)
@@ -716,13 +696,9 @@ class IngestionPipeline:
             ).run(self.store, result, dry_run=dry_run)
 
         elif source == "all":
-            # Run local + synthetic + khronos in sequence
-            result.log("=== Running ALL sources ===")
+            # Run verified local >1 MB furniture assets
+            result.log("=== Running ALL verified sources (local >1 MB GLBs) ===")
             LocalFileScanner().run(self.store, result, dry_run=dry_run)
-            SyntheticFileScanner().run(self.store, result, dry_run=dry_run)
-            KhronosGitHubScraper(delay=delay, max_models=max_models).run(
-                self.store, result, dry_run=dry_run
-            )
 
         else:
             raise ValueError(f"Unknown source '{source}'. Use: local | synthetic | khronos | http | all")
@@ -736,6 +712,10 @@ class IngestionPipeline:
     def get_all(self) -> list[dict]:
         """Return all LanceDB records formatted for /api/v1/assets."""
         return self.store.all_records()
+
+    def clear(self) -> None:
+        """Clear and recreate the furniture_assets table."""
+        self.store.clear()
 
     def count(self) -> int:
         return self.store.count()
@@ -755,11 +735,15 @@ if __name__ == "__main__":
                         help="Seconds between HTTP requests (polite scraping)")
     parser.add_argument("--max",       type=int, default=20,
                         help="Max models to fetch from Khronos")
+    parser.add_argument("--reset",     action="store_true",
+                        help="Clear furniture_assets table before ingesting")
     parser.add_argument("--dry-run",   action="store_true",
                         help="Print what would be ingested without writing to DB")
     args = parser.parse_args()
 
     pipeline = IngestionPipeline()
+    if args.reset and not args.dry_run:
+        pipeline.clear()
     res = pipeline.run(
         source=args.source,
         url=args.url,

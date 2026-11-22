@@ -12,11 +12,11 @@ export default function SupabaseConnectionBadge() {
         const res = await fetch("/api/v1/db-check");
         if (res.ok) {
           const data = await res.json();
-          if (data.status === "success") {
+          if (data.status === "healthy") {
             setStatus("connected");
           } else {
             setStatus("failed");
-            setErrorMessage(data.message || "فشل الاتصال بقاعدة البيانات");
+            setErrorMessage(data.message || data.error || "فشل الاتصال بقاعدة البيانات");
           }
         } else {
           setStatus("failed");

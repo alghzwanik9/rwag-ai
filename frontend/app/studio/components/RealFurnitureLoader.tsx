@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { useSceneStore } from "@/lib/useSceneStore";
 import { RigidBody, RapierRigidBody } from "@react-three/rapier";
 
-const FALLBACK_MODEL_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb";
+const FALLBACK_MODEL_URL = "/assets/armchair_wood.glb";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -698,7 +698,7 @@ export default function RealFurnitureLoader({
 
 // ── Preload hint ───────────────────────────────────────────────────────────────
 // Call from parent when the model URL is known at build time:
-//   RealFurnitureLoader.preload("/assets/sofa.glb");
+//   RealFurnitureLoader.preload("/assets/sofa_khronos.glb");
 RealFurnitureLoader.preload = (url: string) => {
   if (url && url.trim() !== "") useGLTF.preload(url);
 };

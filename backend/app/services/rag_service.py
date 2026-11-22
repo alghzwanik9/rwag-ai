@@ -5,7 +5,7 @@ from google import genai
 from backend.app.config import LANCEDB_DIR
 
 TABLE_NAME = "ikea_catalog"
-FALLBACK_GLB_URL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb"
+FALLBACK_GLB_URL = "/assets/armchair_wood.glb"
 
 class RagRetriever:
     def __init__(self):
@@ -54,18 +54,46 @@ def resolve_ikea_model_url(name: str, category: str) -> str:
     if not text:
         return FALLBACK_GLB_URL
 
-    if "sofa" in text or "كنب" in text or "أريكة" in text:
-        return "/assets/sofa.glb"
-    elif "chair" in text or "كرسي" in text or "armchair" in text or "seating" in text:
-        return "/assets/armchair.glb"
-    elif "tv" in text or "تلفاز" in text or "تلفزيون" in text or "media" in text:
-        return "/assets/tv_unit.glb"
-    elif "table" in text or "طاول" in text or "desk" in text or "مكتب" in text:
-        return "/assets/table.glb"
-    elif "rug" in text or "سجاد" in text:
-        return "/assets/rug.glb"
-    elif "plant" in text or "نبات" in text or "decor" in text or "ديكور" in text:
-        return "/assets/plant.glb"
+    if "sofa" in text or "couch" in text or "كنب" in text or "أريكة" in text:
+        return "/assets/sofa_khronos.glb"
+    elif ("dining" in text and ("chair" in text or "كرسي" in text)) or "stool" in text or "bar" in text:
+        return "/assets/dining_chair.glb"
+    elif "deck" in text or "lounge" in text or "sun" in text:
+        return "/assets/deck_chair.glb"
+    elif "chair" in text or "كرسي" in text or "armchair" in text or "seating" in text or "مقعد" in text:
+        return "/assets/armchair_wood.glb"
+    elif "shelf" in text or "bookcase" in text or "bookshelf" in text or "رف" in text or "مكتبة" in text:
+        return "/assets/display_shelf.glb"
+    elif (
+        "tv" in text
+        or "تلفاز" in text
+        or "تلفزيون" in text
+        or "media" in text
+        or "cabinet" in text
+        or "drawer" in text
+        or "wardrobe" in text
+        or "storage" in text
+        or "chest" in text
+        or "sideboard" in text
+        or "خزانة" in text
+    ):
+        return "/assets/drawer_cabinet.glb"
+    elif "outdoor" in text or "garden" in text or "patio" in text or "حديقة" in text:
+        return "/assets/outdoor_set.glb"
+    elif "coffee" in text or "table" in text or "طاول" in text or "desk" in text or "مكتب" in text:
+        return "/assets/coffee_table_round.glb"
+    elif (
+        "vase" in text
+        or "flower" in text
+        or "plant" in text
+        or "نبات" in text
+        or "decor" in text
+        or "ديكور" in text
+        or "مزهرية" in text
+        or "rug" in text
+        or "سجاد" in text
+    ):
+        return "/assets/vase_flowers.glb"
 
     return FALLBACK_GLB_URL
 
