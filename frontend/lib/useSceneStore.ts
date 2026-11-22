@@ -334,6 +334,7 @@ export const useSceneStore = create<SceneStore>()(
         roomWidth: 5.5,
         roomDepth: 4.8,
         wallHeight: 3.0,
+        windows: [],
       }),
 
       setIsDragging: (dragging) => set({ isDragging: dragging }),

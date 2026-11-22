@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { REGION, Z } from "../config/regions";
 
@@ -25,6 +26,14 @@ export default function StudioHeader({ onNewProject, onOpenProjects }: StudioHea
       </div>
 
       <div className="flex items-center gap-2">
+        <Link
+          href="/maarad"
+          className="flex items-center gap-1.5 rounded-xl border border-outline-variant px-3.5 py-2.5 font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high"
+        >
+          <span className="material-symbols-outlined text-[18px] text-rwaq-gold">auto_awesome</span>
+          معرض التصاميم
+        </Link>
+
         <button
           onClick={onNewProject}
           className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-95"

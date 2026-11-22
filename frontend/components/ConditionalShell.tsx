@@ -16,7 +16,7 @@ export default function ConditionalShell({ children }: { children: React.ReactNo
   const isLandingPage = pathname === '/';
   // Public marketing pages ship their own dark chrome and must not inherit the
   // light app sidebar/header.
-  const isMarketingPage = pathname === '/privacy';
+  const isMarketingPage = pathname === '/privacy' || pathname?.startsWith('/maarad');
   // The studio owns its full viewport: header, conversation column and scene
   // drawer are all studio-local. The global chrome does not fit around it —
   // the shared Header pins itself to `right-[280px]` while the studio sidebar

@@ -40,6 +40,7 @@ export const MEDIA = {
 export type NavLink = { href: string; labelAr: string; labelEn: string };
 
 export const NAV_LINKS: NavLink[] = [
+  { href: '/maarad', labelAr: 'معرض التصاميم', labelEn: 'Showroom' },
   { href: '#features', labelAr: 'المميزات', labelEn: 'Features' },
   { href: '#styles', labelAr: 'مكتبة الأنماط', labelEn: 'Style Library' },
   { href: '#studio-2d', labelAr: 'استوديو 2D', labelEn: '2D Studio' },
@@ -467,6 +468,7 @@ export const FOOTER_GROUPS: { titleAr: string; links: NavLink[] }[] = [
   {
     titleAr: 'المنتج',
     links: [
+      { href: '/maarad', labelAr: 'معرض التصاميم', labelEn: 'Showroom' },
       { href: '#features', labelAr: 'المميزات', labelEn: 'Features' },
       { href: '#studio-2d', labelAr: 'استوديو 2D', labelEn: '2D Studio' },
       { href: '/studio', labelAr: 'الأستوديو ثلاثي الأبعاد', labelEn: '3D Studio' },

@@ -7,7 +7,7 @@ import { Canvas, useFrame, useThree, ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PointerLockControls, useGLTF, Environment, ContactShadows } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import * as THREE from 'three';
-import { EffectComposer, Bloom, DepthOfField } from '@react-three/postprocessing';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import AdaptiveARViewer from "@/components/AdaptiveARViewer";
 import CopilotSuggestions from "@/components/CopilotSuggestions";
 import MaterialPalette from "@/components/MaterialPalette";
@@ -15,6 +15,7 @@ import ProjectsModal from "@/components/ProjectsModal";
 import PrintReport from "@/components/PrintReport";
 import { useSceneStore, useFormattedTotalCost } from "@/lib/useSceneStore";
 import { TemplateType } from "@/lib/templates";
+import { MAARAD_ROOMS } from "@/lib/maaradRooms";
 import RealRoom from "./components/RealRoom";
 import RealFurnitureLoader from "./components/RealFurnitureLoader";
 import { ChatbotPanel } from "./components/ChatbotPanel";
@@ -33,31 +34,31 @@ import SceneToolbar from "./components/SceneToolbar";
 
 const AMBIENT_PRESETS = {
   morning: {
-    bg: new THREE.Color('#EDE8E1'),
-    ambientColor: new THREE.Color('#ffffff'),
-    ambientIntensity: 0.65,
-    dirColor: new THREE.Color('#FFF5E4'),
-    dirIntensity: 1.4,
-    dirPos: new THREE.Vector3(6, 9, 5),
-    fogColor: new THREE.Color('#EDE8E1'),
+    bg: new THREE.Color('#16181F'),
+    ambientColor: new THREE.Color('#FFF8EB'),
+    ambientIntensity: 0.75,
+    dirColor: new THREE.Color('#FFF4E0'),
+    dirIntensity: 1.9,
+    dirPos: new THREE.Vector3(7, 11, 6),
+    fogColor: new THREE.Color('#16181F'),
   },
   rainy: {
-    bg: new THREE.Color('#2C3540'),
-    ambientColor: new THREE.Color('#8899A6'),
-    ambientIntensity: 0.45,
-    dirColor: new THREE.Color('#A4B8C6'),
-    dirIntensity: 0.6,
-    dirPos: new THREE.Vector3(0, 8, 4),
-    fogColor: new THREE.Color('#2C3540'),
+    bg: new THREE.Color('#161A20'),
+    ambientColor: new THREE.Color('#94A3B8'),
+    ambientIntensity: 0.5,
+    dirColor: new THREE.Color('#B0C4DE'),
+    dirIntensity: 0.8,
+    dirPos: new THREE.Vector3(0, 9, 4),
+    fogColor: new THREE.Color('#161A20'),
   },
   midnight: {
-    bg: new THREE.Color('#0D1117'),
-    ambientColor: new THREE.Color('#161B22'),
-    ambientIntensity: 0.2,
-    dirColor: new THREE.Color('#58A6FF'),
-    dirIntensity: 0.4,
-    dirPos: new THREE.Vector3(-4, 6, 4),
-    fogColor: new THREE.Color('#0D1117'),
+    bg: new THREE.Color('#0A0D12'),
+    ambientColor: new THREE.Color('#1B202B'),
+    ambientIntensity: 0.35,
+    dirColor: new THREE.Color('#64B5F6'),
+    dirIntensity: 0.6,
+    dirPos: new THREE.Vector3(-4, 7, 4),
+    fogColor: new THREE.Color('#0A0D12'),
   }
 };
 
@@ -101,7 +102,7 @@ function AmbientController() {
     if (scene.fog instanceof THREE.Fog) {
       scene.fog.color.lerp(target.fogColor, lerpFactor);
     } else {
-      scene.fog = new THREE.Fog(target.fogColor, 15, 40);
+      scene.fog = new THREE.Fog(target.fogColor, 40, 120);
     }
 
     if (ambientLightRef.current) {
@@ -125,8 +126,8 @@ function AmbientController() {
         position={[8, 12, 6]} 
         intensity={1.2} 
         castShadow 
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.0005}
         shadow-camera-near={0.5} 
         shadow-camera-far={50} 
@@ -137,15 +138,9 @@ function AmbientController() {
         shadow-normalBias={0.05}
       />
       
-      {/* Rain effect disabled temporarily as it looks like a visual glitch loop */}
-
-      
       {/* Fake interior point lights for midnight to make it cozy */}
       {ambientMode === 'midnight' && (
-        <>
-          <pointLight position={[0, 2, 0]} intensity={0.5} color="#ffebc2" distance={5} />
-          <pointLight position={[-2, 1, -2]} intensity={0.3} color="#ffebc2" distance={3} />
-        </>
+        <pointLight position={[0, 2, 0]} intensity={0.5} color="#ffebc2" distance={5} />
       )}
     </>
   );
@@ -164,42 +159,23 @@ function LightingRig() {
   const spotlightsOn = useSceneStore(s => s.spotlightToggle);
 
   const coveColor = useMemo(() => kelvinToColor(colorK), [colorK]);
-  const covePower = (intensity / 100) * 0.8; 
+  const covePower = (intensity / 100) * 0.7; 
 
   return (
     <group>
       {covePower > 0 && (
-        <>
-          <pointLight position={[-2.4, 2.8, -2.4]} intensity={covePower} color={coveColor} distance={4} />
-          <pointLight position={[2.4, 2.8, -2.4]} intensity={covePower} color={coveColor} distance={4} />
-          <pointLight position={[-2.4, 2.8, 2.4]} intensity={covePower} color={coveColor} distance={4} />
-          <pointLight position={[2.4, 2.8, 2.4]} intensity={covePower} color={coveColor} distance={4} />
-        </>
+        <pointLight position={[0, 2.7, 0]} intensity={covePower} color={coveColor} distance={7} />
       )}
 
       {spotlightsOn && (
-        <>
-          <spotLight 
-            position={[-1, 3, -1]} 
-            angle={0.4} 
-            penumbra={0.5} 
-            intensity={2} 
-            color="#ffeedd" 
-            castShadow 
-            shadow-mapSize={[512, 512]}
-            target-position={[0, 0, 0]}
-          />
-          <spotLight 
-            position={[1, 3, 1]} 
-            angle={0.4} 
-            penumbra={0.5} 
-            intensity={1.5} 
-            color="#ffeedd" 
-            castShadow 
-            shadow-mapSize={[512, 512]}
-            target-position={[0, 0, 0]}
-          />
-        </>
+        <spotLight 
+          position={[0, 3.2, 0]} 
+          angle={0.5} 
+          penumbra={0.5} 
+          intensity={1.8} 
+          color="#ffeedd" 
+          target-position={[0, 0, 0]}
+        />
       )}
     </group>
   );
@@ -468,6 +444,8 @@ export default function StudioClient() {
   const [sceneId, setSceneId]   = useState<string>("default");
   const searchParams = useSearchParams();
   const activeReference = searchParams.get("reference");
+  const presetParam = searchParams.get("preset");
+  const presetLoadedRef = useRef<string | null>(null);
 
   const [isToastVisible, setIsToastVisible] = useState(false);
   const [toastMessage, setToastMessage]   = useState("");
@@ -543,6 +521,46 @@ export default function StudioClient() {
     onBeforeBuild: () => setModelUrl(null),
     onSettled,
   });
+
+  // Auto-load preset from Maarad showroom (/maarad -> /studio?preset=...)
+  useEffect(() => {
+    if (!presetParam || presetLoadedRef.current === presetParam) return;
+    const matchedRoom = MAARAD_ROOMS.find((r) => r.id === presetParam);
+    if (!matchedRoom) return;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || presetLoadedRef.current === presetParam) return;
+      presetLoadedRef.current = presetParam;
+
+      setModelUrl(null);
+      setSceneId(`maarad_${matchedRoom.id}`);
+
+      const store = useSceneStore.getState();
+      store.clearScene();
+      store.setRoomWidth(matchedRoom.dimensions.width);
+      store.setRoomDepth(matchedRoom.dimensions.depth);
+      store.setWallHeight(matchedRoom.dimensions.height);
+      store.setWallColor(matchedRoom.wallColor);
+      store.setFloorColor(matchedRoom.floorColor);
+      store.setAmbientMode(matchedRoom.ambientMode);
+
+      matchedRoom.items.forEach((item) => {
+        store.addSceneItem({
+          ...item,
+          thumbnailUrl: item.thumbnailUrl || "",
+          instanceId: crypto.randomUUID(),
+        });
+      });
+
+      setPrompt(matchedRoom.prompt);
+      showToast(`🏛️ تم استيراد تصميم "${matchedRoom.title}" بنجاح في الاستوديو!`);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [presetParam, setPrompt, showToast]);
 
   /**
    * Dev-only state override: /studio?state=partial renders a fixture so every
@@ -810,7 +828,7 @@ export default function StudioClient() {
                 gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, outputColorSpace: THREE.SRGBColorSpace, preserveDrawingBuffer: true }}
                 camera={{ position: [8.5, 6, 8.5], fov: 40 }}
               >
-                <color attach="background" args={['#EDE8E1']} />
+                <color attach="background" args={['#16181F']} />
 
                 <SnapshotManager />
                 <AmbientController />
@@ -818,7 +836,7 @@ export default function StudioClient() {
                 
                 <Suspense fallback={null}>
                   <Environment preset={ambientMode === 'morning' ? 'city' : ambientMode === 'midnight' ? 'sunset' : 'apartment'} background={false} blur={0.6} />
-                  <ContactShadows position={[0, 0.01, 0]} opacity={0.4} scale={20} blur={2} far={4} />
+                  <ContactShadows position={[0, 0.01, 0]} opacity={0.5} scale={20} blur={1.5} far={4} />
                   <group position={[0, 0, 0]}>
                     <Physics debug={false}>
                       <SceneErrorBoundary>
@@ -847,8 +865,7 @@ export default function StudioClient() {
 
                 {/* Cinematic Post-Processing */}
                 <EffectComposer>
-                  <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.8} />
-                  <DepthOfField target={[0, 1, 0]} focalLength={0.3} bokehScale={3} height={480} />
+                  <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.5} />
                 </EffectComposer>
 
                 {viewMode === 'orbit' ? (

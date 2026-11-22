@@ -81,17 +81,12 @@ interface Calibration {
  *                 locked, dominant-axis anchor = axis requiring least scaling).
  */
 function getLocalBoundingBox(object: THREE.Object3D): THREE.Box3 {
-  const clone = object.clone();
-  clone.position.set(0, 0, 0);
-  clone.rotation.set(0, 0, 0);
-  clone.scale.set(1, 1, 1);
-  clone.updateMatrixWorld(true);
-
   const box = new THREE.Box3();
   box.makeEmpty();
-  clone.traverse((child) => {
+  object.updateMatrixWorld(true);
+
+  object.traverse((child) => {
     if (child instanceof THREE.Mesh && child.visible && child.geometry) {
-      // Ignore shadow planes or fully transparent meshes that ruin bounding boxes
       const isTransparent = child.material && (
         child.material.transparent === true || 
         child.material.opacity < 1 || 
@@ -100,7 +95,7 @@ function getLocalBoundingBox(object: THREE.Object3D): THREE.Box3 {
       );
 
       if (!isTransparent) {
-        child.geometry.computeBoundingBox();
+        if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
         if (child.geometry.boundingBox) {
           const childBox = child.geometry.boundingBox.clone();
           childBox.applyMatrix4(child.matrixWorld);
@@ -109,6 +104,10 @@ function getLocalBoundingBox(object: THREE.Object3D): THREE.Box3 {
       }
     }
   });
+
+  if (box.isEmpty()) {
+    box.setFromObject(object);
+  }
   return box;
 }
 
@@ -267,7 +266,6 @@ function InnerModel({ modelUrl, onLoaded, color }: InnerModelProps) {
     return () => {
       s.traverse((child) => {
         if (!(child instanceof THREE.Mesh)) return;
-        child.geometry?.dispose();
         if (Array.isArray(child.material)) {
           child.material.forEach((m) => m.dispose());
         } else {
@@ -588,7 +586,7 @@ export default function RealFurnitureLoader({
     <RigidBody 
       ref={rigidBodyRef} 
       type={isActivelyDragging ? 'kinematicPosition' : 'fixed'} 
-      colliders="hull" 
+      colliders="cuboid" 
       restitution={0.1} 
       friction={1}
       position={position as [number, number, number]}

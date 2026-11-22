@@ -35,7 +35,7 @@ export const LEFT_DRAWER_W = 320;
  */
 export const REGION = {
   header: 'fixed top-0 inset-x-0 h-16',
-  conversation: 'fixed top-16 bottom-0 right-0 w-[360px]',
+  conversation: 'fixed top-20 right-4 z-40',
   drawer: 'fixed top-16 bottom-0 left-0 w-[320px]',
-  canvas: 'fixed top-16 bottom-0 left-0 right-[360px]',
+  canvas: 'fixed top-16 bottom-0 inset-x-0',
 } as const;
