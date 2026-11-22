@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useSceneStore } from "@/lib/useSceneStore";
+import {
+  useSceneStore,
+  type CurtainStyle,
+  type RoomWindow,
+  type WindowSize,
+  type WindowWall,
+} from "@/lib/useSceneStore";
 import type { IProductTemplate } from "@/app/studio/config/catalogTemplates";
 import {
   arabicNumber,
@@ -15,9 +21,11 @@ import {
 } from "@/app/studio/config/matching";
 import {
   createPendingStages,
+  normalizeDimensionsMm,
   withRemainingSkipped,
   withStage,
-  type AIResponseItem,
+  type AIResponseWindow,
+  type GenerateRoomResponse,
   type PipelineStage,
   type StageId,
   type StageStatus,
@@ -26,14 +34,6 @@ import {
 } from "@/app/studio/config/pipeline";
 
 const HALT_NOTE = 'توقف بسبب فشل التحليل';
-
-interface GenerateRoomResponse {
-  items?: AIResponseItem[];
-  room_dimensions?: { width: number; depth: number };
-  ambient_mode?: 'morning' | 'rainy' | 'midnight';
-  floor_color?: string;
-  wall_color?: string;
-}
 
 type FetchOutcome = { ok: true; data: GenerateRoomResponse } | { ok: false; reason: string };
 
@@ -85,6 +85,36 @@ async function fetchRoomLayout(
   }
 }
 
+function normalizeAiWindows(rawWindows: AIResponseWindow[]): RoomWindow[] {
+  return rawWindows.map((w, idx) => {
+    const wall: WindowWall = w.wall === 'left' ? 'left' : 'back';
+    const size: WindowSize = w.size === 'small' || w.size === 'large' ? w.size : 'medium';
+    const curtain: CurtainStyle =
+      w.curtain === 'none' || w.curtain === 'blackout' || w.curtain === 'draped'
+        ? w.curtain
+        : 'sheer';
+    const positionOffset =
+      typeof w.positionOffset === 'number' && Number.isFinite(w.positionOffset)
+        ? Math.max(-1, Math.min(1, w.positionOffset))
+        : 0;
+    const height =
+      typeof w.height === 'number' && Number.isFinite(w.height)
+        ? Math.max(0.3, Math.min(1.0, w.height))
+        : 0.55;
+
+    return {
+      id: w.id || `ai_win_${idx}_${Date.now()}`,
+      wall,
+      size,
+      positionOffset,
+      height,
+      curtain,
+      curtainColor: typeof w.curtainColor === 'string' && w.curtainColor ? w.curtainColor : '#f0ece4',
+      isOpen: typeof w.isOpen === 'boolean' ? w.isOpen : true,
+    };
+  });
+}
+
 /** Writes the resolved items and room settings into the scene store. */
 function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
   const store = useSceneStore.getState();
@@ -95,6 +125,10 @@ function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
     // prices live in the AI's `economy` block, not the asset catalog. Preferring
     // the economy price is what stops the cost card reading ٠ ر.س.
     const economyPrice = item.economy?.price ?? 0;
+    const storeUrl =
+      item.store_url ||
+      item.economy?.store_url ||
+      (resolution.kind !== 'placeholder' ? resolution.asset.store_url : undefined);
 
     if (resolution.kind === 'placeholder') {
       store.addSceneItem({
@@ -107,7 +141,8 @@ function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
         category: "seating",
         modelUrl: PLACEHOLDER_MODEL_URL,
         thumbnailUrl: "",
-        dimensions: item.dimensions || { width: 1, height: 1, depth: 1 },
+        store_url: storeUrl,
+        dimensions: normalizeDimensionsMm(item.dimensions),
         position: item.position || [0, 0, 0],
         rotation: item.rotation || [0, 0, 0],
       });
@@ -117,6 +152,8 @@ function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
         instanceId: item.instance_id,
         price: economyPrice || resolution.asset.price,
         currency: item.economy?.currency || resolution.asset.currency,
+        store_url: storeUrl,
+        dimensions: normalizeDimensionsMm(item.dimensions, resolution.asset.dimensions),
         position: item.position,
         rotation: item.rotation,
       });
@@ -124,12 +161,24 @@ function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
   }
 
   if (data.room_dimensions) {
-    store.setRoomWidth(data.room_dimensions.width);
-    store.setRoomDepth(data.room_dimensions.depth);
+    if (typeof data.room_dimensions.width === 'number' && Number.isFinite(data.room_dimensions.width)) {
+      store.setRoomWidth(data.room_dimensions.width);
+    }
+    if (typeof data.room_dimensions.depth === 'number' && Number.isFinite(data.room_dimensions.depth)) {
+      store.setRoomDepth(data.room_dimensions.depth);
+    }
+    if (typeof data.room_dimensions.height === 'number' && Number.isFinite(data.room_dimensions.height)) {
+      store.setWallHeight(data.room_dimensions.height);
+    }
   }
-  if (data.ambient_mode) store.setAmbientMode(data.ambient_mode);
+  if (data.ambient_mode === 'morning' || data.ambient_mode === 'rainy' || data.ambient_mode === 'midnight') {
+    store.setAmbientMode(data.ambient_mode);
+  }
   if (data.floor_color) store.setFloorColor(data.floor_color);
   if (data.wall_color) store.setWallColor(data.wall_color);
+  if (Array.isArray(data.windows) && data.windows.length > 0) {
+    store.setWindows(normalizeAiWindows(data.windows));
+  }
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────

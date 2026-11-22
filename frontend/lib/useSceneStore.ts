@@ -141,6 +141,7 @@ export interface SceneStore {
   setSelectedAssetId: (id: string | null) => void;
   setActiveMaterial: (material: RwaqMaterial | null) => void;
   applyCustomMaterial: (meshId: string, material: RwaqMaterial) => void;
+  removeCustomMaterial: (meshId: string) => void;
   setAmbientMode: (mode: 'morning' | 'rainy' | 'midnight') => void;
   setCoveLightIntensity: (intensity: number) => void;
   setCoveLightColor: (kelvin: number) => void;
@@ -159,6 +160,7 @@ export interface SceneStore {
   addWindow: (wall: WindowWall) => void;
   removeWindow: (id: string) => void;
   updateWindow: (id: string, patch: Partial<RoomWindow>) => void;
+  setWindows: (windows: RoomWindow[]) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -301,6 +303,12 @@ export const useSceneStore = create<SceneStore>()(
         customMaterials: { ...state.customMaterials, [meshId]: material }
       })),
 
+      removeCustomMaterial: (meshId) => set((state) => {
+        const next = { ...state.customMaterials };
+        delete next[meshId];
+        return { customMaterials: next };
+      }),
+
       setAmbientMode: (mode) => set({ ambientMode: mode }),
       setCoveLightIntensity: (intensity) => set({ coveLightIntensity: intensity }),
       setCoveLightColor: (kelvin) => set({ coveLightColor: kelvin }),
@@ -363,6 +371,8 @@ export const useSceneStore = create<SceneStore>()(
       updateWindow: (id, patch) => set((state) => ({
         windows: state.windows.map((w) => w.id === id ? { ...w, ...patch } : w),
       })),
+
+      setWindows: (windows) => set({ windows }),
     }),
     {
       name: 'rwaq-scene-store',

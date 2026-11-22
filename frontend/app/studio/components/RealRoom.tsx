@@ -21,17 +21,34 @@ const CURTAIN_OPACITY: Record<string, number> = {
 };
 
 /** High-end Architectural Window Component */
-function ArchitecturalWindow({ win, roomWidth, wallHeight }: { win: RoomWindow; roomWidth: number; wallHeight: number }) {
+function ArchitecturalWindow({
+  win,
+  roomWidth,
+  roomDepth,
+  wallHeight,
+}: {
+  win: RoomWindow;
+  roomWidth: number;
+  roomDepth: number;
+  wallHeight: number;
+}) {
   const [winW, winH] = WINDOW_DIMS[win.size] || [1.6, 1.8];
-  const posX = win.positionOffset * (roomWidth / 2 - winW / 2 - 0.5);
   const posY = win.height * wallHeight;
-  const posZ = -roomWidth / 2 + 0.12;
+
+  const isLeftWall = win.wall === 'left';
+  const wallSpan = isLeftWall ? roomDepth : roomWidth;
+  const maxOffset = Math.max(0, wallSpan / 2 - winW / 2 - 0.3);
+  const clampedOffset = Math.max(-1, Math.min(1, win.positionOffset));
+
+  const posX = isLeftWall ? -roomWidth / 2 + 0.12 : clampedOffset * maxOffset;
+  const posZ = isLeftWall ? clampedOffset * maxOffset : -roomDepth / 2 + 0.12;
+  const rotation: [number, number, number] = isLeftWall ? [0, Math.PI / 2, 0] : [0, 0, 0];
 
   const curtainOpacity = CURTAIN_OPACITY[win.curtain] ?? 0.35;
   const curtainOffset = win.isOpen ? winW * 0.4 : 0;
 
   return (
-    <group position={[posX, posY, posZ]}>
+    <group position={[posX, posY, posZ]} rotation={rotation}>
       {/* Aluminum Window Frame */}
       <mesh castShadow receiveShadow>
         <boxGeometry args={[winW + 0.08, winH + 0.08, 0.12]} />
@@ -111,7 +128,7 @@ export default function RealRoom() {
   const wallHeight  = useSceneStore((s) => s.wallHeight);
   const windows     = useSceneStore((s) => s.windows);
 
-  const backWindows = windows.filter((w) => w.wall === 'back');
+  const activeWindows = windows.filter((w) => w.wall === 'back' || w.wall === 'left');
 
   // Palette tuning for luxury interior aesthetic
   const displayFloor = floorColor && floorColor !== '#4f3c2b' ? floorColor : '#C8B29B'; // Warm Natural Oak / Travertine
@@ -202,8 +219,14 @@ export default function RealRoom() {
       />
 
       {/* ── Dynamic Windows ── */}
-      {backWindows.map((win) => (
-        <ArchitecturalWindow key={win.id} win={win} roomWidth={roomWidth} wallHeight={wallHeight} />
+      {activeWindows.map((win) => (
+        <ArchitecturalWindow
+          key={win.id}
+          win={win}
+          roomWidth={roomWidth}
+          roomDepth={roomDepth}
+          wallHeight={wallHeight}
+        />
       ))}
     </group>
   );

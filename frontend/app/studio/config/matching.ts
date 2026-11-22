@@ -35,25 +35,183 @@ export function arabicNumber(value: number): string {
   return value.toLocaleString('ar-SA');
 }
 
+const CANONICAL_SYNONYMS: Record<string, string[]> = {
+  sofa: ['sofa', 'kivik_sofa', 'sofa_khronos'],
+  couch: ['sofa', 'kivik_sofa', 'sofa_khronos'],
+  kivik: ['kivik_sofa', 'sofa'],
+  kivik_sofa: ['kivik_sofa', 'sofa'],
+  sectional: ['sofa', 'kivik_sofa'],
+  loveseat: ['sofa', 'kivik_sofa'],
+
+  coffee_table: ['coffee_table', 'lack_table', 'coffee_table_art'],
+  table: ['coffee_table', 'lack_table', 'coffee_table_art', 'outdoor_set'],
+  lack: ['lack_table', 'coffee_table'],
+  lack_table: ['lack_table', 'coffee_table'],
+  coffee_table_art: ['coffee_table_art', 'coffee_table'],
+  coffee_table_round: ['coffee_table', 'coffee_table_art'],
+  side_table: ['coffee_table', 'lack_table', 'coffee_table_art'],
+  end_table: ['coffee_table', 'lack_table'],
+  desk: ['coffee_table_art', 'coffee_table', 'lack_table'],
+
+  armchair: ['armchair', 'strandmon_chair'],
+  chair: ['armchair', 'strandmon_chair', 'dining_chair', 'deck_chair'],
+  strandmon: ['strandmon_chair', 'armchair'],
+  strandmon_chair: ['strandmon_chair', 'armchair'],
+  accent_chair: ['armchair', 'strandmon_chair'],
+  lounge_chair: ['armchair', 'deck_chair'],
+
+  bookshelf: ['bookshelf', 'display_shelf'],
+  bookcase: ['bookshelf', 'display_shelf'],
+  shelf: ['bookshelf', 'display_shelf'],
+  display_shelf: ['display_shelf', 'bookshelf'],
+  synthetic_shelf: ['bookshelf', 'display_shelf'],
+  shelving: ['bookshelf', 'display_shelf'],
+
+  tv_unit: ['tv_unit', 'drawer_cabinet'],
+  tv_stand: ['tv_unit', 'drawer_cabinet'],
+  tv: ['tv_unit', 'drawer_cabinet'],
+  media_console: ['tv_unit', 'drawer_cabinet'],
+  cabinet: ['drawer_cabinet', 'tv_unit'],
+  drawer_cabinet: ['drawer_cabinet', 'tv_unit'],
+  drawer: ['drawer_cabinet', 'tv_unit'],
+  wardrobe: ['drawer_cabinet', 'tv_unit'],
+  sideboard: ['drawer_cabinet', 'tv_unit'],
+
+  dining_chair: ['dining_chair', 'armchair'],
+  stool: ['dining_chair', 'armchair'],
+  deck_chair: ['deck_chair', 'armchair'],
+  outdoor_set: ['outdoor_set', 'coffee_table'],
+  garden_set: ['outdoor_set'],
+  patio_set: ['outdoor_set'],
+
+  plant: ['vase_flowers'],
+  potted_plant: ['vase_flowers'],
+  vase: ['vase_flowers'],
+  vase_flowers: ['vase_flowers'],
+  flowers: ['vase_flowers'],
+  decor: ['vase_flowers'],
+  lamp: ['vase_flowers'],
+  floor_lamp: ['vase_flowers'],
+  table_lamp: ['vase_flowers'],
+};
+
+const CATEGORY_HINTS: Record<string, IProductTemplate['category']> = {
+  sofa: 'seating',
+  couch: 'seating',
+  chair: 'seating',
+  armchair: 'seating',
+  seating: 'seating',
+  table: 'tables',
+  desk: 'tables',
+  shelf: 'storage',
+  bookcase: 'storage',
+  bookshelf: 'storage',
+  cabinet: 'storage',
+  drawer: 'storage',
+  tv: 'storage',
+  storage: 'storage',
+  rug: 'rugs',
+  carpet: 'rugs',
+  lamp: 'lighting',
+  light: 'lighting',
+  vase: 'decor',
+  plant: 'decor',
+  decor: 'decor',
+};
+
+function norm(value: string | undefined): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function extractTokens(value: string): string[] {
+  return value
+    .split(/[\s_-]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
 export function resolveItem(
   item: AIResponseItem,
   catalogAssets: IProductTemplate[]
 ): Resolution {
-  const targetId = item.economy?.sku || item.asset_id;
-
-  const exact = catalogAssets.find((a) => a.id === targetId);
-  if (exact) return { kind: 'catalog', asset: exact };
-
-  if (catalogAssets.length > 0) {
-    const keyword = item.asset_id.toLowerCase().split('_')[0];
-    const substitute =
-      catalogAssets.find(
-        (a) =>
-          (a.category?.toLowerCase().includes(keyword) || a.name.toLowerCase().includes(keyword)) &&
-          a.modelUrl
-      ) || catalogAssets.find((a) => a.modelUrl);
-    if (substitute) return { kind: 'substitute', asset: substitute };
+  if (catalogAssets.length === 0) {
+    return { kind: 'placeholder' };
   }
+
+  const skuNorm = norm(item.economy?.sku);
+  const assetIdNorm = norm(item.asset_id);
+
+  // 1. Exact match on item.economy?.sku against catalog id / sku
+  if (skuNorm) {
+    const exactSku = catalogAssets.find(
+      (a) => norm(a.id) === skuNorm || norm(a.sku) === skuNorm
+    );
+    if (exactSku) return { kind: 'catalog', asset: exactSku };
+  }
+
+  // 2. Exact match on item.asset_id against catalog id / sku
+  if (assetIdNorm) {
+    const exactId = catalogAssets.find(
+      (a) => norm(a.id) === assetIdNorm || norm(a.sku) === assetIdNorm
+    );
+    if (exactId) return { kind: 'catalog', asset: exactId };
+  }
+
+  // 3. Canonical synonym lookup (full keys first, then tokens)
+  const candidateKeys: string[] = [];
+  if (assetIdNorm) candidateKeys.push(assetIdNorm);
+  if (skuNorm) candidateKeys.push(skuNorm);
+  const tokens = [
+    ...extractTokens(assetIdNorm),
+    ...extractTokens(skuNorm),
+  ];
+  for (const tok of tokens) {
+    if (!candidateKeys.includes(tok)) candidateKeys.push(tok);
+  }
+
+  for (const key of candidateKeys) {
+    const targets = CANONICAL_SYNONYMS[key];
+    if (!targets) continue;
+    for (const targetId of targets) {
+      const matched = catalogAssets.find(
+        (a) => norm(a.id) === targetId || norm(a.sku) === targetId
+      );
+      if (matched) return { kind: 'catalog', asset: matched };
+    }
+  }
+
+  // Special handling for rug/carpet: match catalog rug if present
+  if (candidateKeys.some((k) => k === 'rug' || k === 'carpet')) {
+    const rugAsset = catalogAssets.find(
+      (a) => a.category === 'rugs' || norm(a.id).includes('rug') || norm(a.name).includes('سجاد')
+    );
+    if (rugAsset) return { kind: 'catalog', asset: rugAsset };
+  }
+
+  // 4. Substring & category match on meaningful tokens (ignore short prefixes like "ik")
+  const meaningfulTokens = tokens.filter((t) => t.length >= 3 && !/^\d+$/.test(t));
+  for (const token of meaningfulTokens) {
+    const bySubstring = catalogAssets.find(
+      (a) =>
+        a.modelUrl &&
+        (norm(a.id).includes(token) ||
+          norm(a.name).includes(token) ||
+          norm(a.category).includes(token))
+    );
+    if (bySubstring) return { kind: 'catalog', asset: bySubstring };
+
+    const hintedCategory = CATEGORY_HINTS[token];
+    if (hintedCategory) {
+      const byCategory = catalogAssets.find(
+        (a) => a.category === hintedCategory && a.modelUrl
+      );
+      if (byCategory) return { kind: 'catalog', asset: byCategory };
+    }
+  }
+
+  // 5. Fallback substitute so the scene is never empty
+  const substitute = catalogAssets.find((a) => a.modelUrl);
+  if (substitute) return { kind: 'substitute', asset: substitute };
 
   return { kind: 'placeholder' };
 }

@@ -160,6 +160,7 @@ interface SceneActionsProps {
   onOpenMaterialPalette: () => void;
   onOpenAudit: () => void;
   onOpenAR: () => void;
+  onOpenChatbot: () => void;
   onLoadTemplate: (type: TemplateType) => void;
   modelUrl: string | null;
 }
@@ -169,13 +170,13 @@ function SceneActions({
   onOpenMaterialPalette,
   onOpenAudit,
   onOpenAR,
+  onOpenChatbot,
   onLoadTemplate,
-  modelUrl,
 }: SceneActionsProps) {
   return (
     <>
       {/* Actions relocated out of the fourteen-icon rail. */}
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="mb-3 grid grid-cols-2 gap-2">
         <button
           onClick={onOpenFurnitureLibrary}
           className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-2 py-2.5 text-[11px] font-bold text-on-primary transition-all hover:opacity-90 active:scale-95"
@@ -199,17 +200,22 @@ function SceneActions({
         </button>
         <button
           onClick={onOpenAR}
-          title={
-            modelUrl
-              ? 'عرض المشهد بالواقع المعزز'
-              : 'الواقع المعزز يعرض ملف المشروع المحفوظ فقط'
-          }
+          title="عرض المشهد ثلاثي الأبعاد والواقع المعزز"
           className="flex items-center justify-center gap-1.5 rounded-xl border border-outline-variant px-2 py-2.5 text-[11px] font-bold text-on-surface transition-colors hover:bg-surface-container-high"
         >
           <span className="material-symbols-outlined text-[16px]">view_in_ar</span>
           الواقع المعزز
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenChatbot}
+        className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-secondary/30 bg-secondary/10 px-3 py-2.5 text-[11px] font-bold text-secondary transition-colors hover:bg-secondary/20"
+      >
+        <span className="material-symbols-outlined text-[16px]">smart_toy</span>
+        المساعد الذكي (محادثة وإضافة أثاث)
+      </button>
 
       <div className="mb-4">
         <p className="mb-2 text-[10px] font-bold uppercase text-on-surface-variant">قوالب جاهزة</p>

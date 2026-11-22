@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useSceneStore } from "@/lib/useSceneStore";
 import { useAssets } from "@/lib/useAssets";
-import type { AIResponseItem } from "../config/pipeline";
+import { normalizeDimensionsMm, type AIResponseItem } from "../config/pipeline";
+import { PLACEHOLDER_MODEL_URL, resolveItem } from "../config/matching";
 
 interface Message {
   role: "user" | "ai";
@@ -55,34 +56,40 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
         // Auto-inject items if returned
         if (data.items && data.items.length > 0) {
           data.items.forEach((item: AIResponseItem) => {
-            const matchingAsset = catalogAssets.find(a => a.id === item.asset_id);
-            if (matchingAsset) {
+            const resolution = resolveItem(item, catalogAssets);
+            const storeUrl =
+              item.store_url ||
+              item.economy?.store_url ||
+              (resolution.kind !== "placeholder" ? resolution.asset.store_url : undefined);
+
+            if (resolution.kind !== "placeholder") {
+              const matchingAsset = resolution.asset;
               addSceneItem({
                 ...matchingAsset,
                 instanceId: item.instance_id,
+                price: item.economy?.price ?? matchingAsset.price,
+                currency: item.economy?.currency || matchingAsset.currency,
+                store_url: storeUrl,
                 position: item.position,
                 rotation: item.rotation,
-                dimensions: item.dimensions || { width: 1000, height: 1000, depth: 1000 }
+                dimensions: normalizeDimensionsMm(item.dimensions, matchingAsset.dimensions),
               });
             } else {
               // Fallback
               addSceneItem({
                 instanceId: item.instance_id,
-                id: item.asset_id,
-                name: item.asset_id.replace("_", " "),
+                id: item.economy?.sku || item.asset_id,
+                name: item.asset_id.replace(/_/g, " "),
                 brand: item.economy?.brand || "Rwaq AI",
                 price: item.economy?.price || 0,
-                currency: "SAR",
+                currency: item.economy?.currency || "SAR",
                 category: "seating",
-                modelUrl: "",
+                modelUrl: PLACEHOLDER_MODEL_URL,
                 thumbnailUrl: "",
-                dimensions: { 
-                    width: item.dimensions?.width ? item.dimensions.width * 1000 : 1000, 
-                    height: item.dimensions?.height ? item.dimensions.height * 1000 : 1000,
-                    depth: item.dimensions?.depth ? item.dimensions.depth * 1000 : 1000 
-                },
+                store_url: storeUrl,
+                dimensions: normalizeDimensionsMm(item.dimensions),
                 position: item.position,
-                rotation: item.rotation
+                rotation: item.rotation,
               });
             }
           });

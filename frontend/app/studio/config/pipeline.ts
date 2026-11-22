@@ -13,18 +13,112 @@
  * One furniture item as `POST /api/generate-room` returns it
  * (see backend/app/api/routes.py::generate_room).
  */
+export interface RawDimensionsInput {
+  length?: number;
+  width?: number;
+  height?: number;
+  depth?: number;
+}
+
+export interface NormalizedDimensionsMm {
+  width: number;
+  height: number;
+  depth: number;
+}
+
+/**
+ * Normalizes furniture dimensions to canonical millimeters `{ width, height, depth }`.
+ *
+ * Handles both:
+ * 1. Raw backend `ai_agent.py` format `{ length, width, height }` where
+ *    `length` is X (`width`), `height` is Y (`height`), `width` is Z (`depth`).
+ * 2. Catalog `{ width, height, depth }` format.
+ *
+ * If the largest positive axis is `<= 20`, values are treated as meters and
+ * multiplied by `1000` (rounded). Missing, zero, or invalid axes fall back
+ * per-axis to `fallback` (in millimeters).
+ */
+export function normalizeDimensionsMm(
+  raw: unknown,
+  fallback: NormalizedDimensionsMm = { width: 1000, height: 1000, depth: 1000 }
+): NormalizedDimensionsMm {
+  const toPositive = (val: unknown): number => {
+    if (typeof val === 'number') {
+      return Number.isFinite(val) && val > 0 ? val : 0;
+    }
+    if (typeof val === 'string' && val.trim() !== '') {
+      const parsed = Number.parseFloat(val);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    }
+    return 0;
+  };
+
+  if (!raw || typeof raw !== 'object') {
+    return { ...fallback };
+  }
+
+  const d = raw as Record<string, unknown>;
+  let rawW: number;
+  let rawH: number;
+  let rawD: number;
+
+  if ('length' in d && d.length !== undefined && d.length !== null) {
+    rawW = toPositive(d.length);
+    rawH = toPositive(d.height);
+    rawD = toPositive(d.width !== undefined && d.width !== null ? d.width : d.depth);
+  } else {
+    rawW = toPositive(d.width);
+    rawH = toPositive(d.height);
+    rawD = toPositive(d.depth);
+  }
+
+  const positiveAxes = [rawW, rawH, rawD].filter((v) => v > 0);
+  const scale = positiveAxes.length > 0 && Math.max(...positiveAxes) <= 20 ? 1000 : 1;
+
+  return {
+    width: rawW > 0 ? Math.round(rawW * scale) : fallback.width,
+    height: rawH > 0 ? Math.round(rawH * scale) : fallback.height,
+    depth: rawD > 0 ? Math.round(rawD * scale) : fallback.depth,
+  };
+}
+
+export interface AIResponseWindow {
+  id?: string;
+  wall?: 'back' | 'left' | string;
+  size?: 'small' | 'medium' | 'large' | string;
+  positionOffset?: number;
+  height?: number;
+  curtain?: 'none' | 'sheer' | 'blackout' | 'draped' | string;
+  curtainColor?: string;
+  isOpen?: boolean;
+  position?: [number, number, number];
+  width?: number;
+  height_m?: number;
+}
+
 export interface AIResponseItem {
   instance_id: string;
   asset_id: string;
   position?: [number, number, number];
   rotation?: [number, number, number];
-  dimensions?: { width: number; height: number; depth: number };
+  dimensions?: RawDimensionsInput;
+  store_url?: string;
   economy?: {
     sku?: string;
     brand?: string;
     price?: number;
     currency?: string;
+    store_url?: string;
   };
+}
+
+export interface GenerateRoomResponse {
+  items?: AIResponseItem[];
+  windows?: AIResponseWindow[];
+  room_dimensions?: { width: number; depth: number; height?: number };
+  ambient_mode?: 'morning' | 'rainy' | 'midnight';
+  floor_color?: string;
+  wall_color?: string;
 }
 
 export type StageId = 'analyze' | 'match' | 'build' | 'cost';

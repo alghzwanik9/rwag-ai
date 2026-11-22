@@ -1,15 +1,25 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSceneStore, SceneItem, RwaqMaterial } from "@/lib/useSceneStore";
+import { useSceneStore, SceneItem, RwaqMaterial, RoomWindow } from "@/lib/useSceneStore";
 import { FolderOpen, Plus } from "lucide-react";
 
 interface ProjectsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast: (msg: string) => void;
-  setModelUrl: (url: string) => void;
+  setModelUrl: (url: string | null) => void;
   setSceneId: (id: string) => void;
+}
+
+interface SavedRoomSettings {
+  roomWidth?: number;
+  roomDepth?: number;
+  wallHeight?: number;
+  floorColor?: string;
+  wallColor?: string;
+  ambientMode?: 'morning' | 'rainy' | 'midnight';
+  windows?: RoomWindow[];
 }
 
 interface Project {
@@ -18,9 +28,10 @@ interface Project {
   savedAt: string;
   totalCost: number;
   sceneId?: string;
-  glbUrl?: string;
+  glbUrl?: string | null;
   sceneItems?: SceneItem[];
   customMaterials?: Record<string, RwaqMaterial>;
+  roomSettings?: SavedRoomSettings | null;
 }
 
 export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUrl, setSceneId }: ProjectsModalProps) {
@@ -32,11 +43,25 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
   const sceneItems = useSceneStore((s) => s.sceneItems);
   const customMaterials = useSceneStore((s) => s.customMaterials);
   const currentTotalCost = useSceneStore((s) => s.currentTotalCost());
+  const roomWidth = useSceneStore((s) => s.roomWidth);
+  const roomDepth = useSceneStore((s) => s.roomDepth);
+  const wallHeight = useSceneStore((s) => s.wallHeight);
+  const floorColor = useSceneStore((s) => s.floorColor);
+  const wallColor = useSceneStore((s) => s.wallColor);
+  const ambientMode = useSceneStore((s) => s.ambientMode);
+  const windows = useSceneStore((s) => s.windows);
   
   // Use these to restore state when loading
   const clearScene = useSceneStore((s) => s.clearScene);
   const addSceneItem = useSceneStore((s) => s.addSceneItem);
   const setActiveSceneId = useSceneStore((s) => s.setActiveSceneId);
+  const setRoomWidth = useSceneStore((s) => s.setRoomWidth);
+  const setRoomDepth = useSceneStore((s) => s.setRoomDepth);
+  const setWallHeight = useSceneStore((s) => s.setWallHeight);
+  const setFloorColor = useSceneStore((s) => s.setFloorColor);
+  const setWallColor = useSceneStore((s) => s.setWallColor);
+  const setAmbientMode = useSceneStore((s) => s.setAmbientMode);
+  const setWindows = useSceneStore((s) => s.setWindows);
 
   const fetchProjects = async () => {
     try {
@@ -80,6 +105,15 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
           sceneItems: sceneItems,
           customMaterials: customMaterials,
           totalCost: currentTotalCost,
+          roomSettings: {
+            roomWidth,
+            roomDepth,
+            wallHeight,
+            floorColor,
+            wallColor,
+            ambientMode,
+            windows,
+          },
         })
       });
 
@@ -106,28 +140,60 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
         
         // Restore scene state
         clearScene();
-        setActiveSceneId(data.sceneId);
-        setModelUrl(data.glbUrl);
-        setSceneId(data.sceneId);
+        if (data.sceneId) {
+          setActiveSceneId(data.sceneId);
+          setSceneId(data.sceneId);
+        } else {
+          setSceneId("default");
+        }
+        setModelUrl(data.glbUrl ?? null);
         
-        // We need to access Zustand internals or just use actions. 
-        // We'll map through sceneItems and add them back.
-        if (data.sceneItems) {
+        // Restore room properties if saved (backward compatible with legacy rows)
+        const room: SavedRoomSettings | undefined = data.roomSettings || undefined;
+        if (room) {
+          if (typeof room.roomWidth === 'number' && Number.isFinite(room.roomWidth)) {
+            setRoomWidth(room.roomWidth);
+          }
+          if (typeof room.roomDepth === 'number' && Number.isFinite(room.roomDepth)) {
+            setRoomDepth(room.roomDepth);
+          }
+          if (typeof room.wallHeight === 'number' && Number.isFinite(room.wallHeight)) {
+            setWallHeight(room.wallHeight);
+          }
+          if (typeof room.floorColor === 'string' && room.floorColor) {
+            setFloorColor(room.floorColor);
+          }
+          if (typeof room.wallColor === 'string' && room.wallColor) {
+            setWallColor(room.wallColor);
+          }
+          if (room.ambientMode === 'morning' || room.ambientMode === 'rainy' || room.ambientMode === 'midnight') {
+            setAmbientMode(room.ambientMode);
+          }
+          if (Array.isArray(room.windows)) {
+            setWindows(room.windows);
+          }
+        }
+
+        if (Array.isArray(data.sceneItems)) {
           data.sceneItems.forEach((item: Parameters<typeof addSceneItem>[0]) => {
-            // Because addSceneItem auto-generates addedAt, it's fine.
             addSceneItem(item);
           });
         }
         
-        // Restore custom materials. 
-        // Since we don't have a bulk setCustomMaterials in store, we might need to add it,
-        // or just iterate and apply.
-        if (data.customMaterials) {
-          useSceneStore.setState({ customMaterials: data.customMaterials });
+        if (data.customMaterials && typeof data.customMaterials === 'object') {
+          const restoredMaterials: Record<string, RwaqMaterial> = {};
+          for (const [k, v] of Object.entries(data.customMaterials as Record<string, RwaqMaterial>)) {
+            if (k !== '__roomSettings' && v && typeof v === 'object') {
+              restoredMaterials[k] = v;
+            }
+          }
+          useSceneStore.setState({ customMaterials: restoredMaterials });
         }
         
         onShowToast(`تم تحميل مشروع: ${data.name}`);
         onClose();
+      } else {
+        onShowToast("فشل تحميل المشروع");
       }
     } catch {
       onShowToast("فشل تحميل المشروع");

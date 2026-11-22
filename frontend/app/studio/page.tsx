@@ -4,10 +4,11 @@ import { Suspense } from 'react';
 import StudioClient from './StudioClient';
 
 export default async function StudioPage() {
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect('/');
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== 'true') {
+    const { userId } = await auth();
+    if (!userId) {
+      redirect('/');
+    }
   }
 
   return (

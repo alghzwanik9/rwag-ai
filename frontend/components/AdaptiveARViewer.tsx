@@ -152,9 +152,18 @@ const ModelViewerWrapper = dynamic(
 interface AdaptiveARViewerProps {
   glbUrl: string;
   sceneId: string;
+  /** True only when a server-hosted `/outputs/output_${sceneId}.glb` exists for mobile QR handoff. */
+  hasServerGlb?: boolean;
+  /** True while the studio is exporting the live Three.js scene to a local GLB Blob. */
+  isExporting?: boolean;
 }
 
-export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerProps) {
+export default function AdaptiveARViewer({
+  glbUrl,
+  sceneId,
+  hasServerGlb,
+  isExporting = false,
+}: AdaptiveARViewerProps) {
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [targetUrl, setTargetUrl] = useState<string>('');
   const [modelState, setModelState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -162,17 +171,20 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
   
   const customMaterials = useSceneStore((s) => s.customMaterials);
 
+  const isLocalBlob = glbUrl.startsWith('blob:');
+  const canShareViaQr =
+    !isLocalBlob &&
+    hasServerGlb === true &&
+    Boolean(glbUrl) &&
+    !sceneId.startsWith('maarad_') &&
+    sceneId !== 'default';
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const timer = setTimeout(() => {
         const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         setIsMobile(mobile);
-        
-        if (mobile) {
-          setTargetUrl(`${window.location.origin}/ar/${sceneId}`);
-        } else {
-          setTargetUrl(`${window.location.origin}/ar/${sceneId}`);
-        }
+        setTargetUrl(`${window.location.origin}/ar/${sceneId}`);
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -191,17 +203,45 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
       className="relative w-full h-full min-h-[500px] flex flex-col rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800"
     >
       <div className="w-full h-full grow relative">
-        {glbUrl && (
+        {isExporting ? (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-800 gap-4 p-6 text-center" dir="rtl">
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                border: '4px solid rgba(0,0,0,0.1)',
+                borderTopColor: '#2563eb',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            <p className="text-gray-700 dark:text-gray-200 font-bold text-sm">
+              جاري تصدير المشهد ثلاثي الأبعاد (GLB) للعرض بالواقع المعزز...
+            </p>
+          </div>
+        ) : glbUrl ? (
           <ModelViewerWrapper
+            key={glbUrl}
             url={glbUrl}
             customMaterials={customMaterials}
             onLoad={handleModelLoad}
             onError={handleModelError}
           />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-800 gap-3 p-6 text-center" dir="rtl">
+            <span className="material-symbols-outlined text-5xl text-gray-400">view_in_ar</span>
+            <p className="text-gray-700 dark:text-gray-200 font-bold text-sm">
+              لا يوجد نموذج ثلاثي الأبعاد جاهز للعرض حالياً.
+            </p>
+            <p className="text-gray-500 text-xs max-w-sm">
+              قم بتوليد غرفة أو إضافة قطع أثاث داخل الاستوديو ثم افتح عرض الواقع المعزز مجدداً.
+            </p>
+          </div>
         )}
       </div>
 
-      {modelState === 'error' && (
+      {modelState === 'error' && !isExporting && glbUrl && (
         <div
           id="model-viewer-error-overlay"
           className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-30 p-6"
@@ -252,7 +292,6 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
               onClick={() => {
                 setModelState('loading');
                 setModelError('');
-                setTimeout(() => setModelState('loading'), 100);
               }}
               style={{
                 width: '100%',
@@ -273,7 +312,7 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
         </div>
       )}
 
-      {isMobile === false && targetUrl && modelState !== 'error' && (
+      {isMobile === false && canShareViaQr && targetUrl && modelState !== 'error' && !isExporting && (
         <div
           id="ar-qr-overlay"
           className="absolute top-6 right-6 bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl flex flex-col items-center justify-center border border-gray-100/50 z-20 hover:scale-105 transition-transform duration-300"
@@ -290,6 +329,29 @@ export default function AdaptiveARViewer({ glbUrl, sceneId }: AdaptiveARViewerPr
           >
             {targetUrl}
           </p>
+        </div>
+      )}
+
+      {!canShareViaQr && glbUrl && modelState !== 'error' && !isExporting && (
+        <div
+          id="ar-local-export-panel"
+          dir="rtl"
+          className="absolute top-6 right-6 bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl flex flex-col gap-3 border border-gray-200/80 z-20 max-w-[260px]"
+        >
+          <div className="flex items-start gap-2">
+            <span className="material-symbols-outlined text-blue-600 text-[20px] shrink-0">view_in_ar</span>
+            <p className="text-xs text-gray-700 font-medium leading-relaxed">
+              هذا المشهد مُصدّر محلياً كملف GLB. استخدم عارض الواقع المعزز مباشرة على الجوال أو حمّل الملف لتشغيله في تطبيقات AR.
+            </p>
+          </div>
+          <a
+            href={glbUrl}
+            download={`rwaq-${sceneId || 'scene'}.glb`}
+            className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-xs font-bold shadow-sm transition-colors"
+          >
+            <span className="material-symbols-outlined text-[17px]">download</span>
+            تحميل ملف GLB للواقع المعزز
+          </a>
         </div>
       )}
     </div>

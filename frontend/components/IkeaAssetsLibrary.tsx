@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { IProductTemplate } from '@/app/studio/config/catalogTemplates';
+import { normalizeDimensionsMm } from '@/app/studio/config/pipeline';
 import { SceneItem } from '@/lib/useSceneStore';
 
 interface IkeaAssetsLibraryProps {
@@ -27,10 +28,16 @@ export interface RawAsset {
   thumbnailUrl?: string;
   image_url?: string;
   short_description?: string;
+  link?: string;
+  store_url?: string;
 }
+
+const FALLBACK_SVG_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'%3E%3Crect width='400' height='225' fill='%23ece8e1'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%238c8478' font-family='sans-serif' font-size='16'%3ERwaq%203D%20Asset%3C/text%3E%3C/svg%3E";
 
 export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryProps) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [realAssets, setRealAssets] = useState<RawAsset[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +114,13 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
       <div className="px-stack-lg pb-4 pt-4">
         <div className="relative flex items-center">
           <span className="material-symbols-outlined absolute right-4 text-on-surface-variant">search</span>
-          <input className="w-full bg-surface-container-low border border-outline-variant rounded-full py-2.5 pr-12 pl-4 font-body-md text-on-surface placeholder-on-surface-variant focus:outline-none focus:ring-2 focus:ring-secondary/20" placeholder="ابحث عن الأثاث، الماركة، أو اللون..." type="text" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-surface-container-low border border-outline-variant rounded-full py-2.5 pr-12 pl-4 font-body-md text-on-surface placeholder-on-surface-variant focus:outline-none focus:ring-2 focus:ring-secondary/20"
+            placeholder="ابحث عن الأثاث، الماركة، أو اللون..."
+            type="text"
+          />
         </div>
       </div>
       <div className="flex border-b border-outline-variant bg-surface-container-low px-stack-lg overflow-x-auto hide-scrollbar shrink-0">
@@ -137,22 +150,38 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
           )}
           {!isLoading && !error && (Array.isArray(realAssets) ? realAssets : []).filter(item => {
             const cat = (item?.category || "").toLowerCase();
-            if (activeCategory === "all") return true;
-            return cat === activeCategory;
+            if (activeCategory !== "all" && cat !== activeCategory) return false;
+
+            const q = searchQuery.trim().toLowerCase();
+            if (!q) return true;
+
+            const translatedCat = (categoryTranslations[cat] || "").toLowerCase();
+            return (
+              (item?.name || "").toLowerCase().includes(q) ||
+              cat.includes(q) ||
+              translatedCat.includes(q) ||
+              (item?.short_description || "").toLowerCase().includes(q) ||
+              (item?.brand || "").toLowerCase().includes(q) ||
+              (item?.id || "").toLowerCase().includes(q)
+            );
           }).map((item, index) => {
             const safeId = item?.id || `fallback-id-${index}`;
-            
+            const imgSrc = item.thumbnail_url || item.image_url || item.thumbnailUrl || getPlaceholderImage(item.category || "");
+
             return (
               <div key={safeId} className="group bg-white border border-outline-variant rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col">
                 <div className="relative aspect-video bg-surface-container flex items-center justify-center overflow-hidden">
-                  <Image 
-                    src={item.thumbnail_url || getPlaceholderImage(item.category || "")} 
-                    alt={(item?.name as string) || "Product"} 
+                  <Image
+                    unoptimized
+                    src={imgSrc}
+                    alt={(item?.name as string) || "Product"}
                     width={400}
                     height={300}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     onError={(e) => {
-                      e.currentTarget.src = "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=800&q=80";
+                      if (e.currentTarget.src !== FALLBACK_SVG_PLACEHOLDER) {
+                        e.currentTarget.src = FALLBACK_SVG_PLACEHOLDER;
+                      }
                     }}
                   />
                 </div>
@@ -162,12 +191,10 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
                     <p className="text-[10px] text-on-surface-variant line-clamp-1" title={item?.short_description || undefined}>{item?.short_description || "IKEA"}</p>
                     <p className="font-bold text-secondary text-sm mt-1">{item?.price ? `${item.price} SAR` : "0 SAR"}</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => {
-                      // RealFurnitureLoader expects dimensions in millimetres!
-                      const widthMm = parseFloat(String(item?.dimensions?.width)) || 1000;
-                      const heightMm = parseFloat(String(item?.dimensions?.height)) || 1000;
-                      const depthMm = parseFloat(String(item?.dimensions?.depth)) || 1000;
+                      const normalizedDims = normalizeDimensionsMm(item?.dimensions);
+                      const storeUrl = item?.link || item?.store_url || undefined;
 
                       const newItem = {
                         id: safeId,
@@ -177,14 +204,14 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
                         price: Number(item.price) || 0,
                         currency: 'SAR' as const,
                         instanceId: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-                        position: [0, 0.5, 0] as [number, number, number],
+                        position: [0, 0, 0] as [number, number, number],
                         rotation: [0, 0, 0] as [number, number, number],
-                        dimensions: { width: widthMm, height: heightMm, depth: depthMm },
-                        modelUrl: item?.model_url || DEFAULT_MODEL_URL,
-                        thumbnailUrl: item?.thumbnail_url || getPlaceholderImage(item?.category || ""),
+                        dimensions: normalizedDims,
+                        modelUrl: item?.model_url || item?.model_3d_url || item?.modelUrl || DEFAULT_MODEL_URL,
+                        thumbnailUrl: imgSrc,
+                        store_url: storeUrl,
                         asset_id: safeId
                       };
-                      console.log("Adding scene item:", newItem);
                       addSceneItem(newItem);
                       onClose();
                     }}

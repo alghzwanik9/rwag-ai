@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useCallback, useState } from "react";
 import { useGLTF, Html, useHelper } from "@react-three/drei";
 import { ThreeEvent, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/useSceneStore";
+import { useSceneStore, type RwaqMaterial } from "@/lib/useSceneStore";
 import { RigidBody, RapierRigidBody } from "@react-three/rapier";
 
 const FALLBACK_MODEL_URL = "/assets/armchair_wood.glb";
@@ -207,11 +207,12 @@ class ModelErrorBoundary extends React.Component<
 interface InnerModelProps {
   modelUrl: string;
   color?: string;
+  customMaterial?: RwaqMaterial;
   /** Fires once after PBR defaults are applied; passes the raw scene for bbox calc */
   onLoaded: (scene: THREE.Group) => void;
 }
 
-function InnerModel({ modelUrl, onLoaded, color }: InnerModelProps) {
+function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelProps) {
   const { scene } = useGLTF(modelUrl);
 
   // ── Clone Scene & Materials (Prevents cross-instance pollution) ───────────
@@ -225,16 +226,22 @@ function InnerModel({ modelUrl, onLoaded, color }: InnerModelProps) {
         if (child.material) {
           // Clone material to ensure independent color swapping
           child.material = child.material.clone();
-          
-          if ("roughness" in child.material) {
-            if (child.material.roughness >= 0.99) child.material.roughness = 0.6;
-            if (child.material.metalness === 0) child.material.metalness = 0.05;
-            child.material.needsUpdate = true;
+          const mat = child.material as THREE.MeshStandardMaterial;
+
+          if ("roughness" in mat) {
+            if (mat.roughness >= 0.99) mat.roughness = 0.6;
+            if (mat.metalness === 0) mat.metalness = 0.05;
+            mat.needsUpdate = true;
+            child.userData.originalRoughness = mat.roughness;
+            child.userData.originalMetalness = mat.metalness;
           }
-          
-          // Save original color for reset functionality
-          if (child.material.color) {
-            child.userData.originalColor = child.material.color.clone();
+
+          // Save original color and map for reset functionality
+          if (mat.color) {
+            child.userData.originalColor = mat.color.clone();
+          }
+          if ("map" in mat) {
+            child.userData.originalMap = mat.map ?? null;
           }
         }
       }
@@ -242,18 +249,76 @@ function InnerModel({ modelUrl, onLoaded, color }: InnerModelProps) {
     return clone;
   }, [scene]);
 
-  // ── Apply Color Swap (No frame drops because it's just a uniform update) ──
+  // ── Apply Color / Material Swap (No frame drops) ──────────────────────────
   useEffect(() => {
+    let cancelled = false;
+    const effectiveColor = customMaterial?.color || color;
+    const loader = customMaterial?.textureUrl ? new THREE.TextureLoader() : null;
+
     clonedScene.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material && child.userData.originalColor) {
-        if (color) {
-          child.material.color.set(color);
+      if (!(child instanceof THREE.Mesh) || !child.material) return;
+      const mat = child.material as THREE.MeshStandardMaterial;
+
+      if (mat.color && child.userData.originalColor) {
+        if (effectiveColor) {
+          mat.color.set(effectiveColor);
         } else {
-          child.material.color.copy(child.userData.originalColor);
+          mat.color.copy(child.userData.originalColor);
         }
       }
+
+      if ("roughness" in mat) {
+        mat.roughness =
+          customMaterial?.roughness !== undefined
+            ? customMaterial.roughness
+            : (child.userData.originalRoughness ?? mat.roughness);
+      }
+
+      if ("metalness" in mat) {
+        mat.metalness =
+          customMaterial?.metalness !== undefined
+            ? customMaterial.metalness
+            : (child.userData.originalMetalness ?? mat.metalness);
+      }
+
+      if ("map" in mat) {
+        if (customMaterial?.textureUrl && loader) {
+          if (child.userData.loadedTextureUrl !== customMaterial.textureUrl) {
+            const targetUrl = customMaterial.textureUrl;
+            loader.load(
+              targetUrl,
+              (tex) => {
+                if (cancelled) {
+                  tex.dispose();
+                  return;
+                }
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.repeat.set(1, 1);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                mat.map = tex;
+                mat.needsUpdate = true;
+                child.userData.loadedTextureUrl = targetUrl;
+              },
+              undefined,
+              () => {
+                // Offline/network fallback: keep color-based PBR override silently
+              }
+            );
+          }
+        } else {
+          mat.map = child.userData.originalMap ?? null;
+          child.userData.loadedTextureUrl = undefined;
+        }
+      }
+
+      mat.needsUpdate = true;
     });
-  }, [clonedScene, color]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clonedScene, color, customMaterial]);
 
   // ── Notify Parent (For BBox calibration) ──────────────────────────────────
   useEffect(() => {
@@ -405,6 +470,7 @@ export default function RealFurnitureLoader({
   const removeSceneItem = useSceneStore((s) => s.removeSceneItem);
   const roomWidth = useSceneStore((s) => s.roomWidth);
   const roomDepth = useSceneStore((s) => s.roomDepth);
+  const customMaterial = useSceneStore((s) => (instanceId ? s.customMaterials[instanceId] : undefined));
   const isSelected = !!instanceId && selectedAssetId === instanceId;
 
   // ── Manual Transform Sync (Fixes Snapping) ────────────────────────────────
@@ -628,7 +694,7 @@ export default function RealFurnitureLoader({
             onError={() => setLoadState("error")}
           >
             <group visible={false}>
-              <InnerModel modelUrl={resolvedModelUrl} onLoaded={handleLoaded} color={color} />
+              <InnerModel modelUrl={resolvedModelUrl} onLoaded={handleLoaded} color={color} customMaterial={customMaterial} />
             </group>
           </ModelErrorBoundary>
         </React.Suspense>
@@ -643,7 +709,7 @@ export default function RealFurnitureLoader({
             onError={() => setLoadState("error")}
           >
             <group scale={calibration.scale} position={calibration.offset}>
-              <InnerModel modelUrl={resolvedModelUrl} onLoaded={handleLoaded} color={color} />
+              <InnerModel modelUrl={resolvedModelUrl} onLoaded={handleLoaded} color={color} customMaterial={customMaterial} />
             </group>
           </ModelErrorBoundary>
         </React.Suspense>
@@ -680,11 +746,6 @@ export default function RealFurnitureLoader({
               >
                 <span className="material-symbols-outlined text-[18px]">delete</span>
               </button>
-            </div>
-            <div className="bg-black/90 text-white text-xs p-2 rounded-lg text-left" dir="ltr">
-              <span className="text-gray-400">Y_Store:</span> {position[1]?.toFixed(3) || "0.000"}<br/>
-              <span className="text-gray-400">Offset_Y:</span> {calibration.offset[1]?.toFixed(3)}<br/>
-              <span className="text-gray-400">Scale_Y:</span> {calibration.scale[1]?.toFixed(3)}<br/>
             </div>
           </div>
         </Html>

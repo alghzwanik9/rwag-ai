@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSceneStore } from "@/lib/useSceneStore";
+import { normalizeDimensionsMm } from "../config/pipeline";
 
 interface SpatialAuditModalProps {
   isOpen: boolean;
@@ -55,14 +56,25 @@ export function SpatialAuditModal({ isOpen, onClose, showToast }: SpatialAuditMo
     setIsLoading(true);
     try {
       const payload = {
-        items: sceneItems.map((item) => ({
-          instance_id: item.instanceId,
-          asset_id: item.id || item.name,
-          name: item.name,
-          position: item.position,
-          rotation: item.rotation,
-          dimensions: item.dimensions || { width: 1.0, height: 1.0, depth: 0.8 }
-        })),
+        items: sceneItems.map((item) => {
+          const dimsMm = normalizeDimensionsMm(item.dimensions, {
+            width: 1000,
+            height: 1000,
+            depth: 800,
+          });
+          return {
+            instance_id: item.instanceId,
+            asset_id: item.id || item.name,
+            name: item.name,
+            position: item.position,
+            rotation: item.rotation,
+            dimensions: {
+              width: dimsMm.width / 1000,
+              height: dimsMm.height / 1000,
+              depth: dimsMm.depth / 1000,
+            },
+          };
+        }),
         room_width: roomWidth,
         room_depth: roomDepth
       };

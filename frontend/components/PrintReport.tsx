@@ -66,18 +66,19 @@ export default function PrintReport() {
           {sceneItems.map((item, idx) => {
             // Find custom material if applied
             const customMat = customMaterials[item.instanceId];
-            const materialDisplay = customMat ? customMat.name : "الافتراضي";
-            
+            const displayColor = customMat?.color || item.color;
+            const materialDisplay = customMat ? customMat.name : item.color ? item.color : "الافتراضي";
+
             return (
               <tr key={idx} className="border-b border-gray-200 hover:bg-gray-50">
                 <td className="p-3 text-gray-800 font-medium">{item.name}</td>
                 <td className="p-3 text-gray-600">{item.brand || "-"}</td>
                 <td className="p-3 text-gray-600">
                   <div className="flex items-center gap-2">
-                    {customMat && customMat.color && (
-                      <span 
-                        className="w-4 h-4 rounded-full border border-gray-400 inline-block" 
-                        style={{ backgroundColor: customMat.color }}
+                    {displayColor && (
+                      <span
+                        className="w-4 h-4 rounded-full border border-gray-400 inline-block"
+                        style={{ backgroundColor: displayColor }}
                       ></span>
                     )}
                     {materialDisplay}
@@ -87,8 +88,8 @@ export default function PrintReport() {
                   {formatCurrency(item.price, item.currency as SupportedCurrency)}
                 </td>
                 <td className="p-3 text-blue-600 text-sm">
-                  {item.thumbnailUrl ? (
-                    <a href={item.thumbnailUrl} target="_blank" rel="noopener noreferrer">
+                  {item.store_url ? (
+                    <a href={item.store_url} target="_blank" rel="noopener noreferrer">
                       رابط الشراء
                     </a>
                   ) : (

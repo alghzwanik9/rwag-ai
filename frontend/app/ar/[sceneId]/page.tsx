@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AdaptiveARViewer from '@/components/AdaptiveARViewer';
 
 interface PageProps {
@@ -202,10 +203,30 @@ export default function ARPage({ params }: PageProps) {
               cursor: 'pointer',
               fontFamily: 'IBM Plex Sans, sans-serif',
               transition: 'opacity 0.2s',
+              marginBottom: '0.75rem',
             }}
           >
             إعادة المحاولة
           </button>
+
+          <Link
+            href="/studio"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '0.65rem',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.08)',
+              color: '#e5e7eb',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              textAlign: 'center',
+              textDecoration: 'none',
+              fontFamily: 'IBM Plex Sans, sans-serif',
+            }}
+          >
+            العودة إلى أستوديو التصميم
+          </Link>
         </div>
       </div>
     );
@@ -217,7 +238,7 @@ export default function ARPage({ params }: PageProps) {
       id="ar-viewer-container"
       style={{ width: '100vw', height: '100dvh', overflow: 'hidden', background: '#000' }}
     >
-      <AdaptiveARViewer glbUrl={glbUrl} sceneId={sceneId} />
+      <AdaptiveARViewer glbUrl={glbUrl} sceneId={sceneId} hasServerGlb />
     </div>
   );
 }

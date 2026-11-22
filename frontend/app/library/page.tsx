@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -47,6 +47,88 @@ interface RoomStandard {
     accent_10: string;
   };
   default_dims?: { width: number; depth: number };
+}
+
+interface RawBackendStandard {
+  id?: string;
+  room_type?: string;
+  category?: string;
+  name_ar?: string;
+  description?: string;
+  anthropometrics?: Record<string, unknown>;
+  spatial_rules?: string[];
+  lighting_standards?: {
+    recommended_lux?: number;
+    color_temperature_k?: number[];
+    layers?: Record<string, string>;
+  };
+  material_balance?: {
+    dominant_60?: string;
+    secondary_30?: string;
+    accent_10?: string;
+  };
+  default_dims?: { width: number; depth: number };
+}
+
+const ANTHROPOMETRIC_KEY_LABELS: Record<string, string> = {
+  primary_walkway_min_m: "الممر الرئيسي",
+  secondary_walkway_min_m: "الممر الثانوي",
+  coffee_table_distance_to_sofa_m: "مسافة طاولة القهوة للكنب",
+  sofa_to_armchair_conversation_distance_m: "مسافة المحادثة بين المقاعد",
+  tv_viewing_distance_formula: "مسافة التلفاز الموصى بها",
+  side_table_height_relative_to_armrest: "ارتفاع الطاولة الجانبية",
+  area_per_person_m2: "المساحة لكل شخص",
+  clearance_around_bed_sides_m: "الممر حول جانبي السرير",
+  clearance_in_front_of_wardrobe_m: "الممر أمام خزانة الملابس",
+  bed_to_tv_distance_min_m: "المسافة بين السرير والتلفاز",
+  nightstand_height_relative_to_mattress: "ارتفاع الكومودينو",
+  wardrobe_depth_standard_m: "عمق خزانة الملابس القياسي",
+  clearance_behind_chair_to_wall_min_m: "خلوص خلف الكرسي للجدار",
+  clearance_behind_chair_with_walkway_m: "خلوص خلف الكرسي مع ممر",
+  table_width_per_diner_cm: "عرض الطاولة لكل شخص",
+  table_depth_per_diner_cm: "عمق الطاولة لكل شخص",
+  chandelier_height_above_table_cm: "ارتفاع الثريا فوق الطاولة",
+  rug_extension_beyond_table_edges_min_cm: "امتداد السجادة حول الطاولة",
+  counter_depth_standard_m: "عمق سطح العمل القياسي",
+  counter_height_standard_m: "ارتفاع سطح العمل القياسي",
+  aisle_width_between_counters_m: "الممر بين أسطح العمل",
+  island_stool_clearance_m: "خلوص كراسي الجزيرة",
+  work_triangle_perimeter_m: "محيط مثلث العمل الإجمالي",
+  desk_depth_min_m: "عمق سطح المكتب الأدنى",
+  desk_width_min_m: "عرض سطح المكتب الأدنى",
+  chair_pullout_clearance_m: "مسافة رجوع الكرسي",
+  walkway_behind_chair_m: "الممر خلف الكرسي",
+  monitor_viewing_distance_cm: "مسافة الرؤية للشاشة",
+};
+
+const DEFAULT_DIMS_BY_ROOM_TYPE: Record<string, { width: number; depth: number }> = {
+  living_room: { width: 5.5, depth: 5.0 },
+  bedroom: { width: 4.8, depth: 4.5 },
+  kitchen: { width: 4.5, depth: 4.0 },
+  home_office: { width: 4.0, depth: 3.5 },
+  dining_room: { width: 4.6, depth: 4.0 },
+};
+
+function formatAnthropometricValue(key: string, value: unknown): string {
+  if (typeof value === "string") return value;
+  const unit = key.endsWith("_cm") ? "سم" : key.endsWith("_m2") ? "م²" : "متر";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `${value} ${unit}`;
+  }
+  if (Array.isArray(value) && value.length >= 2) {
+    return `${value[0]} إلى ${value[1]} ${unit}`;
+  }
+  return String(value ?? "");
+}
+
+function normalizeAnthropometrics(raw?: Record<string, unknown>): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const result: Record<string, string> = {};
+  Object.entries(raw).forEach(([key, val]) => {
+    const label = ANTHROPOMETRIC_KEY_LABELS[key] || key.replace(/_/g, " ");
+    result[label] = formatAnthropometricValue(key, val);
+  });
+  return result;
 }
 
 const ARCHITECTURAL_STYLES: ArchitecturalStyle[] = [
@@ -295,10 +377,74 @@ const ROOM_STANDARDS: RoomStandard[] = [
   }
 ];
 
+function mergeLiveStandards(
+  fallback: RoomStandard[],
+  remoteItems: RawBackendStandard[]
+): RoomStandard[] {
+  const byRoomType = new Map<string, RoomStandard>();
+  fallback.forEach((std) => byRoomType.set(std.room_type, std));
+
+  remoteItems.forEach((item) => {
+    if (!item || typeof item !== "object" || !item.room_type) return;
+    const roomType = String(item.room_type);
+    const existing = byRoomType.get(roomType);
+    const normalizedAnthro = normalizeAnthropometrics(item.anthropometrics);
+
+    const hydrated: RoomStandard = {
+      id: item.id || existing?.id || `std_${roomType}`,
+      room_type: roomType,
+      name_ar: item.name_ar || existing?.name_ar || roomType,
+      description: item.description || existing?.description || "",
+      anthropometrics:
+        Object.keys(normalizedAnthro).length > 0
+          ? normalizedAnthro
+          : existing?.anthropometrics || {},
+      spatial_rules:
+        Array.isArray(item.spatial_rules) && item.spatial_rules.length > 0
+          ? item.spatial_rules
+          : existing?.spatial_rules || [],
+      lighting_standards: {
+        recommended_lux:
+          item.lighting_standards?.recommended_lux ??
+          existing?.lighting_standards.recommended_lux ??
+          200,
+        color_temperature_k:
+          Array.isArray(item.lighting_standards?.color_temperature_k) &&
+          item.lighting_standards.color_temperature_k.length > 0
+            ? item.lighting_standards.color_temperature_k
+            : existing?.lighting_standards.color_temperature_k || [2700, 3000],
+        layers:
+          item.lighting_standards?.layers &&
+          Object.keys(item.lighting_standards.layers).length > 0
+            ? item.lighting_standards.layers
+            : existing?.lighting_standards.layers || {},
+      },
+      material_balance: {
+        dominant_60:
+          item.material_balance?.dominant_60 || existing?.material_balance.dominant_60 || "",
+        secondary_30:
+          item.material_balance?.secondary_30 || existing?.material_balance.secondary_30 || "",
+        accent_10:
+          item.material_balance?.accent_10 || existing?.material_balance.accent_10 || "",
+      },
+      default_dims:
+        item.default_dims ||
+        existing?.default_dims ||
+        DEFAULT_DIMS_BY_ROOM_TYPE[roomType] || { width: 5.0, depth: 4.5 },
+    };
+
+    byRoomType.set(roomType, hydrated);
+  });
+
+  return Array.from(byRoomType.values());
+}
+
 export default function ArchitecturalLibrary() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<LibraryTab>("standards");
   const [search, setSearch] = useState("");
+  const [roomStandards, setRoomStandards] = useState<RoomStandard[]>(ROOM_STANDARDS);
+  const [isLiveSynced, setIsLiveSynced] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<ArchitecturalStyle | null>(null);
   const [selectedStandard, setSelectedStandard] = useState<RoomStandard | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -306,6 +452,33 @@ export default function ArchitecturalLibrary() {
   const setRoomWidth = useSceneStore((s) => s.setRoomWidth);
   const setRoomDepth = useSceneStore((s) => s.setRoomDepth);
   const setCoveLightColor = useSceneStore((s) => s.setCoveLightColor);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("/api/v1/architectural-standards", { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error("Standards API unavailable");
+        return res.json();
+      })
+      .then((payload) => {
+        const remoteList: RawBackendStandard[] = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.standards)
+            ? payload.standards
+            : [];
+
+        if (remoteList.length > 0) {
+          setRoomStandards(mergeLiveStandards(ROOM_STANDARDS, remoteList));
+          setIsLiveSynced(true);
+        }
+      })
+      .catch(() => {
+        // Silent offline fallback: local ROOM_STANDARDS are already displayed.
+      });
+
+    return () => controller.abort();
+  }, []);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -332,11 +505,12 @@ export default function ArchitecturalLibrary() {
   }, [search]);
 
   const filteredStandards = useMemo(() => {
-    return ROOM_STANDARDS.filter((std) =>
+    return roomStandards.filter((std) =>
       std.name_ar.toLowerCase().includes(search.toLowerCase()) ||
-      std.description.toLowerCase().includes(search.toLowerCase())
+      std.description.toLowerCase().includes(search.toLowerCase()) ||
+      std.room_type.toLowerCase().includes(search.toLowerCase())
     );
-  }, [search]);
+  }, [roomStandards, search]);
 
   return (
     <main className="fixed top-[64px] left-0 right-0 md:right-[280px] bottom-0 bg-[#F5F7FA] overflow-y-auto px-4 md:px-8 py-6 md:py-10" dir="rtl">
@@ -351,15 +525,26 @@ export default function ArchitecturalLibrary() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-200 pb-6 mb-6">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-[#1E1E1E] mb-2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#4A90E2] text-3xl">architecture</span>
-            مركز المعرفة والمعايير المعمارية
-          </h1>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#1E1E1E] flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#4A90E2] text-3xl">architecture</span>
+              مركز المعرفة والمعايير المعمارية
+            </h1>
+            <span
+              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                isLiveSynced
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-gray-100 text-gray-600 border-gray-200"
+              }`}
+            >
+              {isLiveSynced ? "متصل بالمرجع الحي" : "المرجع الهندسي المدمج"}
+            </span>
+          </div>
           <p className="text-gray-500 text-sm">مرجع هندسي متكامل للمصممين يغذي وكلاء الذكاء الاصطناعي بمعايير الفراغات والإضاءة والخامات.</p>
         </div>
         <Link 
           href="/studio" 
-          className="bg-[#1E1E1E] hover:bg-[#2d2d2d] text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg hover:shadow-xl hover:scale-105"
+          className="bg-[#1E1E1E] hover:bg-[#2d2d2d] text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg hover:shadow-xl hover:scale-105 shrink-0"
         >
           <span className="material-symbols-outlined text-sm">home_pin</span>
           الذهاب للاستوديو 3D
@@ -371,6 +556,7 @@ export default function ArchitecturalLibrary() {
         {LIBRARY_TABS.map((tab) => (
           <button
             key={tab.id}
+            type="button"
             onClick={() => setActiveTab(tab.id)}
             className={`px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shrink-0 ${
               activeTab === tab.id
@@ -402,14 +588,14 @@ export default function ArchitecturalLibrary() {
           {filteredStandards.map((std) => (
             <div key={std.id} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-md hover:shadow-xl transition-all flex flex-col justify-between">
               <div>
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start gap-2 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="p-2.5 bg-[#4A90E2]/10 text-[#4A90E2] rounded-xl material-symbols-outlined text-xl">
                       square_foot
                     </span>
                     <h3 className="text-xl font-black text-gray-900">{std.name_ar}</h3>
                   </div>
-                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full">
+                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1 rounded-full shrink-0">
                     {std.default_dims ? `${std.default_dims.width}م × ${std.default_dims.depth}م` : "أبعاد متغيرة"}
                   </span>
                 </div>
@@ -447,8 +633,9 @@ export default function ArchitecturalLibrary() {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-4 border-t border-gray-100 flex justify-between items-center gap-3">
+              <div className="pt-4 border-t border-gray-100 flex flex-wrap justify-between items-center gap-3">
                 <button
+                  type="button"
                   onClick={() => setSelectedStandard(std)}
                   className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
                 >
@@ -456,6 +643,7 @@ export default function ArchitecturalLibrary() {
                   الدليل التفصيلي
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleApplyStandardToStudio(std)}
                   className="bg-[#4A90E2] hover:bg-[#357abd] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
                 >
@@ -491,7 +679,11 @@ export default function ArchitecturalLibrary() {
                   <p className="text-gray-500 text-xs line-clamp-3 mb-4 leading-relaxed">{style.summary}</p>
                 </div>
                 <div className="pt-4 border-t border-gray-100 flex justify-between gap-2">
-                  <button onClick={() => setSelectedStyle(style)} className="text-gray-700 hover:text-black font-bold text-xs bg-gray-100 px-4 py-2.5 rounded-xl transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStyle(style)}
+                    className="text-gray-700 hover:text-black font-bold text-xs bg-gray-100 px-4 py-2.5 rounded-xl transition-colors"
+                  >
                     التفاصيل
                   </button>
                   <Link href={`/studio?reference=${style.slug}`} className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1">
@@ -631,7 +823,14 @@ export default function ArchitecturalLibrary() {
                 <span className="material-symbols-outlined text-[#4A90E2] text-2xl">square_foot</span>
                 <h3 className="font-black text-xl text-gray-900">{selectedStandard.name_ar}</h3>
               </div>
-              <button onClick={() => setSelectedStandard(null)} className="material-symbols-outlined text-gray-500 hover:text-black">close</button>
+              <button
+                type="button"
+                onClick={() => setSelectedStandard(null)}
+                aria-label="إغلاق"
+                className="material-symbols-outlined text-gray-500 hover:text-black"
+              >
+                close
+              </button>
             </div>
             <div className="p-6 overflow-y-auto grow space-y-5 text-xs text-gray-700">
               <div>
@@ -648,8 +847,21 @@ export default function ArchitecturalLibrary() {
               </div>
             </div>
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between gap-3">
-              <button onClick={() => setSelectedStandard(null)} className="bg-gray-200 text-gray-700 px-5 py-2.5 rounded-xl font-bold">إغلاق</button>
-              <button onClick={() => { handleApplyStandardToStudio(selectedStandard); setSelectedStandard(null); }} className="bg-[#4A90E2] text-white px-6 py-2.5 rounded-xl font-bold shadow-md">
+              <button
+                type="button"
+                onClick={() => setSelectedStandard(null)}
+                className="bg-gray-200 text-gray-700 px-5 py-2.5 rounded-xl font-bold"
+              >
+                إغلاق
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleApplyStandardToStudio(selectedStandard);
+                  setSelectedStandard(null);
+                }}
+                className="bg-[#4A90E2] text-white px-6 py-2.5 rounded-xl font-bold shadow-md"
+              >
                 تطبيق في الاستوديو 3D
               </button>
             </div>
@@ -678,7 +890,9 @@ export default function ArchitecturalLibrary() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedStyle(null)}
+                aria-label="إغلاق"
                 className="absolute top-4 left-4 bg-white/80 hover:bg-white text-gray-700 hover:text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors"
               >
                 <span className="material-symbols-outlined">close</span>
@@ -738,6 +952,7 @@ export default function ArchitecturalLibrary() {
 
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2 shrink-0">
               <button
+                type="button"
                 onClick={() => setSelectedStyle(null)}
                 className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 font-bold text-xs px-5 py-3 rounded-xl transition-all"
               >

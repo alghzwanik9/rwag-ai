@@ -4,7 +4,7 @@ import React, { useState, Suspense, useRef, useEffect, useMemo, useCallback } fr
 import { useSearchParams } from "next/navigation";
 
 import { Canvas, useFrame, useThree, ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, PointerLockControls, useGLTF, Environment, ContactShadows } from "@react-three/drei";
+import { OrbitControls, PointerLockControls, useGLTF, Environment, Lightformer, ContactShadows } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import * as THREE from 'three';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
@@ -70,21 +70,62 @@ function AmbientController() {
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   
-  // Audio state
+  // Procedural offline Web Audio API soft rain noise generator (zero external CDN calls)
   useEffect(() => {
-    const audio = new Audio("https://cdn.pixabay.com/download/audio/2021/08/04/audio_3d1a8c3d91.mp3?filename=rain-and-thunder-16705.mp3");
-    audio.loop = true;
-    audio.volume = 0.3;
-    
-    if (ambientMode === 'rainy') {
-      audio.play().catch(e => console.log("Audio autoplay prevented", e));
-    } else {
-      audio.pause();
+    if (ambientMode !== 'rainy' || typeof window === 'undefined') return;
+
+    let ctx: AudioContext | null = null;
+    let source: AudioBufferSourceNode | null = null;
+
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+
+      ctx = new AudioCtx();
+      const bufferSize = ctx.sampleRate * 2;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = buffer.getChannelData(0);
+      let lastOut = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        output[i] = (lastOut + 0.02 * white) / 1.02;
+        lastOut = output[i];
+        output[i] *= 2.5;
+      }
+
+      source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 900;
+      filter.Q.value = 0.6;
+
+      const gain = ctx.createGain();
+      gain.gain.value = 0.05;
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      source.start(0);
+      ctx.resume().catch(() => {});
+    } catch {
+      // Gracefully no-op when AudioContext is blocked or unavailable
     }
-    
+
     return () => {
-      audio.pause();
-      audio.src = "";
+      try {
+        source?.stop();
+        source?.disconnect();
+      } catch {
+        // ignore stop errors
+      }
+      if (ctx) {
+        ctx.close().catch(() => {});
+      }
     };
   }, [ambientMode]);
 
@@ -151,6 +192,52 @@ function kelvinToColor(kelvin: number): THREE.Color {
   const warm = new THREE.Color('#ffb966');
   const cool = new THREE.Color('#eaf5ff');
   return warm.lerp(cool, t);
+}
+
+function ProceduralEnvironment({ ambientMode }: { ambientMode: 'morning' | 'rainy' | 'midnight' }) {
+  const palette =
+    ambientMode === 'morning'
+      ? { top: '#FFF8EB', topInt: 2.2, key: '#FFE6C2', keyInt: 1.6, fill: '#D9ECFF', fillInt: 0.9, ground: '#C8B29B', groundInt: 0.5 }
+      : ambientMode === 'rainy'
+        ? { top: '#CBD5E1', topInt: 1.4, key: '#94A3B8', keyInt: 1.0, fill: '#B0C4DE', fillInt: 0.85, ground: '#64748B', groundInt: 0.4 }
+        : { top: '#334155', topInt: 0.7, key: '#FFB966', keyInt: 1.1, fill: '#64B5F6', fillInt: 0.8, ground: '#1E293B', groundInt: 0.35 };
+
+  return (
+    <Environment key={ambientMode} resolution={256} frames={1}>
+      <Lightformer
+        form="rect"
+        intensity={palette.topInt}
+        color={palette.top}
+        scale={[14, 14, 1]}
+        position={[0, 8, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+      />
+      <Lightformer
+        form="rect"
+        intensity={palette.keyInt}
+        color={palette.key}
+        scale={[10, 6, 1]}
+        position={[8, 4, 6]}
+        target={[0, 1, 0]}
+      />
+      <Lightformer
+        form="circle"
+        intensity={palette.fillInt}
+        color={palette.fill}
+        scale={8}
+        position={[-8, 5, -4]}
+        target={[0, 1, 0]}
+      />
+      <Lightformer
+        form="ring"
+        intensity={palette.groundInt}
+        color={palette.ground}
+        scale={16}
+        position={[0, -4, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      />
+    </Environment>
+  );
 }
 
 function LightingRig() {
@@ -451,6 +538,8 @@ export default function StudioClient() {
   const [toastMessage, setToastMessage]   = useState("");
   const [isModalOpen, setIsModalOpen]     = useState(false);
   const [isARModalOpen, setIsARModalOpen] = useState(false);
+  const [arBlobUrl, setArBlobUrl]         = useState<string | null>(null);
+  const [isExportingAR, setIsExportingAR] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
@@ -459,6 +548,9 @@ export default function StudioClient() {
   const [isTransitioning, setIsTransitioning]         = useState(false);
   /** Collapsed by default; auto-opens when a generation settles. */
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  const exportGroupRef = useRef<THREE.Group>(null);
+  const arBlobUrlRef = useRef<string | null>(null);
 
   const {
     assets: catalogAssets,
@@ -637,6 +729,88 @@ export default function StudioClient() {
    * The promoted primary action. The button that used to carry this label sat
    * at the bottom of the global sidebar with no onClick at all.
    */
+  const handleCloseAR = useCallback(() => {
+    setIsARModalOpen(false);
+    setIsExportingAR(false);
+    if (arBlobUrlRef.current) {
+      URL.revokeObjectURL(arBlobUrlRef.current);
+      arBlobUrlRef.current = null;
+    }
+    setArBlobUrl(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (arBlobUrlRef.current) {
+        URL.revokeObjectURL(arBlobUrlRef.current);
+        arBlobUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleOpenAR = useCallback(async () => {
+    setIsARModalOpen(true);
+
+    // Server-hosted GLB exists — render directly without client-side export
+    if (modelUrl) {
+      setIsExportingAR(false);
+      return;
+    }
+
+    const rootGroup = exportGroupRef.current;
+    if (!rootGroup) {
+      showToast("⚠️ تعذر تجهيز المشهد للواقع المعزز");
+      return;
+    }
+
+    setIsExportingAR(true);
+    try {
+      const { GLTFExporter } = await import("three-stdlib");
+      rootGroup.updateMatrixWorld(true);
+
+      const exportRoot = new THREE.Group();
+      exportRoot.name = "RwaqScene";
+
+      rootGroup.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh) || !obj.visible || !obj.geometry) return;
+        const mat = obj.material;
+        if (!mat) return;
+        const mats = Array.isArray(mat) ? mat : [mat];
+        if (mats.some((m) => m instanceof THREE.ShaderMaterial)) return;
+        const lowerName = obj.name.toLowerCase();
+        if (lowerName.includes("contactshadow") || lowerName.includes("helper")) return;
+
+        const clonedMesh = new THREE.Mesh(obj.geometry, obj.material);
+        clonedMesh.name = obj.name || "mesh";
+        clonedMesh.matrixAutoUpdate = false;
+        clonedMesh.matrix.copy(obj.matrixWorld);
+        clonedMesh.matrix.decompose(clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale);
+        clonedMesh.matrixAutoUpdate = true;
+        exportRoot.add(clonedMesh);
+      });
+
+      const exporter = new GLTFExporter();
+      const result = await exporter.parseAsync(exportRoot, { binary: true, onlyVisible: true });
+
+      if (result instanceof ArrayBuffer) {
+        const blob = new Blob([result], { type: "model/gltf-binary" });
+        const url = URL.createObjectURL(blob);
+        if (arBlobUrlRef.current) {
+          URL.revokeObjectURL(arBlobUrlRef.current);
+        }
+        arBlobUrlRef.current = url;
+        setArBlobUrl(url);
+      } else {
+        showToast("⚠️ تعذر تصدير المشهد إلى ملف GLB");
+      }
+    } catch (err) {
+      console.error("[StudioClient] GLTFExporter failed:", err);
+      showToast("❌ حدث خطأ أثناء تصدير المشهد للواقع المعزز");
+    } finally {
+      setIsExportingAR(false);
+    }
+  }, [modelUrl, showToast]);
+
   const handleNewProject = () => {
     clearScene();
     clearRequests();
@@ -812,7 +986,8 @@ export default function StudioClient() {
           onOpenFurnitureLibrary={() => setIsModalOpen(true)}
           onOpenMaterialPalette={() => setIsMaterialPaletteOpen(true)}
           onOpenAudit={() => setIsAuditModalOpen(true)}
-          onOpenAR={() => setIsARModalOpen(true)}
+          onOpenAR={handleOpenAR}
+          onOpenChatbot={() => setIsChatbotOpen(true)}
           onLoadTemplate={handleLoadTemplate}
           modelUrl={modelUrl}
         />
@@ -835,9 +1010,9 @@ export default function StudioClient() {
                 <LightingRig />
                 
                 <Suspense fallback={null}>
-                  <Environment preset={ambientMode === 'morning' ? 'city' : ambientMode === 'midnight' ? 'sunset' : 'apartment'} background={false} blur={0.6} />
+                  <ProceduralEnvironment ambientMode={ambientMode} />
                   <ContactShadows position={[0, 0.01, 0]} opacity={0.5} scale={20} blur={1.5} far={4} />
-                  <group position={[0, 0, 0]}>
+                  <group ref={exportGroupRef} position={[0, 0, 0]}>
                     <Physics debug={false}>
                       <SceneErrorBoundary>
                         {modelUrl ? <RoomModel url={modelUrl} /> : <EmptyRoom />}
@@ -853,7 +1028,8 @@ export default function StudioClient() {
                             category={item.category}
                             price={item.price}
                             dimensions={item.dimensions}
-                            buyUrl={item.thumbnailUrl || "#"}
+                            buyUrl={item.store_url || "#"}
+                            color={item.color}
                             position={item.position}
                             rotation={item.rotation}
                           />
@@ -906,6 +1082,19 @@ export default function StudioClient() {
               onResetView={resetCamera}
               onScreenshot={() => window.dispatchEvent(new CustomEvent("rwaq-snapshot"))}
             />
+
+            {!isChatbotOpen && (
+              <button
+                type="button"
+                onClick={() => setIsChatbotOpen(true)}
+                aria-label="فتح المساعد الذكي"
+                title="فتح المساعد الذكي للمحادثة وإضافة الأثاث"
+                className={`absolute bottom-6 left-6 ${Z.sceneToolbar} flex items-center gap-2 rounded-2xl border border-secondary/30 bg-surface/90 px-4 py-2.5 text-xs font-bold text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-xl transition-all hover:bg-secondary hover:text-white active:scale-95`}
+              >
+                <span className="material-symbols-outlined text-[19px]">smart_toy</span>
+                <span>المساعد الذكي</span>
+              </button>
+            )}
           </div>
         </main>
 
@@ -936,17 +1125,23 @@ export default function StudioClient() {
       {/* ── مودال الواقع المعزز ── */}
       {isARModalOpen && (
         <div className={`fixed inset-0 ${Z.modal} flex items-center justify-center p-4`}>
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsARModalOpen(false)} />
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={handleCloseAR} />
           <div className="relative w-full max-w-5xl h-[85vh] bg-surface rounded-2xl overflow-hidden shadow-2xl flex flex-col z-10 border border-outline-variant">
             <div className="absolute top-4 left-4 z-50">
               <button
                 className="bg-white/80 backdrop-blur text-gray-800 w-10 h-10 rounded-full shadow-lg hover:bg-white hover:scale-110 transition-all flex items-center justify-center"
-                onClick={() => setIsARModalOpen(false)}
+                onClick={handleCloseAR}
+                aria-label="إغلاق عرض الواقع المعزز"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <AdaptiveARViewer glbUrl={modelUrl ?? ""} sceneId={sceneId} />
+            <AdaptiveARViewer
+              glbUrl={modelUrl ?? arBlobUrl ?? ""}
+              sceneId={sceneId}
+              hasServerGlb={Boolean(modelUrl)}
+              isExporting={isExportingAR}
+            />
           </div>
         </div>
       )}
@@ -970,7 +1165,7 @@ export default function StudioClient() {
       <ProjectsModal 
         isOpen={isProjectsModalOpen}
         onClose={() => setIsProjectsModalOpen(false)}
-        onShowToast={setToastMessage}
+        onShowToast={showToast}
         setModelUrl={setModelUrl}
         setSceneId={setSceneId}
       />
