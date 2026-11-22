@@ -3,7 +3,7 @@ import sys
 import json
 import math
 
-# Fix for Windows console encoding (CrewAI emojis)
+# Fix for Windows console encoding
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
@@ -12,18 +12,17 @@ from google.genai import types
 from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from crewai import Agent, Task, Crew, LLM
+from typing import List
 
 load_dotenv()
 
-# Set environment variables for CrewAI LLM native initialization
-api_key = os.environ.get("GEMINI_API_KEY")
-os.environ["GOOGLE_API_KEY"] = api_key or ""
-os.environ["GEMINI_API_KEY"] = api_key or ""
+# Set environment variables
+api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+os.environ["GOOGLE_API_KEY"] = api_key
+os.environ["GEMINI_API_KEY"] = api_key
 
 
-# ── Pydantic Output Models for CrewAI ─────────────────────────────────────────
+# ── Pydantic Output Models ────────────────────────────────────────────────────
 
 class Dimensions(BaseModel):
     length: float = Field(description="Length (size along X axis) in meters")
@@ -32,14 +31,14 @@ class Dimensions(BaseModel):
 
 class Transform(BaseModel):
     t_x: float = Field(description="Translation along X axis (in meters)")
-    t_y: float = Field(default=0.0, description="Translation along Y axis (vertical). MUST be strictly 0.0")
+    t_y: float = Field(description="Translation along Y axis (vertical). MUST be strictly 0.0")
     t_z: float = Field(description="Translation along Z axis (in meters)")
     yaw_y: float = Field(description="Rotation angle around Y axis (in degrees, e.g. 0, 90, 180, -90)")
-    scale: float = Field(default=1.0, description="Scale multiplier, default is 1.0")
+    scale: float = Field(description="Scale multiplier, MUST be 1.0")
 
 class Economy(BaseModel):
     price: float = Field(description="Retail price of the furniture in Saudi Riyal (SAR)")
-    currency: str = Field(default="SAR", description="ISO currency code, e.g. SAR")
+    currency: str = Field(description="ISO currency code, e.g. SAR")
     store_url: str = Field(description="Product retail URL")
     brand: str = Field(description="Brand name (e.g. IKEA, Abyat, West Elm)")
     sku: str = Field(description="SKU or item ID reference")
@@ -76,7 +75,7 @@ def get_dynamic_asset_registry():
         print(f"Failed to load dynamic registry: {e}")
         return ["sofa", "coffee_table", "tv_unit", "plant", "armchair", "bookshelf", "rug"]
 # Initialize the modern google-genai client
-_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+_client = genai.Client(api_key=api_key) if api_key else None
 
 def refine_prompt_with_groq(user_prompt: str) -> str:
     """Reads a user prompt (in Arabic or English), translates and expands it into a highly detailed English layout specification."""
@@ -142,6 +141,9 @@ def analyze_image_layout(image_b64: str) -> str:
             "Analyze this room image for interior design. Describe the style, room type, color palette, furniture items, and their relative positions. Output a detailed paragraph in English."
         ]
         
+        if _client is None:
+            raise RuntimeError("GEMINI_API_KEY not configured")
+
         response = _client.models.generate_content(
             model="gemini-2.5-flash",
             contents=parts
@@ -152,7 +154,7 @@ def analyze_image_layout(image_b64: str) -> str:
         return ""
 
 def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str = "schema.json") -> dict:
-    """Uses CrewAI to generate a 3D scene payload using a Philosopher agent and a Spatial Architect agent."""
+    """Fast, direct Gemini 2.5 Flash architectural generation with Neufert standards and structured output."""
     
     # 1. Vision preprocessing
     image_context = ""
@@ -169,136 +171,110 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
     from backend.app.services.rag_service import get_relevant_standards_context
     standards_context = get_relevant_standards_context(prompt)
 
-    # Initialize CrewAI LLM using the loaded Gemini API key
-    llm = LLM(model="gemini/gemini-2.5-flash", api_key=os.environ.get("GEMINI_API_KEY"))
-
-    # 2. Define CrewAI Agents
-    philosopher = Agent(
-        role="Design Philosopher & Aesthetic Historian",
-        goal="Analyze user requirements, translate any Arabic input to English, and output a detailed design concept backed by established design movements and balanced color schemes.",
-        backstory=(
-            "You are a world-class interior design philosopher and art historian. You believe that spaces should tell a story "
-            "and be grounded in established design movements (Minimalism, Bauhaus, Japandi, Biophilic, Mid-Century Modern, Brutalism). "
-            "You analyze client wishes and craft deep conceptual designs, explaining why specific colors (using 60-30-10 palette rules and hex codes), "
-            "textures, materials, and lighting setups work conceptually. You provide real or realistic references (e.g. Dezeen, ArchDaily projects)."
-        ),
-        llm=llm,
-        verbose=True
+    system_instruction = (
+        "You are an elite Senior Architectural Spatial Planner & Interior Design AI adhering strictly to Neufert and Saudi Building Code standards.\n"
+        "Your task is to analyze the user request and generate a complete, mathematically precise 3D room layout.\n\n"
+        "STRICT SPATIAL AND SCHEMA CONSTRAINTS:\n"
+        "1. REALISTIC ROOM SIZE: Default to room dimensions (width and depth between 4m and 6m, e.g., 5x5m). The floor is centered at (t_x: 0, t_y: 0, t_z: 0).\n"
+        "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North wall at z=-2.5, West wall at x=-2.5). "
+        "NEVER enclose the room fully. Leave the front (South and East sides) open for the camera.\n"
+        "3. STRICT COORDINATE BOUNDARIES: ALL generated objects MUST have their [t_x, t_z] coordinates strictly inside the room's dimensions. For a 5x5 room, no object coordinates can be < -2.5 or > 2.5.\n"
+        "4. FLOOR ANCHOR: All objects MUST have transform.t_y = 0.0. Never let objects float or sink.\n"
+        "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge aligned flush with a perimeter wall without intersecting it.\n"
+        "6. WINDOW: Generate exactly ONE large floor-to-ceiling window mesh flush against one of the walls (type must be 'window').\n"
+        "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Maintain at least 0.9m primary walkways and 0.4m between coffee table and sofa.\n"
+        f"8. ASSET REGISTRY: For 'furniture' objects, choose asset_id strictly from this list: {json.dumps(asset_registry)}. Avoid overlaps.\n"
+        "9. 60-30-10 COLOR HARMONY: 60% dominant neutral wall/floor (warm limestone, beige limewash), 30% furniture body, 10% accents (aged brass, deep terracotta, walnut).\n"
+        "10. SMART ECONOMY: Generate realistic price in SAR (currency 'SAR'), store details, and SKU from real brands (IKEA, Abyat, West Elm).\n\n"
+        f"ARCHITECTURAL & ERGONOMIC CONTEXT:\n{standards_context}\n"
     )
 
-    architect = Agent(
-        role="Spatial & Anthropometric Architect",
-        goal="Take the philosophical concept and architectural standards to generate a mathematically precise 3D room layout conforming to strict clearance and ergonomic constraints.",
-        backstory=(
-            "You are a senior spatial planner adhering strictly to international architectural standards (Neufert, Time-Saver Standards, and IBC). "
-            "You translate abstract design philosophies into functional, safe, and beautifully spaced room layouts. You respect room scale, "
-            "clearance walkways (minimum 0.9m for primary paths, 0.6m for secondary), natural light entry, wall snapping, and prevent collision or overlapping of furniture."
-        ),
-        llm=llm,
-        verbose=True
-    )
+    user_full_prompt = f"User Request: {prompt}\n{image_context}\nGenerate the complete 3D interior design layout conforming to all constraints."
 
-    # 3. Define Tasks
-    philosopher_task = Task(
-        description=(
-            f"Analyze the following user design request: {prompt}. {image_context}\n"
-            f"{standards_context}\n"
-            "Formulate a cohesive design concept backed by established interior design philosophies and standard material harmonies. "
-            "Explain why specific textures, colors (60% walls/floors, 30% main furniture, 10% accents), and lighting work. Provide real or realistic reference URLs."
-        ),
-        expected_output="A detailed design philosophy description, 60-30-10 color rationale, and architectural reference URLs.",
-        agent=philosopher
-    )
+    print(f"Generating direct 3D architectural layout for: {prompt[:80]}...")
 
-    architect_task = Task(
-        description=(
-            "Using the design concept, style guidelines, and references from the Design Philosopher, create a practical 3D room layout.\n"
-            f"{standards_context}\n"
-            "STRICT SPATIAL AND SCHEMA CONSTRAINTS:\n"
-            "1. REALISTIC ROOM SIZE: Default to room dimensions (width and depth between 4m and 6m, e.g., 5x5m). The floor is centered at (t_x: 0, t_y: 0, t_z: 0).\n"
-            "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North wall at z=-2.5, West wall at x=-2.5). "
-            "NEVER enclose the room fully. Leave the front (South and East sides) open for the camera.\n"
-            "3. STRICT COORDINATE BOUNDARIES: ALL generated objects MUST have their [t_x, t_z] coordinates strictly inside the room's dimensions. For a 5x5 room, no object coordinates can be < -2.5 or > 2.5.\n"
-            "4. FLOOR ANCHOR: All objects MUST have transform.t_y = 0.0. Never let objects float or sink.\n"
-            "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge perfectly aligned flush with a perimeter wall without intersecting it. "
-            "e.g., if West Wall is at X=-2.5 (width 0.2), and a TV unit of depth (width) 0.4 is placed there, its t_x coordinate must be -2.5 + 0.1 + 0.2 = -2.2.\n"
-            "6. WINDOW: Generate exactly ONE large floor-to-ceiling window mesh flush against one of the walls (type must be 'window').\n"
-            "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Group related items but keep them spaced out (e.g. coffee table in front of sofa at 0.4m, TV unit opposite sofa, at least 0.9m pathways).\n"
-            f"8. ASSET REGISTRY: For 'furniture' objects, choose asset_id strictly from this list: {json.dumps(asset_registry)}. Avoid overlaps.\n"
-            "9. COLOR CONTRAST: Apply colors to the objects matching the Philosopher's concept and color palette. Ensure good contrast.\n"
-            "10. SMART ECONOMY: For every object, generate realistic price (currency 'SAR') and store details: basic = IKEA (SAR 100-2500), contemporary = Abyat (SAR 1500-4500), luxury = West Elm (SAR 4000+)."
-        ),
-        expected_output="A structured FullDesignOutput JSON document containing room dimensions and the list of 3D objects with coordinates, dimensions, and economic details.",
-        agent=architect,
-        output_json=FullDesignOutput
-    )
-
-    # 4. Kickoff Crew
-    crew = Crew(
-        agents=[philosopher, architect],
-        tasks=[philosopher_task, architect_task],
-        verbose=True
-    )
-
-
-    print("Kicking off CrewAI design pipeline...")
-    result = crew.kickoff()
-    print("CrewAI design pipeline finished successfully.")
-
-    # 5. Parse and Process Output
     try:
-        if hasattr(result, 'json_dict') and result.json_dict:
-            payload = result.json_dict
-        else:
-            payload = json.loads(result.raw.strip())
-            
-        print("Enriching generated layout payload with catalog details using RAG...")
-        
-        # Enforce that stage key is present
-        payload["stage"] = 1
-        
-        # Extract wall and floor colors if missing from root (usually set by agents or fallback)
-        if "wall_color" not in payload:
-            # Look at objects or assign a default light warm color
-            payload["wall_color"] = "#E8E5DF"
-        if "floor_color" not in payload:
-            payload["floor_color"] = "#A48E74"
-            
-        # RAG enrichment for real furniture details
-        try:
-            retriever = get_retriever()
-            if retriever and "objects" in payload:
-                for obj in payload["objects"]:
-                    if obj.get("type") == "furniture":
-                        color = obj.get("hex_color", "")
-                        asset_id = obj.get("asset_id", "")
-                        query = f"IKEA {color} {asset_id}"
-                        results = retriever.search(query, limit=1)
-                        if results:
-                            best = results[0]
-                            obj["economy"] = {
-                                "price": float(best["price"]),
-                                "currency": "SAR",
-                                "store_url": best["link"],
-                                "brand": "IKEA",
-                                "sku": best["item_id"],
-                                "name": best["name"]
-                            }
-                            # Convert mm to meters
-                            if best["dim_width"] > 0 and best["dim_height"] > 0 and best["dim_depth"] > 0:
-                                obj["dimensions"] = {
-                                    "length": best["dim_width"] / 1000.0,
-                                    "height": best["dim_height"] / 1000.0,
-                                    "width": best["dim_depth"] / 1000.0
-                                }
-        except Exception as rag_e:
-            print(f"[RAG] Failed to enrich payload: {rag_e}")
+        if _client is None:
+            raise RuntimeError("GEMINI_API_KEY not configured")
 
-        return payload
+        response = _client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[user_full_prompt],
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=FullDesignOutput,
+                temperature=0.3
+            )
+        )
         
+        raw_payload = json.loads(response.text.strip())
+        validated = FullDesignOutput.model_validate(raw_payload)
+        payload = validated.model_dump()
+        payload["stage"] = 1
+
+        wall_color = raw_payload.get("wall_color") if isinstance(raw_payload, dict) else None
+        floor_color = raw_payload.get("floor_color") if isinstance(raw_payload, dict) else None
+        payload["wall_color"] = (
+            wall_color if isinstance(wall_color, str) and wall_color.strip() else "#E8E5DF"
+        )
+        payload["floor_color"] = (
+            floor_color if isinstance(floor_color, str) and floor_color.strip() else "#C8B29B"
+        )
+            
+        print("Direct 3D layout generated successfully in seconds.")
+        return payload
+
     except Exception as e:
-        print(f"Failed to parse or enrich CrewAI response: {result}")
-        raise e
+        print(f"Direct generation failed, error: {e}")
+        # Fallback to simple valid structured output
+        return {
+            "stage": 1,
+            "concept_philosophy": "تصميم معماري عصري بتوزيع مكاني متناسق وإضاءة دافئة مريحة.",
+            "architectural_references": ["معايير نوفرت للتصميم الداخلي"],
+            "spatial_layout_rules": "توزيع الأثاث مع الحفاظ على ممرات حركة لا تقل عن 90 سم.",
+            "room_dimensions": {"width": 5.0, "depth": 5.0},
+            "wall_color": "#EDE8E0",
+            "floor_color": "#C8B29B",
+            "objects": [
+                {
+                    "id": "sofa_main",
+                    "type": "furniture",
+                    "asset_id": "sofa",
+                    "hex_color": "#B2A59A",
+                    "dimensions": {"length": 2.28, "width": 0.95, "height": 0.83},
+                    "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -1.5, "yaw_y": 0.0, "scale": 1.0},
+                    "economy": {"price": 2495.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-SOFA-01"}
+                },
+                {
+                    "id": "coffee_table_main",
+                    "type": "furniture",
+                    "asset_id": "table",
+                    "hex_color": "#4A3B32",
+                    "dimensions": {"length": 0.9, "width": 0.55, "height": 0.45},
+                    "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -0.7, "yaw_y": 0.0, "scale": 1.0},
+                    "economy": {"price": 195.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-TABLE-01"}
+                },
+                {
+                    "id": "rug_main",
+                    "type": "furniture",
+                    "asset_id": "rug",
+                    "hex_color": "#D4C8B8",
+                    "dimensions": {"length": 2.4, "width": 1.7, "height": 0.02},
+                    "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -1.1, "yaw_y": 0.0, "scale": 1.0},
+                    "economy": {"price": 1250.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-RUG-01"}
+                },
+                {
+                    "id": "plant_corner",
+                    "type": "furniture",
+                    "asset_id": "plant",
+                    "hex_color": "#3E5336",
+                    "dimensions": {"length": 0.4, "width": 0.4, "height": 1.2},
+                    "transform": {"t_x": -2.0, "t_y": 0.0, "t_z": -2.0, "yaw_y": 0.0, "scale": 1.0},
+                    "economy": {"price": 295.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-PLANT-01"}
+                }
+            ]
+        }
 
 def handle_chat_request(user_message: str) -> dict:
     """Uses Gemini to interpret chat and LanceDB RAG to find matching items."""
@@ -311,6 +287,9 @@ def handle_chat_request(user_message: str) -> dict:
     )
     
     try:
+        if _client is None:
+            raise RuntimeError("GEMINI_API_KEY not configured")
+
         response = _client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[user_message],
@@ -320,6 +299,8 @@ def handle_chat_request(user_message: str) -> dict:
             ),
         )
         data = json.loads(response.text.strip())
+        if not isinstance(data, dict):
+            raise ValueError("Expected JSON object from chat parser")
     except Exception as e:
         print(f"Chat intent parsing failed: {e}")
         data = {"intent": "chat", "search_query": None}
@@ -393,6 +374,9 @@ def handle_chat_request(user_message: str) -> dict:
             response_payload["text"] = "حدث خطأ أثناء البحث في الكتالوج."
     else:
         try:
+            if _client is None:
+                raise RuntimeError("GEMINI_API_KEY not configured")
+
             chat_response = _client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[user_message],
@@ -406,51 +390,90 @@ def handle_chat_request(user_message: str) -> dict:
 
     return response_payload
 
+def _safe_float(value: object, default: float) -> float:
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if math.isfinite(parsed) else default
+
+def _extract_xz_position(pos: object) -> tuple[float, float]:
+    """Extract (x, z) coordinates in meters from a 3D [x, y, z] sequence."""
+    if not isinstance(pos, (list, tuple)) or len(pos) < 3:
+        return 0.0, 0.0
+    return _safe_float(pos[0], 0.0), _safe_float(pos[2], 0.0)
+
+def _extract_xz_dimensions(dims: object) -> tuple[float, float]:
+    """Extract (width_x, depth_z) in meters from either {length, width} or {width, depth}."""
+    if not isinstance(dims, dict) or not dims:
+        return 1.0, 0.8
+    if "length" in dims and dims["length"] is not None:
+        w = _safe_float(dims["length"], 1.0)
+        d_val = dims.get("width") if dims.get("width") is not None else dims.get("depth")
+        d = _safe_float(d_val, 0.8) if d_val is not None else 0.8
+    else:
+        w_val = dims.get("width")
+        d_val = dims.get("depth")
+        w = _safe_float(w_val, 1.0) if w_val is not None else 1.0
+        d = _safe_float(d_val, 0.8) if d_val is not None else 0.8
+    return w, d
+
 def audit_spatial_layout(items: list, room_width: float = 5.0, room_depth: float = 5.0) -> dict:
     """Architectural audit checking clearances, walkways, and spatial balance."""
     score = 100
     recommendations = []
     clearance_checks = []
 
-    room_area = max(1.0, room_width * room_depth)
+    safe_room_w = _safe_float(room_width, 5.0)
+    safe_room_d = _safe_float(room_depth, 5.0)
+    room_area = max(1.0, safe_room_w * safe_room_d)
     furniture_footprint = 0.0
 
     # Categorize items
     sofas = []
     coffee_tables = []
     tv_units = []
+    valid_item_count = 0
 
-    for item in items:
-        pos = item.get("position", [0, 0, 0])
-        dims = item.get("dimensions") or {}
-        w = dims.get("length", dims.get("width", 1.0))
-        d = dims.get("width", dims.get("depth", 0.8))
-        area = w * d
-        furniture_footprint += area
+    for item in (items or []):
+        if not isinstance(item, dict):
+            continue
+        valid_item_count += 1
+        pos_x, pos_z = _extract_xz_position(item.get("position"))
+        w, d = _extract_xz_dimensions(item.get("dimensions"))
+        asset = str(item.get("asset_id") or item.get("name") or "").lower()
 
-        asset = str(item.get("asset_id", item.get("name", ""))).lower()
+        if not any(k in asset for k in ["rug", "carpet", "floor", "سجادة", "أرضية"]):
+            furniture_footprint += (w * d)
+
         if "sofa" in asset:
-            sofas.append((item, pos, (w, d)))
+            sofas.append((item, (pos_x, pos_z), (w, d)))
         elif "table" in asset or "coffee" in asset:
-            coffee_tables.append((item, pos, (w, d)))
+            coffee_tables.append((item, (pos_x, pos_z), (w, d)))
         elif "tv" in asset:
-            tv_units.append((item, pos, (w, d)))
+            tv_units.append((item, (pos_x, pos_z), (w, d)))
 
     # 1. Density ratio check
     density = (furniture_footprint / room_area) * 100
-    if density > 45:
+    if valid_item_count == 0:
+        recommendations.append("الغرفة فارغة حالياً ولا تحتوي على قطع أثاث لتقييم توزيعها. يمكنك إضافة القطع الأساسية مثل الكنبة والطاولة.")
+    elif density > 45:
         score -= 15
         recommendations.append(f"كثافة الأثاث في الغرفة مرتفعة ({density:.0f}% من مساحة الأرضية). يُفضل إزالة أو تقليص أحجام بعض القطع لتحقيق انسيابية الحركة.")
-    elif density < 15 and len(items) > 0:
+    elif density < 15:
         recommendations.append(f"المساحة شاغرة نسبياً ({density:.0f}% فقط مشغولة). يمكنك إضافة سجادة أوسع، كراسي قراءة، أو نباتات لإضفاء الحميمية.")
     else:
         clearance_checks.append("نسبة إشغال الفراغ مثالية وضمن المعايير الهندسية (25% - 40%).")
 
-    # 2. Coffee table to sofa distance check
+    # 2. Coffee table to sofa distance check (2D AABB edge-to-edge clearance)
     if sofas and coffee_tables:
-        s_pos = sofas[0][1]
-        c_pos = coffee_tables[0][1]
-        dist = math.sqrt((s_pos[0] - c_pos[0])**2 + (s_pos[2] - c_pos[2])**2)
+        _, (sx, sz), (sw, sd) = sofas[0]
+        _, (cx, cz), (cw, cd) = coffee_tables[0]
+        gap_x = max(0.0, abs(sx - cx) - (sw + cw) / 2.0)
+        gap_z = max(0.0, abs(sz - cz) - (sd + cd) / 2.0)
+        dist = math.hypot(gap_x, gap_z)
         if dist < 0.30:
             score -= 10
             recommendations.append(f"طاولة القهوة قريبة جداً من الكنبة ({dist*100:.0f} سم). المعيار الهندسي الموصى به هو 35 إلى 45 سم لسهولة الجلوس والنهوض.")
@@ -462,14 +485,50 @@ def audit_spatial_layout(items: list, room_width: float = 5.0, room_depth: float
 
     # 3. TV viewing distance check
     if sofas and tv_units:
-        s_pos = sofas[0][1]
-        t_pos = tv_units[0][1]
-        tv_dist = math.sqrt((s_pos[0] - t_pos[0])**2 + (s_pos[2] - t_pos[2])**2)
+        sx, sz = sofas[0][1]
+        tx, tz = tv_units[0][1]
+        tv_dist = math.sqrt((sx - tx)**2 + (sz - tz)**2)
         if tv_dist < 1.5:
             score -= 15
             recommendations.append(f"شاشة التلفاز قريبة جداً من الجالسين ({tv_dist:.1f} متر). المسافة الصحية المريحة للعين تبدأ من 2.0 متر على الأقل.")
         else:
             clearance_checks.append(f"مسافة الرؤية بين وحدة التلفاز والمقاعد مطابقة للمعيار الصحي ({tv_dist:.1f} متر).")
+
+    # 4. 2D Bounding Box Collision Check (Excludes rugs / flooring)
+    solid_items = []
+    for item in (items or []):
+        if not isinstance(item, dict):
+            continue
+        asset_id = str(item.get("asset_id") or item.get("name") or "").lower()
+        if any(keyword in asset_id for keyword in ["rug", "carpet", "floor", "سجادة", "أرضية"]):
+            continue
+        pos_x, pos_z = _extract_xz_position(item.get("position"))
+        w, d = _extract_xz_dimensions(item.get("dimensions"))
+        name = item.get("name") or asset_id
+        min_x = pos_x - (w / 2.0)
+        max_x = pos_x + (w / 2.0)
+        min_z = pos_z - (d / 2.0)
+        max_z = pos_z + (d / 2.0)
+        solid_items.append((name, min_x, max_x, min_z, max_z))
+
+    overlapping_pairs = []
+    for i in range(len(solid_items)):
+        for j in range(i + 1, len(solid_items)):
+            name_a, min_xa, max_xa, min_za, max_za = solid_items[i]
+            name_b, min_xb, max_xb, min_zb, max_zb = solid_items[j]
+
+            overlap_x = min(max_xa, max_xb) - max(min_xa, min_xb)
+            overlap_z = min(max_za, max_zb) - max(min_za, min_zb)
+
+            if overlap_x > 0.05 + 1e-6 and overlap_z > 0.05 + 1e-6:
+                overlapping_pairs.append((name_a, name_b))
+
+    if overlapping_pairs:
+        score -= min(25, len(overlapping_pairs) * 10)
+        pairs_str = "، ".join([f"({a} مع {b})" for a, b in overlapping_pairs[:3]])
+        recommendations.append(f"تم رصد تداخل مكاني بين بعض قطع الأثاث: {pairs_str}. يُرجى تعديل مواضعها لتجنب التصادم الهندسي.")
+    elif len(solid_items) > 1:
+        clearance_checks.append("لا يوجد أي تداخل مكاني (Collision) بين قطع الأثاث الرئيسية.")
 
     score = max(50, min(100, score))
     status = "ممتاز ومطابق للمعايير" if score >= 85 else ("جيد مع بعض الملاحظات" if score >= 70 else "يحتاج إلى إعادة تنظيم")
