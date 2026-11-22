@@ -158,13 +158,23 @@ def embed_text_384(text: str, dim: int = EMBEDDING_DIM) -> List[float]:
     return vec.tolist()
 
 
+def _get_table_names(db: Any) -> List[str]:
+    """Return LanceDB table names using list_tables() when available to avoid deprecation warnings."""
+    if hasattr(db, "list_tables"):
+        res = db.list_tables()
+        if hasattr(res, "tables"):
+            return list(res.tables)
+        return list(res)
+    return list(db.table_names())
+
+
 class RagRetriever:
     def __init__(self, timeout_s: float = SEARCH_TIMEOUT_S):
         self.vector_dim = EMBEDDING_DIM
         self.timeout_s = timeout_s
         try:
             self.db = lancedb.connect(str(LANCEDB_DIR))
-            if TABLE_NAME in self.db.table_names():
+            if TABLE_NAME in _get_table_names(self.db):
                 self.table = self.db.open_table(TABLE_NAME)
                 try:
                     vec_field = self.table.schema.field("vector")
@@ -287,7 +297,7 @@ def safe_float(value: Any, default: float = 0.0) -> float:
 def get_ikea_catalog_data(limit: int = 200) -> Dict[str, Any]:
     try:
         db = lancedb.connect(str(LANCEDB_DIR))
-        if "ikea_catalog" not in db.table_names():
+        if "ikea_catalog" not in _get_table_names(db):
             return {"items": [], "assets": [], "total": 0}
             
         table = db.open_table("ikea_catalog")
@@ -327,7 +337,7 @@ def find_budget_alternatives(current_item_id: str, budget_left: float) -> List[D
     """Finds cheaper or budget-fitting furniture alternatives from LanceDB."""
     try:
         db = lancedb.connect(str(LANCEDB_DIR))
-        if "ikea_catalog" not in db.table_names():
+        if "ikea_catalog" not in _get_table_names(db):
             return []
 
         table = db.open_table("ikea_catalog")
@@ -414,7 +424,7 @@ def get_all_standards_catalog() -> List[Dict[str, Any]]:
 
     try:
         db = lancedb.connect(str(LANCEDB_DIR))
-        if "architectural_standards" in db.table_names():
+        if "architectural_standards" in _get_table_names(db):
             import json
             tbl = db.open_table("architectural_standards")
             rows = tbl.search().limit(20).to_arrow().to_pylist()

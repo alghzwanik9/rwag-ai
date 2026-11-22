@@ -16,6 +16,7 @@ from backend.app.schemas import (
     SpatialAuditRequest,
 )
 from backend.app.services.rag_service import (
+    _get_table_names,
     get_ikea_catalog_data,
     find_budget_alternatives,
     get_all_standards_catalog
@@ -317,7 +318,7 @@ async def db_check():
         from backend.app.config import LANCEDB_DIR
         import lancedb
         db = lancedb.connect(str(LANCEDB_DIR))
-        tables = db.table_names()
+        tables = _get_table_names(db)
         table_stats = {}
         for t in tables:
             tbl = db.open_table(t)

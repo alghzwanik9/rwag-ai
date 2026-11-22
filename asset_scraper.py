@@ -128,6 +128,16 @@ class AssetRecord:
             ],
         }
 
+def _get_table_names(db) -> list[str]:
+    """Return LanceDB table names using list_tables() when available to avoid deprecation warnings."""
+    if hasattr(db, "list_tables"):
+        res = db.list_tables()
+        if hasattr(res, "tables"):
+            return list(res.tables)
+        return list(res)
+    return list(db.table_names())
+
+
 # ── LanceDB Store ──────────────────────────────────────────────────────────────
 
 class LanceDBAssetStore:
@@ -205,7 +215,7 @@ class LanceDBAssetStore:
 
     def clear(self) -> None:
         """Drop and recreate the furniture_assets table for a clean re-seed."""
-        if _TABLE_NAME in self._db.table_names():
+        if _TABLE_NAME in _get_table_names(self._db):
             self._db.drop_table(_TABLE_NAME)
         empty = pa.table({name: pa.array([], type=field.type)
                           for name, field in zip(ASSET_SCHEMA.names, ASSET_SCHEMA)})

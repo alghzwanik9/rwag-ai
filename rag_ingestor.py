@@ -50,6 +50,16 @@ def safe_str(val):
     return str(val).strip()
 
 
+def _get_table_names(db) -> list[str]:
+    """Return LanceDB table names using list_tables() when available to avoid deprecation warnings."""
+    if hasattr(db, "list_tables"):
+        res = db.list_tables()
+        if hasattr(res, "tables"):
+            return list(res.tables)
+        return list(res)
+    return list(db.table_names())
+
+
 def main():
     if not CSV_PATH.exists():
         logger.error(f"CSV not found at {CSV_PATH}")
@@ -81,7 +91,7 @@ def main():
     logger.info(f"Loaded and embedded {len(records)} records from CSV (dim={EMBEDDING_DIM}).")
 
     db = lancedb.connect(str(DB_PATH))
-    if TABLE_NAME in db.table_names():
+    if TABLE_NAME in _get_table_names(db):
         db.drop_table(TABLE_NAME)
 
     table = db.create_table(TABLE_NAME, schema=SCHEMA)

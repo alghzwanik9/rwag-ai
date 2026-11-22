@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6,7 +8,16 @@ from backend.app.config import OUTPUTS_DIR, ASSETS_DIR, CORS_ORIGINS
 from backend.app.api.routes import router
 from backend.app.services.rag_service import get_retriever
 
-app = FastAPI(title="Atelier AI Orchestrator")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Initializing global RAG Retriever...")
+    get_retriever()
+    print("RAG Retriever initialized successfully.")
+    yield
+
+
+app = FastAPI(title="Atelier AI Orchestrator", lifespan=lifespan)
 
 # Static mounts
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
@@ -23,12 +34,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def startup_event():
-    print("Initializing global RAG Retriever...")
-    get_retriever()
-    print("RAG Retriever initialized successfully.")
 
 # Include API routes
 app.include_router(router)
