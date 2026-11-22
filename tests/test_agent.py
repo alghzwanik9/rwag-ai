@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from google.genai import _transformers
+from pydantic import ValidationError
 
 import ai_agent
 from ai_agent import (
@@ -53,6 +54,9 @@ def test_generate_layout(monkeypatch):
         concept_philosophy="Modern warm minimalism with balanced circulation.",
         architectural_references=["Neufert Architects' Data"],
         spatial_layout_rules="Maintain 0.9m walkways and 0.4m coffee table clearance.",
+        wall_color="#F2ECE4",
+        floor_color="#C8B29B",
+        ambient_mode="morning",
         room_dimensions=RoomDimensions(width=5.0, depth=5.0),
         objects=[
             Object3D(
@@ -82,8 +86,9 @@ def test_generate_layout(monkeypatch):
 
     mock_client.models.generate_content.assert_called_once()
     assert res["stage"] == 1
-    assert res["wall_color"] == "#E8E5DF"
+    assert res["wall_color"] == "#F2ECE4"
     assert res["floor_color"] == "#C8B29B"
+    assert res["ambient_mode"] == "morning"
     assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
     assert len(res["objects"]) == 1
     assert res["objects"][0]["asset_id"] == "sofa"
@@ -95,22 +100,26 @@ def test_generate_layout_fallback_on_api_error(monkeypatch):
     mock_client.models.generate_content.side_effect = RuntimeError("API unavailable")
     monkeypatch.setattr(ai_agent, "_client", mock_client)
 
-    res = generate_room_layout("تصميم غرفة معيشة مع كنبة زرقاء")
+    with pytest.raises(RuntimeError, match="API unavailable"):
+        generate_room_layout("تصميم غرفة معيشة مع كنبة زرقاء")
+    assert mock_client.models.generate_content.call_count == 1
 
-    assert res["stage"] == 1
-    assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
-    assert len(res["objects"]) >= 4
-    assert any(obj["asset_id"] == "coffee_table" for obj in res["objects"])
+    mock_429_client = MagicMock()
+    mock_429_client.models.generate_content.side_effect = RuntimeError(
+        "429 RESOURCE_EXHAUSTED: Quota exceeded"
+    )
+    monkeypatch.setattr(ai_agent, "_client", mock_429_client)
+
+    with pytest.raises(RuntimeError, match="429"):
+        generate_room_layout("تصميم غرفة معيشة مع كنبة زرقاء")
+    assert mock_429_client.models.generate_content.call_count == 1
 
 
 def test_generate_layout_fallback_when_client_unconfigured(monkeypatch):
     monkeypatch.setattr(ai_agent, "_client", None)
 
-    res = generate_room_layout("تصميم غرفة معيشة مع كنبة زرقاء")
-
-    assert res["stage"] == 1
-    assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
-    assert len(res["objects"]) >= 4
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        generate_room_layout("تصميم غرفة معيشة مع كنبة زرقاء")
 
 
 def test_audit_room_layout_no_collision():
@@ -162,13 +171,8 @@ def test_generate_layout_fallback_on_schema_mismatch(monkeypatch, bad_json):
     mock_client.models.generate_content.return_value = SimpleNamespace(text=bad_json)
     monkeypatch.setattr(ai_agent, "_client", mock_client)
 
-    res = generate_room_layout("تصميم غرفة معيشة")
-
-    assert res["stage"] == 1
-    assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
-    assert isinstance(res["objects"], list)
-    assert len(res["objects"]) >= 4
-    assert any(obj["asset_id"] == "coffee_table" for obj in res["objects"])
+    with pytest.raises(ValidationError):
+        generate_room_layout("تصميم غرفة معيشة")
 
 
 def test_handle_chat_request_non_dict_json_fallback(monkeypatch):

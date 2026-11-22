@@ -1,44 +1,225 @@
-import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import hashlib
+import logging
+import re
 from typing import List, Dict, Any
+
 import lancedb
-from google import genai
+import numpy as np
+
 from backend.app.config import LANCEDB_DIR
 
+logger = logging.getLogger(__name__)
+
 TABLE_NAME = "ikea_catalog"
+EMBEDDING_DIM = 384
+SEARCH_TIMEOUT_S = 10.0
 FALLBACK_GLB_URL = "/assets/armchair_wood.glb"
 
+_AR_TO_EN_SYNONYMS: Dict[str, List[str]] = {
+    "أريكة": ["sofa", "sofas"],
+    "اريكة": ["sofa", "sofas"],
+    "كنبة": ["sofa", "sofas"],
+    "كنب": ["sofa", "sofas"],
+    "صوفا": ["sofa", "sofas"],
+    "رمادي": ["grey", "gray"],
+    "رمادية": ["grey", "gray"],
+    "رصاصي": ["grey", "gray"],
+    "أبيض": ["white"],
+    "ابيض": ["white"],
+    "بيضاء": ["white"],
+    "أسود": ["black"],
+    "اسود": ["black"],
+    "سوداء": ["black"],
+    "أزرق": ["blue"],
+    "ازرق": ["blue"],
+    "زرقاء": ["blue"],
+    "أخضر": ["green"],
+    "اخضر": ["green"],
+    "خضراء": ["green"],
+    "أحمر": ["red"],
+    "احمر": ["red"],
+    "حمراء": ["red"],
+    "بيج": ["beige"],
+    "بني": ["brown"],
+    "بنية": ["brown"],
+    "خشب": ["wood", "oak", "birch", "pine"],
+    "خشبي": ["wood", "oak", "birch"],
+    "خشبية": ["wood", "oak", "birch"],
+    "كرسي": ["chair", "armchair"],
+    "كراسي": ["chair", "chairs"],
+    "مقعد": ["chair", "seat"],
+    "بذراعين": ["armchair"],
+    "طعام": ["dining"],
+    "سفرة": ["dining"],
+    "طاولة": ["table"],
+    "طاولات": ["table", "tables"],
+    "قهوة": ["coffee"],
+    "جانبية": ["side"],
+    "سرير": ["bed", "beds"],
+    "نوم": ["bed", "bedroom"],
+    "مكتب": ["desk", "office"],
+    "عمل": ["desk", "office"],
+    "مكتبة": ["bookcase", "bookshelf", "shelf"],
+    "رف": ["shelf", "shelving"],
+    "رفوف": ["shelf", "shelving"],
+    "كتب": ["bookcase"],
+    "خزانة": ["cabinet", "wardrobe", "storage"],
+    "دولاب": ["wardrobe", "cabinet"],
+    "أدراج": ["drawer", "chest"],
+    "ادراج": ["drawer", "chest"],
+    "تلفاز": ["tv", "bench"],
+    "تلفزيون": ["tv", "bench"],
+    "سجادة": ["rug"],
+    "سجاد": ["rug"],
+    "نبات": ["plant"],
+    "مزهرية": ["vase"],
+    "زهر": ["flower", "vase"],
+    "حديقة": ["outdoor", "garden"],
+    "خارجي": ["outdoor"],
+    "خارجية": ["outdoor"],
+    "مصباح": ["lamp"],
+    "إضاءة": ["lamp"],
+    "اضاءة": ["lamp"],
+    "جلد": ["leather"],
+    "قماش": ["fabric"],
+    "زاوية": ["corner"],
+    "دائري": ["round"],
+    "دائرية": ["round"],
+    "مستديرة": ["round"],
+    "بار": ["bar", "stool"],
+    "مرتفع": ["high", "bar"],
+}
+
+_FURNITURE_NOUNS = {
+    "sofa", "sofas", "couch", "chair", "chairs", "armchair", "armchairs", "stool",
+    "table", "tables", "coffee", "dining", "desk", "desks", "bed", "beds",
+    "bookcase", "bookcases", "bookshelf", "shelf", "shelving", "cabinet", "cabinets",
+    "wardrobe", "wardrobes", "drawer", "drawers", "chest", "tv", "bench", "rug",
+    "outdoor", "lamp", "vase", "plant",
+}
+
+
+def extract_slug_from_link(link: str) -> str:
+    """Extract human-readable product keywords (including color/material) from an IKEA product URL."""
+    if not link:
+        return ""
+    match = re.search(r"/p/([^/]+)/?", link)
+    if not match:
+        return ""
+    slug = re.sub(r"-[0-9a-z]*\d+[0-9a-z]*$", "", match.group(1).lower())
+    return slug.replace("-", " ")
+
+
+def embed_text_384(text: str, dim: int = EMBEDDING_DIM) -> List[float]:
+    """Deterministic, offline-safe bilingual (AR/EN) 384-dim unit vector embedder."""
+    tokens = re.findall(r"[a-z0-9\u0600-\u06FF]+", (text or "").lower())
+    en_tokens: List[str] = []
+    for tok in tokens:
+        if tok.isascii():
+            en_tokens.append(tok)
+            if tok == "gray":
+                en_tokens.append("grey")
+            elif tok == "grey":
+                en_tokens.append("gray")
+        else:
+            mapped = _AR_TO_EN_SYNONYMS.get(tok)
+            if not mapped and tok.startswith("ال") and len(tok) > 3:
+                mapped = _AR_TO_EN_SYNONYMS.get(tok[2:])
+            if mapped:
+                en_tokens.extend(mapped)
+            else:
+                en_tokens.append(tok)
+
+    vec = np.zeros(dim, dtype=np.float32)
+
+    def _add(feat: str, weight: float) -> None:
+        digest = hashlib.blake2b(feat.encode("utf-8"), digest_size=8).digest()
+        val = int.from_bytes(digest, "little")
+        idx = val % dim
+        sign = 1.0 if ((val >> 32) & 1) == 0 else -1.0
+        vec[idx] += sign * weight
+
+    seen = set()
+    for tok in en_tokens:
+        if len(tok) < 2:
+            continue
+        base_w = 3.5 if tok in _FURNITURE_NOUNS else 2.0
+        weight = base_w if tok not in seen else base_w * 0.35
+        seen.add(tok)
+        _add(f"w:{tok}", weight)
+        if tok.isascii() and len(tok) >= 4:
+            for i in range(len(tok) - 2):
+                _add(f"c3:{tok[i:i + 3]}", 0.15)
+
+    norm = float(np.linalg.norm(vec))
+    if norm > 0.0:
+        vec /= norm
+    return vec.tolist()
+
+
 class RagRetriever:
-    def __init__(self):
+    def __init__(self, timeout_s: float = SEARCH_TIMEOUT_S):
+        self.vector_dim = EMBEDDING_DIM
+        self.timeout_s = timeout_s
         try:
             self.db = lancedb.connect(str(LANCEDB_DIR))
             if TABLE_NAME in self.db.table_names():
                 self.table = self.db.open_table(TABLE_NAME)
+                try:
+                    vec_field = self.table.schema.field("vector")
+                    if hasattr(vec_field.type, "list_size") and vec_field.type.list_size:
+                        self.vector_dim = int(vec_field.type.list_size)
+                except Exception as schema_err:
+                    logger.warning("Could not inspect vector dimension on '%s': %s", TABLE_NAME, schema_err)
             else:
+                logger.warning("LanceDB table '%s' not found in %s", TABLE_NAME, LANCEDB_DIR)
                 self.table = None
         except Exception as e:
-            print(f"LanceDB connection warning: {e}")
+            logger.error("LanceDB connection failed for %s: %s", LANCEDB_DIR, e, exc_info=True)
             self.table = None
 
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
-        else:
-            self.client = None
+    def embed_query(self, query: str) -> List[float]:
+        """Embed a search query into the exact vector dimension expected by the LanceDB table."""
+        return embed_text_384(query, dim=self.vector_dim)
 
     def search(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
         """Searches the LanceDB index for the closest IKEA items matching the query."""
-        if not self.table or not self.client:
+        if not self.table:
+            logger.warning("RAG search skipped: LanceDB table '%s' is unavailable.", TABLE_NAME)
+            return []
+        if not query or not str(query).strip():
+            logger.warning("RAG search skipped: empty query.")
             return []
         try:
-            response = self.client.models.embed_content(
-                model='text-embedding-004',
-                contents=query
-            )
-            query_vector = response.embeddings[0].values
-            results = self.table.search(query_vector).limit(limit).to_list()
+            query_vector = self.embed_query(query)
+            if len(query_vector) != self.vector_dim:
+                logger.error(
+                    "RAG vector dimension mismatch: query_vector=%d != table_dim=%d",
+                    len(query_vector),
+                    self.vector_dim,
+                )
+                return []
+
+            def _run_query() -> List[Dict[str, Any]]:
+                return self.table.search(query_vector).limit(limit).to_list()
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(_run_query)
+                results = future.result(timeout=self.timeout_s)
+
+            for item in results:
+                if not item.get("model_url"):
+                    item["model_url"] = resolve_ikea_model_url(
+                        str(item.get("name", "")),
+                        str(item.get("category", "")),
+                    )
             return results
+        except FuturesTimeoutError:
+            logger.error("RAG search timed out after %.1fs for query=%r", self.timeout_s, query)
+            return []
         except Exception as e:
-            print(f"RAG search error: {e}")
+            logger.error("RAG search failed for query=%r: %s", query, e, exc_info=True)
             return []
 
 _global_retriever = None

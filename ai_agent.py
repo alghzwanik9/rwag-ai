@@ -2,24 +2,33 @@ import os
 import sys
 import json
 import math
+import time
+import logging
 
 # Fix for Windows console encoding
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
+import httpx
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Literal
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Set environment variables
 api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
 os.environ["GOOGLE_API_KEY"] = api_key
 os.environ["GEMINI_API_KEY"] = api_key
+
+GEMINI_TIMEOUT_MS = 30000
+GEMINI_MAX_ATTEMPTS = 2
 
 
 # ── Pydantic Output Models ────────────────────────────────────────────────────
@@ -81,6 +90,11 @@ class FullDesignOutput(BaseModel):
     concept_philosophy: str = Field(description="A detailed design philosophy concept, rationale, colors, and textures explanation.")
     architectural_references: List[str] = Field(description="List of architectural reference URLs or project names (e.g., Dezeen, ArchDaily).")
     spatial_layout_rules: str = Field(description="Strict technical layout rules, clearances, and circulation details.")
+    wall_color: str = Field(description="Dominant wall paint hex color code (e.g., #E8E5DF)")
+    floor_color: str = Field(description="Dominant floor finish hex color code (e.g., #C8B29B)")
+    ambient_mode: Literal["morning", "rainy", "midnight"] = Field(
+        description="Ambient lighting and weather mood matching the design: 'morning', 'rainy', or 'midnight'"
+    )
     room_dimensions: RoomDimensions
     objects: List[Object3D]
 
@@ -95,8 +109,87 @@ def get_dynamic_asset_registry():
     except Exception as e:
         print(f"Failed to load dynamic registry: {e}")
         return list(CANONICAL_ASSET_IDS)
+
 # Initialize the modern google-genai client
 _client = genai.Client(api_key=api_key) if api_key else None
+
+
+def _is_non_retryable_gemini_error(exc: Exception) -> bool:
+    """Returns True for quota/429, auth, or 4xx client errors that must never be retried."""
+    if isinstance(exc, genai_errors.ClientError):
+        return True
+    msg = str(exc).lower()
+    non_retryable_tokens = (
+        "429",
+        "resource_exhausted",
+        "quota",
+        "rate limit",
+        "api_key_invalid",
+        "api key",
+        "gemini_api_key",
+        "unauthenticated",
+        "permission_denied",
+        "invalid_argument",
+    )
+    return any(tok in msg for tok in non_retryable_tokens)
+
+
+def _is_transient_gemini_error(exc: Exception) -> bool:
+    """Returns True ONLY for transient 5xx or transport/timeout failures."""
+    if _is_non_retryable_gemini_error(exc):
+        return False
+    if isinstance(exc, (genai_errors.ServerError, TimeoutError, ConnectionError, httpx.TimeoutException, httpx.TransportError)):
+        return True
+    status_code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    if isinstance(status_code, int) and 500 <= status_code < 600:
+        return True
+    msg = str(exc)
+    return any(code in msg for code in ("500", "502", "503", "504", "DEADLINE_EXCEEDED"))
+
+
+def _call_gemini_with_retry(
+    model: str,
+    contents,
+    config: types.GenerateContentConfig | None = None,
+    *,
+    timeout_ms: int = GEMINI_TIMEOUT_MS,
+    max_attempts: int = GEMINI_MAX_ATTEMPTS,
+):
+    """Calls Gemini generate_content with a bounded timeout and limited retry for transient 5xx/network errors."""
+    if _client is None:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+
+    if config is None:
+        effective_config = types.GenerateContentConfig(
+            http_options=types.HttpOptions(timeout=timeout_ms)
+        )
+    elif config.http_options is None:
+        effective_config = config.model_copy(
+            update={"http_options": types.HttpOptions(timeout=timeout_ms)}
+        )
+    else:
+        effective_config = config
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return _client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=effective_config,
+            )
+        except Exception as exc:
+            if attempt < max_attempts and _is_transient_gemini_error(exc):
+                delay_s = 1.0 * (2 ** (attempt - 1))
+                logger.warning(
+                    "Transient Gemini error on attempt %d/%d (%s); retrying in %.1fs...",
+                    attempt,
+                    max_attempts,
+                    exc,
+                    delay_s,
+                )
+                time.sleep(delay_s)
+                continue
+            raise
 
 def refine_prompt_with_groq(user_prompt: str) -> str:
     """Reads a user prompt (in Arabic or English), translates and expands it into a highly detailed English layout specification."""
@@ -155,39 +248,37 @@ def analyze_image_layout(image_b64: str) -> str:
         else:
             mime_type = "image/jpeg"
             data = image_b64
-        
+
         image_bytes = base64.b64decode(data)
         parts = [
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             "Analyze this room image for interior design. Describe the style, room type, color palette, furniture items, and their relative positions. Output a detailed paragraph in English."
         ]
-        
-        if _client is None:
-            raise RuntimeError("GEMINI_API_KEY not configured")
 
-        response = _client.models.generate_content(
+        response = _call_gemini_with_retry(
             model="gemini-2.5-flash",
-            contents=parts
+            contents=parts,
         )
         return response.text.strip()
     except Exception as e:
-        print(f"Vision analysis failed: {e}")
+        if _is_non_retryable_gemini_error(e):
+            raise
+        logger.warning("Vision analysis failed: %s", e)
         return ""
 
 def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str = "schema.json") -> dict:
     """Fast, direct Gemini 2.5 Flash architectural generation with Neufert standards and structured output."""
-    
+
     # 1. Vision preprocessing
     image_context = ""
     if image_b64:
-        print("Analyzing image context using vision model...")
+        logger.info("Analyzing image context using vision model...")
         analyzed_desc = analyze_image_layout(image_b64)
         if analyzed_desc:
             image_context = f"\nAdditional Room Image Context:\n{analyzed_desc}\n"
-            print(f"Vision context gathered: {analyzed_desc[:100]}...")
 
     asset_registry = get_dynamic_asset_registry()
-    
+
     # Retrieve relevant architectural standards context
     from backend.app.services.rag_service import get_relevant_standards_context
     standards_context = get_relevant_standards_context(prompt)
@@ -197,105 +288,54 @@ def generate_layout(prompt: str, image_b64: str | None = None, schema_path: str 
         "Your task is to analyze the user request and generate a complete, mathematically precise 3D room layout.\n\n"
         "STRICT SPATIAL AND SCHEMA CONSTRAINTS:\n"
         "1. REALISTIC ROOM SIZE: Default to room dimensions (width and depth between 4m and 6m, e.g., 5x5m). The floor is centered at (t_x: 0, t_y: 0, t_z: 0).\n"
-        "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North wall at z=-2.5, West wall at x=-2.5). "
+        "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North/back wall at z=-depth/2, West/left wall at x=-width/2). "
         "NEVER enclose the room fully. Leave the front (South and East sides) open for the camera.\n"
         "3. STRICT COORDINATE BOUNDARIES: ALL generated objects MUST have their [t_x, t_z] coordinates strictly inside the room's dimensions. For a 5x5 room, no object coordinates can be < -2.5 or > 2.5.\n"
-        "4. FLOOR ANCHOR: All objects MUST have transform.t_y = 0.0. Never let objects float or sink.\n"
+        "4. FLOOR ANCHOR: All furniture objects MUST have transform.t_y = 0.0. Never let furniture float or sink.\n"
         "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge aligned flush with a perimeter wall without intersecting it.\n"
-        "6. WINDOW: Generate exactly ONE large floor-to-ceiling window mesh flush against one of the walls (type must be 'window').\n"
+        "6. WINDOW: Generate at least ONE architectural window object (type='window', asset_id='window') flush against either the back North wall (z = -depth/2, yaw_y = 0) or the left West wall (x = -width/2, yaw_y = 90) with realistic dimensions (e.g., length 1.6-2.4m, width 0.15m, height 1.8-2.2m) and transform position.\n"
         "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Maintain at least 0.9m primary walkways and 0.4m between coffee table and sofa.\n"
         f"8. ASSET REGISTRY: For 'furniture' objects, choose asset_id strictly from this list: {json.dumps(asset_registry)}. Avoid overlaps.\n"
-        "9. 60-30-10 COLOR HARMONY: 60% dominant neutral wall/floor (warm limestone, beige limewash), 30% furniture body, 10% accents (aged brass, deep terracotta, walnut).\n"
+        "9. 60-30-10 COLOR HARMONY & FINISHES: Always populate top-level 'wall_color' (e.g., '#E8E5DF') and 'floor_color' (e.g., '#C8B29B') as valid hex color codes matching the requested palette, plus 'ambient_mode' strictly as one of 'morning', 'rainy', or 'midnight' matching the requested atmosphere/lighting.\n"
         "10. SMART ECONOMY: Generate realistic price in SAR (currency 'SAR'), store details, and SKU from real brands (IKEA, Abyat, West Elm).\n\n"
         f"ARCHITECTURAL & ERGONOMIC CONTEXT:\n{standards_context}\n"
     )
 
     user_full_prompt = f"User Request: {prompt}\n{image_context}\nGenerate the complete 3D interior design layout conforming to all constraints."
 
-    print(f"Generating direct 3D architectural layout for: {prompt[:80]}...")
+    logger.info("Generating direct 3D architectural layout for: %s", prompt[:80])
 
-    try:
-        if _client is None:
-            raise RuntimeError("GEMINI_API_KEY not configured")
+    response = _call_gemini_with_retry(
+        model="gemini-2.5-flash",
+        contents=[user_full_prompt],
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            response_mime_type="application/json",
+            response_schema=FullDesignOutput,
+            temperature=0.3,
+        ),
+    )
 
-        response = _client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[user_full_prompt],
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=FullDesignOutput,
-                temperature=0.3
-            )
-        )
-        
-        raw_payload = json.loads(response.text.strip())
-        validated = FullDesignOutput.model_validate(raw_payload)
-        payload = validated.model_dump()
-        payload["stage"] = 1
+    raw_payload = json.loads(response.text.strip())
+    validated = FullDesignOutput.model_validate(raw_payload)
+    payload = validated.model_dump()
+    payload["stage"] = 1
+    payload["wall_color"] = validated.wall_color.strip() or "#E8E5DF"
+    payload["floor_color"] = validated.floor_color.strip() or "#C8B29B"
+    payload["ambient_mode"] = validated.ambient_mode or "morning"
 
-        wall_color = raw_payload.get("wall_color") if isinstance(raw_payload, dict) else None
-        floor_color = raw_payload.get("floor_color") if isinstance(raw_payload, dict) else None
-        payload["wall_color"] = (
-            wall_color if isinstance(wall_color, str) and wall_color.strip() else "#E8E5DF"
-        )
-        payload["floor_color"] = (
-            floor_color if isinstance(floor_color, str) and floor_color.strip() else "#C8B29B"
-        )
-            
-        print("Direct 3D layout generated successfully in seconds.")
-        return payload
+    logger.info("Direct 3D layout generated successfully.")
+    return payload
 
-    except Exception as e:
-        print(f"Direct generation failed, error: {e}")
-        # Fallback to simple valid structured output
-        return {
-            "stage": 1,
-            "concept_philosophy": "تصميم معماري عصري بتوزيع مكاني متناسق وإضاءة دافئة مريحة.",
-            "architectural_references": ["معايير نوفرت للتصميم الداخلي"],
-            "spatial_layout_rules": "توزيع الأثاث مع الحفاظ على ممرات حركة لا تقل عن 90 سم.",
-            "room_dimensions": {"width": 5.0, "depth": 5.0},
-            "wall_color": "#EDE8E0",
-            "floor_color": "#C8B29B",
-            "objects": [
-                {
-                    "id": "sofa_main",
-                    "type": "furniture",
-                    "asset_id": "sofa",
-                    "hex_color": "#B2A59A",
-                    "dimensions": {"length": 2.28, "width": 0.95, "height": 0.83},
-                    "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -1.5, "yaw_y": 0.0, "scale": 1.0},
-                    "economy": {"price": 2495.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-SOFA-01"}
-                },
-                {
-                    "id": "coffee_table_main",
-                    "type": "furniture",
-                    "asset_id": "coffee_table",
-                    "hex_color": "#4A3B32",
-                    "dimensions": {"length": 0.9, "width": 0.55, "height": 0.45},
-                    "transform": {"t_x": 0.0, "t_y": 0.0, "t_z": -0.7, "yaw_y": 0.0, "scale": 1.0},
-                    "economy": {"price": 195.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-TABLE-01"}
-                },
-                {
-                    "id": "armchair_accent",
-                    "type": "furniture",
-                    "asset_id": "armchair",
-                    "hex_color": "#D4C8B8",
-                    "dimensions": {"length": 0.82, "width": 0.96, "height": 1.01},
-                    "transform": {"t_x": 1.4, "t_y": 0.0, "t_z": -1.0, "yaw_y": -90.0, "scale": 1.0},
-                    "economy": {"price": 1195.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-CHAIR-01"}
-                },
-                {
-                    "id": "plant_corner",
-                    "type": "furniture",
-                    "asset_id": "plant",
-                    "hex_color": "#3E5336",
-                    "dimensions": {"length": 0.4, "width": 0.4, "height": 1.2},
-                    "transform": {"t_x": -2.0, "t_y": 0.0, "t_z": -2.0, "yaw_y": 0.0, "scale": 1.0},
-                    "economy": {"price": 295.0, "currency": "SAR", "store_url": "https://www.ikea.com", "brand": "IKEA", "sku": "IK-PLANT-01"}
-                }
-            ]
-        }
+
+def _catalog_dim_to_mm(value: object, default_mm: int) -> int:
+    parsed = _safe_float(value, 0.0)
+    if parsed <= 0.0:
+        return default_mm
+    if parsed < 10.0:
+        return round(parsed * 1000.0)
+    return round(parsed)
+
 
 def handle_chat_request(user_message: str) -> dict:
     """Uses Gemini to interpret chat and LanceDB RAG to find matching items."""
@@ -306,12 +346,9 @@ def handle_chat_request(user_message: str) -> dict:
         "If they are just chatting, set 'intent' to 'chat' and 'search_query' to null. "
         "Output JSON only: {\"intent\": \"add\"|\"chat\", \"search_query\": \"...\"|null}"
     )
-    
-    try:
-        if _client is None:
-            raise RuntimeError("GEMINI_API_KEY not configured")
 
-        response = _client.models.generate_content(
+    try:
+        response = _call_gemini_with_retry(
             model="gemini-2.5-flash",
             contents=[user_message],
             config=types.GenerateContentConfig(
@@ -323,7 +360,9 @@ def handle_chat_request(user_message: str) -> dict:
         if not isinstance(data, dict):
             raise ValueError("Expected JSON object from chat parser")
     except Exception as e:
-        print(f"Chat intent parsing failed: {e}")
+        if _is_non_retryable_gemini_error(e):
+            raise
+        logger.warning("Chat intent parsing failed: %s", e)
         data = {"intent": "chat", "search_query": None}
 
     response_payload = {
@@ -340,9 +379,9 @@ def handle_chat_request(user_message: str) -> dict:
                     best = results[0]
                     price = best.get("price", 0)
                     name = best.get("name", "أثاث")
-                    
+
                     response_payload["text"] = f"لقد وجدت {name} بسعر {price} ريال. سأقوم بإضافته إلى الغرفة الآن!"
-                    
+
                     item_obj = {
                         "name": name,
                         "hex_color": "#ffffff",
@@ -355,22 +394,15 @@ def handle_chat_request(user_message: str) -> dict:
                             "name": name
                         }
                     }
-                    
-                    dim_w = best.get("dim_width", 0)
-                    dim_h = best.get("dim_height", 0)
-                    dim_d = best.get("dim_depth", 0)
-                    
-                    if dim_w > 0 and dim_h > 0 and dim_d > 0:
-                        item_obj["dimensions"] = {
-                            "length": dim_w / 1000.0,
-                            "height": dim_h / 1000.0,
-                            "width": dim_d / 1000.0
-                        }
-                    else:
-                        item_obj["dimensions"] = {"length": 1.0, "height": 1.0, "width": 1.0}
-                        
+
+                    item_obj["dimensions"] = {
+                        "width": _catalog_dim_to_mm(best.get("dim_width"), 1000),
+                        "height": _catalog_dim_to_mm(best.get("dim_height"), 800),
+                        "depth": _catalog_dim_to_mm(best.get("dim_depth"), 800),
+                    }
+
                     item_obj["transform"] = {"t_x": 0, "t_y": 0, "t_z": 0, "yaw_y": 0, "scale": 1.0}
-                    
+
                     cat_lower = str(best.get("category", "")).lower()
                     name_lower = str(name).lower()
                     text_lower = f"{cat_lower} {name_lower}"
@@ -398,19 +430,16 @@ def handle_chat_request(user_message: str) -> dict:
                         item_obj["asset_id"] = "plant"
                     else:
                         item_obj["asset_id"] = "armchair"
-                        
+
                     response_payload["items"].append(item_obj)
                 else:
                     response_payload["text"] = "عذراً، لم أتمكن من العثور على أثاث يطابق طلبك."
         except Exception as e:
-            print(f"RAG search failed in chat: {e}")
+            logger.error("RAG search failed in chat: %s", e, exc_info=True)
             response_payload["text"] = "حدث خطأ أثناء البحث في الكتالوج."
     else:
         try:
-            if _client is None:
-                raise RuntimeError("GEMINI_API_KEY not configured")
-
-            chat_response = _client.models.generate_content(
+            chat_response = _call_gemini_with_retry(
                 model="gemini-2.5-flash",
                 contents=[user_message],
                 config=types.GenerateContentConfig(
@@ -419,7 +448,9 @@ def handle_chat_request(user_message: str) -> dict:
             )
             response_payload["text"] = chat_response.text.strip()
         except Exception as e:
-            pass
+            if _is_non_retryable_gemini_error(e):
+                raise
+            logger.warning("Chat reply generation failed: %s", e)
 
     return response_payload
 

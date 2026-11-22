@@ -17,8 +17,42 @@ function ActSection({ act, index, hud }: { act: ActCopy; index: number; hud: Hud
   const Heading = index === 0 ? 'h1' : 'h2';
 
   return (
-    <section className="flex h-[100svh] items-center px-6 sm:px-12 lg:px-24">
-      <div className={`w-full max-w-xl ${index === 0 ? '' : 'ms-auto lg:me-24'}`}>
+    <section className="relative flex h-[100svh] items-center px-6 sm:px-12 lg:px-24">
+      {index === 0 && (
+        <header className="pointer-events-auto absolute inset-x-0 top-0 z-30 flex flex-wrap items-center justify-between gap-3 py-5 pl-6 pr-6 sm:pr-12 md:pl-24 lg:px-24">
+          <Link
+            href="/"
+            className="inline-flex items-baseline gap-2.5 text-chalk transition-opacity hover:opacity-90"
+          >
+            <span className="font-kufi text-lg font-bold tracking-tight">رواق</span>
+            <span dir="ltr" className="font-plex-mono text-[10px] tracking-[0.26em] text-brass">
+              RWAQ AI
+            </span>
+          </Link>
+          <nav aria-label="التنقل الرئيسي" className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <Link
+              href="/maarad"
+              className="rounded-full border border-slate/30 bg-night/75 px-3.5 py-1.5 font-plex-arabic text-xs font-medium text-sand backdrop-blur-sm transition-colors hover:border-brass/60 hover:text-chalk sm:px-4 sm:py-2 sm:text-sm"
+            >
+              معرض الغرف
+            </Link>
+            <Link
+              href="/library"
+              className="rounded-full border border-slate/30 bg-night/75 px-3.5 py-1.5 font-plex-arabic text-xs font-medium text-sand backdrop-blur-sm transition-colors hover:border-brass/60 hover:text-chalk sm:px-4 sm:py-2 sm:text-sm"
+            >
+              المعايير المعمارية
+            </Link>
+            <Link
+              href={CTA.primaryHref}
+              className="rounded-full border border-brass/50 bg-brass/15 px-3.5 py-1.5 font-plex-arabic text-xs font-medium text-brass backdrop-blur-sm transition-colors hover:bg-brass hover:text-ink sm:px-4 sm:py-2 sm:text-sm"
+            >
+              الاستوديو
+            </Link>
+          </nav>
+        </header>
+      )}
+
+      <div className={`w-full max-w-xl ${index === 0 ? 'pt-16 sm:pt-10' : 'ms-auto lg:me-24'}`}>
         <p dir="ltr" className="mb-4 text-end font-plex-mono text-[11px] tracking-[0.28em] text-brass">
           {act.tag}
         </p>
@@ -89,6 +123,20 @@ function CostCard({ hud }: { hud: HudRefs }) {
       >
         {CTA.primaryAr}
       </Link>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link
+          href="/maarad"
+          className="inline-flex items-center justify-center rounded-full border border-slate/30 bg-ink/50 px-3 py-2 font-plex-arabic text-xs font-medium text-sand transition-colors hover:border-brass/60 hover:text-chalk"
+        >
+          معرض الغرف
+        </Link>
+        <Link
+          href="/library"
+          className="inline-flex items-center justify-center rounded-full border border-slate/30 bg-ink/50 px-3 py-2 font-plex-arabic text-xs font-medium text-sand transition-colors hover:border-brass/60 hover:text-chalk"
+        >
+          المعايير المعمارية
+        </Link>
+      </div>
     </div>
   );
 }

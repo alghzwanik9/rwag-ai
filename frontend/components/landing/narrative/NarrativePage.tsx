@@ -1,7 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Canvas } from '@react-three/fiber';
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ErrorInfo,
+  type ReactNode,
+} from 'react';
+import { Canvas, type RootState } from '@react-three/fiber';
 import { ScrollControls } from '@react-three/drei';
 import {
   COST_TOTAL,
@@ -62,15 +72,51 @@ function useMotionParam(): string | null {
   return useSyncExternalStore(subscribeToNothing, readMotionParam, motionParamOnServer);
 }
 
+type ErrorBoundaryProps = {
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: () => void;
+};
+
+type ErrorBoundaryState = {
+  hasError: boolean;
+};
+
+/**
+ * Catches WebGL initialization or runtime 3D rendering errors from `<Canvas>`
+ * and degrades cleanly to `<StaticFallback />` instead of crashing the landing page.
+ */
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[NarrativePage] 3D canvas error — falling back to static view:', error, info.componentStack);
+    this.props.onError?.();
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? <StaticFallback />;
+    }
+    return this.props.children;
+  }
+}
+
 export default function NarrativePage() {
   const motion = useMotionParam();
   const compact = useMediaFlag('(max-width: 767px)');
+  const [webglFailed, setWebglFailed] = useState(false);
 
   const scrollEl = useRef<HTMLElement | null>(null);
   const depthText = useRef<HTMLSpanElement | null>(null);
   const railMarker = useRef<HTMLDivElement | null>(null);
   const budgetText = useRef<HTMLSpanElement | null>(null);
   const copyLayer = useRef<HTMLDivElement | null>(null);
+  const contextLostCleanupRef = useRef<(() => void) | null>(null);
   const hud = useMemo<HudRefs>(
     () => ({ scrollEl, depthText, railMarker, budgetText, copyLayer }),
     [],
@@ -78,6 +124,30 @@ export default function NarrativePage() {
 
   const acts = compact ? MOBILE_ACTS : DESKTOP_ACTS;
   const actsCount = acts.length;
+
+  useEffect(() => {
+    return () => {
+      contextLostCleanupRef.current?.();
+      contextLostCleanupRef.current = null;
+    };
+  }, []);
+
+  const handleWebglFailed = useCallback(() => {
+    setWebglFailed(true);
+  }, []);
+
+  const handleCanvasCreated = useCallback(({ gl }: RootState) => {
+    contextLostCleanupRef.current?.();
+    const canvas = gl.domElement;
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+      setWebglFailed(true);
+    };
+    canvas.addEventListener('webglcontextlost', onContextLost, false);
+    contextLostCleanupRef.current = () => {
+      canvas.removeEventListener('webglcontextlost', onContextLost, false);
+    };
+  }, []);
 
   const handleScrollEl = useCallback((el: HTMLElement | null) => {
     scrollEl.current = el;
@@ -103,7 +173,7 @@ export default function NarrativePage() {
   );
 
   // Every hook above runs unconditionally, so this early return is safe.
-  if (motion === 'off') return <StaticFallback />;
+  if (motion === 'off' || webglFailed) return <StaticFallback />;
 
   const ranges = compact ? MOBILE_RANGES : DESKTOP_RANGES;
   const cameraPath = compact ? MOBILE_CAMERA : DESKTOP_CAMERA;
@@ -124,18 +194,25 @@ export default function NarrativePage() {
           form selects PCFSoftShadowMap, which this three version dropped from
           its shader define table — it silently degrades to BasicShadowMap,
           giving single-tap aliased edges and ignoring `shadow-radius`. */}
-      <Canvas shadows="percentage" dpr={[1, 2]} camera={{ fov: 42, near: 0.1, far: 60 }}>
-        <color attach="background" args={['#0A1220']} />
-        <fog attach="fog" args={['#0A1220', 12, 30]} />
-        <ScrollControls pages={acts.length} damping={0.25}>
-          <Scene
-            ranges={ranges}
-            cameraPath={cameraPath}
-            onScrollEl={handleScrollEl}
-            onHudFrame={handleHudFrame}
-          />
-        </ScrollControls>
-      </Canvas>
+      <ErrorBoundary fallback={<StaticFallback />} onError={handleWebglFailed}>
+        <Canvas
+          shadows="percentage"
+          dpr={[1, 2]}
+          camera={{ fov: 42, near: 0.1, far: 60 }}
+          onCreated={handleCanvasCreated}
+        >
+          <color attach="background" args={['#0A1220']} />
+          <fog attach="fog" args={['#0A1220', 12, 30]} />
+          <ScrollControls pages={acts.length} damping={0.25}>
+            <Scene
+              ranges={ranges}
+              cameraPath={cameraPath}
+              onScrollEl={handleScrollEl}
+              onHudFrame={handleHudFrame}
+            />
+          </ScrollControls>
+        </Canvas>
+      </ErrorBoundary>
     </div>
   );
 }
