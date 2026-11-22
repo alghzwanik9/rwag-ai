@@ -51,7 +51,13 @@ const CANONICAL_SYNONYMS: Record<string, string[]> = {
   coffee_table_round: ['coffee_table', 'coffee_table_art'],
   side_table: ['coffee_table', 'lack_table', 'coffee_table_art'],
   end_table: ['coffee_table', 'lack_table'],
-  desk: ['coffee_table_art', 'coffee_table', 'lack_table'],
+  desk: ['desk', 'coffee_table_art', 'coffee_table'],
+  office_desk: ['desk', 'coffee_table_art'],
+
+  bed: ['bed', 'sofa'],
+  double_bed: ['bed', 'sofa'],
+  king_bed: ['bed', 'sofa'],
+  queen_bed: ['bed', 'sofa'],
 
   armchair: ['armchair', 'strandmon_chair'],
   chair: ['armchair', 'strandmon_chair', 'dining_chair', 'deck_chair'],
@@ -84,15 +90,19 @@ const CANONICAL_SYNONYMS: Record<string, string[]> = {
   garden_set: ['outdoor_set'],
   patio_set: ['outdoor_set'],
 
-  plant: ['vase_flowers'],
-  potted_plant: ['vase_flowers'],
-  vase: ['vase_flowers'],
-  vase_flowers: ['vase_flowers'],
-  flowers: ['vase_flowers'],
-  decor: ['vase_flowers'],
-  lamp: ['vase_flowers'],
-  floor_lamp: ['vase_flowers'],
-  table_lamp: ['vase_flowers'],
+  plant: ['plant', 'vase_flowers'],
+  potted_plant: ['plant', 'vase_flowers'],
+  indoor_plant: ['plant', 'vase_flowers'],
+  vase: ['vase_flowers', 'plant'],
+  vase_flowers: ['vase_flowers', 'plant'],
+  flowers: ['vase_flowers', 'plant'],
+  decor: ['vase_flowers', 'plant'],
+  lamp: ['floor_lamp', 'vase_flowers'],
+  floor_lamp: ['floor_lamp', 'vase_flowers'],
+  table_lamp: ['floor_lamp', 'vase_flowers'],
+  rug: ['rug'],
+  carpet: ['rug'],
+  rug_woven: ['rug'],
 };
 
 const CATEGORY_HINTS: Record<string, IProductTemplate['category']> = {

@@ -245,8 +245,18 @@ def resolve_ikea_model_url(name: str, category: str) -> str:
     if not text:
         return FALLBACK_GLB_URL
 
-    if "sofa" in text or "couch" in text or "كنب" in text or "أريكة" in text:
+    if "bed" in text or "mattress" in text or "سرير" in text or "نوم" in text:
+        return "/assets/bed_double.glb"
+    elif "sofa" in text or "couch" in text or "كنب" in text or "أريكة" in text:
         return "/assets/sofa_khronos.glb"
+    elif "rug" in text or "carpet" in text or "mat" in text or "سجاد" in text:
+        return "/assets/rug_woven.glb"
+    elif "tv" in text or "تلفاز" in text or "تلفزيون" in text or "media" in text or "bench" in text:
+        return "/assets/tv_unit_low.glb"
+    elif "desk" in text or "مكتب" in text or "workstation" in text:
+        return "/assets/office_desk.glb"
+    elif "lamp" in text or "light" in text or "مصباح" in text or "إضاءة" in text or "اضاءة" in text:
+        return "/assets/floor_lamp.glb"
     elif ("dining" in text and ("chair" in text or "كرسي" in text)) or "stool" in text or "bar" in text:
         return "/assets/dining_chair.glb"
     elif "deck" in text or "lounge" in text or "sun" in text:
@@ -256,33 +266,28 @@ def resolve_ikea_model_url(name: str, category: str) -> str:
     elif "shelf" in text or "bookcase" in text or "bookshelf" in text or "رف" in text or "مكتبة" in text:
         return "/assets/display_shelf.glb"
     elif (
-        "tv" in text
-        or "تلفاز" in text
-        or "تلفزيون" in text
-        or "media" in text
-        or "cabinet" in text
+        "cabinet" in text
         or "drawer" in text
         or "wardrobe" in text
         or "storage" in text
         or "chest" in text
         or "sideboard" in text
         or "خزانة" in text
+        or "دولاب" in text
     ):
         return "/assets/drawer_cabinet.glb"
     elif "outdoor" in text or "garden" in text or "patio" in text or "حديقة" in text:
         return "/assets/outdoor_set.glb"
-    elif "coffee" in text or "table" in text or "طاول" in text or "desk" in text or "مكتب" in text:
+    elif "coffee" in text or "table" in text or "طاول" in text:
         return "/assets/coffee_table_round.glb"
+    elif "plant" in text or "نبات" in text or "شجر" in text or "fejka" in text:
+        return "/assets/indoor_plant.glb"
     elif (
         "vase" in text
         or "flower" in text
-        or "plant" in text
-        or "نبات" in text
         or "decor" in text
         or "ديكور" in text
         or "مزهرية" in text
-        or "rug" in text
-        or "سجاد" in text
     ):
         return "/assets/vase_flowers.glb"
 

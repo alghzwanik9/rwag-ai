@@ -26,6 +26,13 @@ export const LOCAL_GLB = {
   // Khronos glTF furniture & decor assets
   sofa_khronos: "/assets/sofa_khronos.glb",
   vase_flowers: "/assets/vase_flowers.glb",
+  // Dedicated architectural PBR furniture assets
+  bed_double: "/assets/bed_double.glb",
+  tv_unit_low: "/assets/tv_unit_low.glb",
+  rug_woven: "/assets/rug_woven.glb",
+  indoor_plant: "/assets/indoor_plant.glb",
+  floor_lamp: "/assets/floor_lamp.glb",
+  office_desk: "/assets/office_desk.glb",
 } as const;
 
 export const DEFAULT_FALLBACK_GLB = LOCAL_GLB.armchair_wood;
@@ -164,8 +171,8 @@ export const IKEA_TEMPLATES: IProductTemplate[] = [
     price: 1450,
     currency: "SAR",
     category: "storage",
-    modelUrl: LOCAL_GLB.drawer_cabinet,
-    dimensions: { width: 1800, height: 450, depth: 400 },
+    modelUrl: LOCAL_GLB.tv_unit_low,
+    dimensions: { width: 1800, height: 500, depth: 420 },
     thumbnailUrl: ""
   },
   {
@@ -188,6 +195,63 @@ export const IKEA_TEMPLATES: IProductTemplate[] = [
     category: "storage",
     modelUrl: LOCAL_GLB.display_shelf,
     dimensions: { width: 800, height: 1200, depth: 300 },
+    thumbnailUrl: ""
+  },
+
+  // ── أسرّة ومكاتب وسجاد وإضاءة ونباتات (Dedicated Categories) ──
+  {
+    id: "bed",
+    name: "سرير مزدوج مبطن فاخر",
+    brand: "Rwaq",
+    price: 3250,
+    currency: "SAR",
+    category: "seating",
+    modelUrl: LOCAL_GLB.bed_double,
+    dimensions: { width: 1800, height: 1100, depth: 2100 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "desk",
+    name: "مكتب عمل تنفيذي خشب جوز",
+    brand: "Rwaq",
+    price: 1850,
+    currency: "SAR",
+    category: "tables",
+    modelUrl: LOCAL_GLB.office_desk,
+    dimensions: { width: 1400, height: 750, depth: 750 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "rug",
+    name: "سجادة منسوجة فاخرة",
+    brand: "Rwaq",
+    price: 1250,
+    currency: "SAR",
+    category: "rugs",
+    modelUrl: LOCAL_GLB.rug_woven,
+    dimensions: { width: 2000, height: 16, depth: 2800 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "floor_lamp",
+    name: "مصباح أرضي معماري نحاسي",
+    brand: "Rwaq",
+    price: 680,
+    currency: "SAR",
+    category: "lighting",
+    modelUrl: LOCAL_GLB.floor_lamp,
+    dimensions: { width: 420, height: 1600, depth: 420 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "plant",
+    name: "نبتة داخلية طبيعية بوعاء خزفي",
+    brand: "IKEA",
+    price: 245,
+    currency: "SAR",
+    category: "decor",
+    modelUrl: LOCAL_GLB.indoor_plant,
+    dimensions: { width: 550, height: 1200, depth: 550 },
     thumbnailUrl: ""
   },
 

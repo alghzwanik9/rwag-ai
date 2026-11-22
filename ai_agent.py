@@ -65,6 +65,10 @@ CANONICAL_ASSET_IDS = [
     "outdoor_set",
     "vase_flowers",
     "plant",
+    "bed",
+    "desk",
+    "rug",
+    "floor_lamp",
 ]
 
 

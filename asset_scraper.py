@@ -394,9 +394,9 @@ _LOCAL_SEED: dict[str, dict] = {
         "w": 800.0, "h": 1200.0, "d": 300.0,
     },
     "tv_unit": {
-        "file": "drawer_cabinet.glb",
+        "file": "tv_unit_low.glb",
         "name": "وحدة تلفاز وتخزين BESTÅ", "category": "storage", "source": "IKEA",
-        "w": 1800.0, "h": 600.0, "d": 400.0,
+        "w": 1800.0, "h": 500.0, "d": 420.0,
     },
     "drawer_cabinet": {
         "file": "drawer_cabinet.glb",
@@ -424,9 +424,29 @@ _LOCAL_SEED: dict[str, dict] = {
         "w": 250.0, "h": 450.0, "d": 250.0,
     },
     "plant": {
-        "file": "vase_flowers.glb",
-        "name": "نبتة ومزهرية ديكور FEJKA", "category": "decor", "source": "IKEA",
-        "w": 300.0, "h": 900.0, "d": 300.0,
+        "file": "indoor_plant.glb",
+        "name": "نبتة داخلية طبيعية FEJKA", "category": "decor", "source": "IKEA",
+        "w": 550.0, "h": 1200.0, "d": 550.0,
+    },
+    "bed": {
+        "file": "bed_double.glb",
+        "name": "سرير مزدوج مبطن MALM", "category": "seating", "source": "IKEA",
+        "w": 1800.0, "h": 1100.0, "d": 2100.0,
+    },
+    "desk": {
+        "file": "office_desk.glb",
+        "name": "مكتب عمل تنفيذي", "category": "tables", "source": "Rwaq",
+        "w": 1400.0, "h": 750.0, "d": 750.0,
+    },
+    "rug": {
+        "file": "rug_woven.glb",
+        "name": "سجادة منسوجة فاخرة", "category": "rugs", "source": "Rwaq",
+        "w": 2000.0, "h": 16.0, "d": 2800.0,
+    },
+    "floor_lamp": {
+        "file": "floor_lamp.glb",
+        "name": "مصباح أرضي معماري", "category": "lighting", "source": "Rwaq",
+        "w": 420.0, "h": 1600.0, "d": 420.0,
     },
 }
 

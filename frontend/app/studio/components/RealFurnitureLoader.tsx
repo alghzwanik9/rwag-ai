@@ -9,6 +9,40 @@ import { RigidBody, RapierRigidBody } from "@react-three/rapier";
 
 const FALLBACK_MODEL_URL = "/assets/armchair_wood.glb";
 
+/**
+ * Per-model intrinsic Y rotation (in radians) to align raw GLB axes with Rwaq's
+ * world convention (width along X, height along Y, depth/front along +Z).
+ * - display_shelf.glb was authored with width along Z (1.08m) and depth along X (0.37m).
+ */
+const MODEL_INTRINSIC_ROTATION_Y: Record<string, number> = {
+  "/assets/display_shelf.glb": Math.PI / 2,
+};
+
+const STRUCTURAL_MATERIAL_KEYWORDS = [
+  "leg",
+  "legs",
+  "base",
+  "metal",
+  "steel",
+  "brass",
+  "glass",
+  "stem",
+  "soil",
+  "pot",
+  "ceramic",
+  "flower",
+  "leaf",
+  "leaves",
+  "slat",
+  "wood_frame",
+  "wood_legs",
+];
+
+function isStructuralOrNaturalMesh(meshName: string, matName: string): boolean {
+  const combined = `${meshName || ""} ${matName || ""}`.toLowerCase();
+  return STRUCTURAL_MATERIAL_KEYWORDS.some((kw) => combined.includes(kw));
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface FurnitureDimensions {
@@ -143,7 +177,23 @@ export function computeAutoScale(
     return [uniformFactor, uniformFactor, uniformFactor];
   }
 
-  return [sx, sy, sz];
+  // Flat floor rugs can legitimately scale thinly on Y while matching X/Z footprint
+  if (targetH <= 0.06) {
+    return [sx, sy, sz];
+  }
+
+  // Prevent grotesque non-uniform stretching when a model's native proportions
+  // differ from target dimensions: clamp each axis within ±35% of the median scale.
+  const sorted = [sx, sy, sz].slice().sort((a, b) => a - b);
+  const medianScale = sorted[1];
+  const minAllowed = medianScale / 1.35;
+  const maxAllowed = medianScale * 1.35;
+
+  return [
+    THREE.MathUtils.clamp(sx, minAllowed, maxAllowed),
+    THREE.MathUtils.clamp(sy, minAllowed, maxAllowed),
+    THREE.MathUtils.clamp(sz, minAllowed, maxAllowed),
+  ];
 }
 
 
@@ -218,6 +268,11 @@ function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelPro
   // ── Clone Scene & Materials (Prevents cross-instance pollution) ───────────
   const clonedScene = React.useMemo(() => {
     const clone = scene.clone();
+    const intrinsicRotY = MODEL_INTRINSIC_ROTATION_Y[modelUrl] ?? 0;
+    if (intrinsicRotY !== 0) {
+      clone.rotation.y = intrinsicRotY;
+      clone.updateMatrixWorld(true);
+    }
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
@@ -247,21 +302,49 @@ function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelPro
       }
     });
     return clone;
-  }, [scene]);
+  }, [scene, modelUrl]);
 
   // ── Apply Color / Material Swap (No frame drops) ──────────────────────────
   useEffect(() => {
     let cancelled = false;
+    const hasExplicitCustomMaterial = Boolean(customMaterial?.color || customMaterial?.textureUrl);
     const effectiveColor = customMaterial?.color || color;
     const loader = customMaterial?.textureUrl ? new THREE.TextureLoader() : null;
+
+    // Check if the model has any non-structural primary meshes so we don't skip
+    // everything on single-mesh models when applying user customMaterials.
+    let hasPrimaryMesh = false;
+    clonedScene.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        if (!isStructuralOrNaturalMesh(child.name, mat.name)) {
+          hasPrimaryMesh = true;
+        }
+      }
+    });
 
     clonedScene.traverse((child) => {
       if (!(child instanceof THREE.Mesh) || !child.material) return;
       const mat = child.material as THREE.MeshStandardMaterial;
+      const isStructural = hasPrimaryMesh && isStructuralOrNaturalMesh(child.name, mat.name);
 
       if (mat.color && child.userData.originalColor) {
-        if (effectiveColor) {
-          mat.color.set(effectiveColor);
+        if (effectiveColor && (!isStructural || hasExplicitCustomMaterial)) {
+          if (hasExplicitCustomMaterial) {
+            // User explicitly selected a material/color from MaterialPalette
+            if (isStructural && hasPrimaryMesh) {
+              mat.color.copy(child.userData.originalColor);
+            } else {
+              mat.color.set(effectiveColor);
+            }
+          } else {
+            // AI hex_color hint: gently tint primary upholstery/body while preserving PBR textures
+            const hasOriginalTexture = Boolean(child.userData.originalMap);
+            const tintStrength = hasOriginalTexture ? 0.32 : 0.65;
+            mat.color
+              .copy(child.userData.originalColor)
+              .lerp(new THREE.Color(effectiveColor), tintStrength);
+          }
         } else {
           mat.color.copy(child.userData.originalColor);
         }
