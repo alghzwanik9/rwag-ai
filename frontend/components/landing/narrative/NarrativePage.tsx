@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ScrollControls } from '@react-three/drei';
 import {
+  COST_TOTAL,
   DESKTOP_CAMERA,
   DESKTOP_RANGES,
   MOBILE_CAMERA,
   MOBILE_RANGES,
+  ROOM,
   type ActId,
 } from './config';
 import type { HudRefs } from './hud';
@@ -74,10 +76,35 @@ export default function NarrativePage() {
     [],
   );
 
+  const acts = compact ? MOBILE_ACTS : DESKTOP_ACTS;
+  const actsCount = acts.length;
+
+  const handleScrollEl = useCallback((el: HTMLElement | null) => {
+    scrollEl.current = el;
+  }, []);
+
+  const handleHudFrame = useCallback(
+    (offset: number, costProgress: number) => {
+      if (depthText.current) {
+        depthText.current.textContent = `${(offset * ROOM.depth).toFixed(1)} m`;
+      }
+      if (railMarker.current) {
+        railMarker.current.style.top = `${(offset * 100).toFixed(2)}%`;
+      }
+      if (budgetText.current) {
+        budgetText.current.textContent = Math.round(COST_TOTAL * costProgress).toLocaleString('en-US');
+      }
+      if (copyLayer.current) {
+        const scrollY = offset * (actsCount - 1) * window.innerHeight;
+        copyLayer.current.style.transform = `translate3d(0, ${-scrollY}px, 0)`;
+      }
+    },
+    [actsCount],
+  );
+
   // Every hook above runs unconditionally, so this early return is safe.
   if (motion === 'off') return <StaticFallback />;
 
-  const acts = compact ? MOBILE_ACTS : DESKTOP_ACTS;
   const ranges = compact ? MOBILE_RANGES : DESKTOP_RANGES;
   const cameraPath = compact ? MOBILE_CAMERA : DESKTOP_CAMERA;
 
@@ -101,7 +128,12 @@ export default function NarrativePage() {
         <color attach="background" args={['#0A1220']} />
         <fog attach="fog" args={['#0A1220', 12, 30]} />
         <ScrollControls pages={acts.length} damping={0.25}>
-          <Scene ranges={ranges} cameraPath={cameraPath} hud={hud} actsCount={acts.length} />
+          <Scene
+            ranges={ranges}
+            cameraPath={cameraPath}
+            onScrollEl={handleScrollEl}
+            onHudFrame={handleHudFrame}
+          />
         </ScrollControls>
       </Canvas>
     </div>

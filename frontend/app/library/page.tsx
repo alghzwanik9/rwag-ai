@@ -1,9 +1,19 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSceneStore } from "@/lib/useSceneStore";
+
+type LibraryTab = "styles" | "standards" | "lighting" | "materials";
+
+const LIBRARY_TABS: { id: LibraryTab; icon: string; label: string }[] = [
+  { id: "standards", icon: "straighten", label: "معايير الفراغات والقياسات (Neufert)" },
+  { id: "styles", icon: "menu_book", label: "الفلسفات والمدارس المعمارية" },
+  { id: "lighting", icon: "lightbulb", label: "هندسة الإضاءة المعمارية (Lux)" },
+  { id: "materials", icon: "texture", label: "تناغم المواد وخامات PBR" },
+];
 
 interface ArchitecturalStyle {
   id: string;
@@ -24,7 +34,7 @@ interface RoomStandard {
   room_type: string;
   name_ar: string;
   description: string;
-  anthropometrics: Record<string, any>;
+  anthropometrics: Record<string, string>;
   spatial_rules: string[];
   lighting_standards: {
     recommended_lux: number;
@@ -287,7 +297,7 @@ const ROOM_STANDARDS: RoomStandard[] = [
 
 export default function ArchitecturalLibrary() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"styles" | "standards" | "lighting" | "materials">("standards");
+  const [activeTab, setActiveTab] = useState<LibraryTab>("standards");
   const [search, setSearch] = useState("");
   const [selectedStyle, setSelectedStyle] = useState<ArchitecturalStyle | null>(null);
   const [selectedStandard, setSelectedStandard] = useState<RoomStandard | null>(null);
@@ -358,15 +368,10 @@ export default function ArchitecturalLibrary() {
 
       {/* Main Tabs Navigation */}
       <div className="flex gap-2 mb-6 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-none">
-        {[
-          { id: "standards", icon: "straighten", label: "معايير الفراغات والقياسات (Neufert)" },
-          { id: "styles", icon: "menu_book", label: "الفلسفات والمدارس المعمارية" },
-          { id: "lighting", icon: "lightbulb", label: "هندسة الإضاءة المعمارية (Lux)" },
-          { id: "materials", icon: "texture", label: "تناغم المواد وخامات PBR" }
-        ].map((tab) => (
+        {LIBRARY_TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => setActiveTab(tab.id)}
             className={`px-5 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shrink-0 ${
               activeTab === tab.id
                 ? "bg-[#1E1E1E] text-white shadow-md"
@@ -469,7 +474,13 @@ export default function ArchitecturalLibrary() {
           {filteredStyles.map((style) => (
             <div key={style.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-md hover:shadow-xl transition-all flex flex-col">
               <div className="relative h-48 w-full overflow-hidden bg-gray-200">
-                <img src={style.hero_image_url} alt={style.title} className="object-cover w-full h-full hover:scale-105 transition-transform duration-500" />
+                <Image
+                  src={style.hero_image_url}
+                  alt={style.title}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover hover:scale-105 transition-transform duration-500"
+                />
                 <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-gray-700 shadow-md">
                   {style.era}
                 </div>
@@ -641,6 +652,104 @@ export default function ArchitecturalLibrary() {
               <button onClick={() => { handleApplyStandardToStudio(selectedStandard); setSelectedStandard(null); }} className="bg-[#4A90E2] text-white px-6 py-2.5 rounded-xl font-bold shadow-md">
                 تطبيق في الاستوديو 3D
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Style Details Modal */}
+      {selectedStyle && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-150 animate-fade-in">
+          <div className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col animate-slide-up border border-gray-100">
+            <div className="relative h-64 bg-gray-200 shrink-0">
+              <Image
+                src={selectedStyle.hero_image_url}
+                alt={selectedStyle.title}
+                fill
+                sizes="(max-width: 768px) 100vw, 672px"
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
+                <div>
+                  <div className="bg-[#4A90E2] text-white text-xs font-bold px-3 py-1 rounded-full inline-block mb-2 shadow-md">
+                    {selectedStyle.era} • {selectedStyle.region}
+                  </div>
+                  <h2 className="text-2xl font-black text-white">{selectedStyle.title}</h2>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedStyle(null)}
+                className="absolute top-4 left-4 bg-white/80 hover:bg-white text-gray-700 hover:text-black w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto grow flex flex-col gap-6 text-right">
+              <div>
+                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">psychology</span>
+                  فلسفة ونشأة التصميم
+                </h4>
+                <p className="text-gray-600 text-sm leading-relaxed">{selectedStyle.content}</p>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">featured_play_list</span>
+                  أبرز الخصائص والسمات الفنية
+                </h4>
+                <ul className="list-disc list-inside text-gray-600 text-sm flex flex-col gap-1.5 pr-2">
+                  {selectedStyle.characteristics.map((char, index) => (
+                    <li key={index} className="leading-relaxed">{char}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">texture</span>
+                  الخامات والمواد المستخدمة
+                </h4>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {selectedStyle.core_materials.map((mat, index) => (
+                    <span
+                      key={index}
+                      className="bg-gray-100 text-gray-700 text-xs px-3 py-1.5 rounded-xl border border-gray-200/50 font-bold"
+                    >
+                      {mat}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-[#1E1E1E] text-base mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                  <span className="material-symbols-outlined text-[#4A90E2] text-lg">foundation</span>
+                  أبرز الأمثلة والمراجع المعمارية
+                </h4>
+                <ul className="list-disc list-inside text-gray-600 text-sm flex flex-col gap-1.5 pr-2">
+                  {selectedStyle.examples.map((ex, index) => (
+                    <li key={index} className="leading-relaxed">{ex}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => setSelectedStyle(null)}
+                className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 font-bold text-xs px-5 py-3 rounded-xl transition-all"
+              >
+                إغلاق النافذة
+              </button>
+              <Link
+                href={`/studio?reference=${selectedStyle.slug}`}
+                className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-sm">brush</span>
+                استخدم في الاستوديو 3D
+              </Link>
             </div>
           </div>
         </div>

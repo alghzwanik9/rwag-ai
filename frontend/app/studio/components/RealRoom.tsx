@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MeshReflectorMaterial, ContactShadows } from '@react-three/drei';
+import { ContactShadows } from '@react-three/drei';
 import { RigidBody } from '@react-three/rapier';
 import { useSceneStore, RoomWindow } from '@/lib/useSceneStore';
 import * as THREE from 'three';

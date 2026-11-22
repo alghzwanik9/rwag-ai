@@ -1,14 +1,13 @@
 'use client';
 
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { ContactShadows, Instance, Instances, useScroll } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   actProgress,
   CIRCULATION,
-  COST_TOTAL,
   FLUTE,
   FURNISHINGS,
   MATERIALS,
@@ -16,7 +15,6 @@ import {
   type ActRanges,
   type CameraKey,
 } from './config';
-import type { HudRefs } from './hud';
 import Furniture, { revealModeFor, type RevealMode } from './Furniture';
 
 /** Precomputed per-index so the Act 4 frame loop stays allocation-free. */
@@ -42,8 +40,8 @@ const PLAN_Y = 0.018;
 type SceneProps = {
   ranges: ActRanges;
   cameraPath: readonly CameraKey[];
-  hud: HudRefs;
-  actsCount?: number;
+  onScrollEl?: (el: HTMLElement | null) => void;
+  onHudFrame?: (offset: number, costProgress: number) => void;
 };
 
 const halfW = ROOM.width / 2;
@@ -144,8 +142,13 @@ function Wall({ spec }: { spec: WallSpec }) {
   );
 }
 
-export default function Scene({ ranges, cameraPath, hud, actsCount = 5 }: SceneProps) {
+export default function Scene({ ranges, cameraPath, onScrollEl, onHudFrame }: SceneProps) {
   const scroll = useScroll();
+
+  useEffect(() => {
+    onScrollEl?.(scroll.el);
+    return () => onScrollEl?.(null);
+  }, [onScrollEl, scroll.el]);
 
   const wallsRef = useRef<THREE.Group>(null);
   const travertineRef = useRef<THREE.MeshPhysicalMaterial>(null);
@@ -200,22 +203,8 @@ export default function Scene({ ranges, cameraPath, hud, actsCount = 5 }: SceneP
   useFrame(({ camera }) => {
     const offset = scroll.offset;
 
-    // ── HUD chrome (direct DOM mutation, no React) ──────────────────────
-    if (hud.scrollEl.current !== scroll.el) hud.scrollEl.current = scroll.el;
-    if (hud.depthText.current) {
-      hud.depthText.current.textContent = `${(offset * ROOM.depth).toFixed(1)} m`;
-    }
-    if (hud.railMarker.current) {
-      hud.railMarker.current.style.top = `${(offset * 100).toFixed(2)}%`;
-    }
-    if (hud.budgetText.current) {
-      const t = actProgress(offset, ranges.cost);
-      hud.budgetText.current.textContent = Math.round(COST_TOTAL * t).toLocaleString('en-US');
-    }
-    if (hud.copyLayer?.current) {
-      const scrollY = offset * (actsCount - 1) * window.innerHeight;
-      hud.copyLayer.current.style.transform = `translate3d(0, ${-scrollY}px, 0)`;
-    }
+    // ── HUD chrome (direct DOM mutation via owner callbacks, no React) ──
+    onHudFrame?.(offset, actProgress(offset, ranges.cost));
 
     // ── Camera along the keyframe path ──────────────────────────────────
     let segment = cameraPath.length - 2;
