@@ -1,12 +1,14 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-// Protect 3D and 2D studio routes (guarding FAL_KEY spend) unless local demo mode is explicitly enabled.
-// Note: /api/projects/save enforces Clerk auth server-side regardless of demo mode.
+// Only enforce Clerk sign-in redirect on studio routes when NEXT_PUBLIC_REQUIRE_AUTH=true is explicitly set.
+// Otherwise allow direct access (and RSC prefetching from /) without cross-origin Clerk redirect errors.
 const isProtectedRoute = createRouteMatcher(['/studio(.*)', '/studio2d(.*)'])
 
 export default clerkMiddleware(async (auth, req) => {
-  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
-  if (!isDemoMode && isProtectedRoute(req)) {
+  const requireAuth =
+    process.env.NEXT_PUBLIC_REQUIRE_AUTH === 'true' &&
+    process.env.NEXT_PUBLIC_DEMO_MODE !== 'true'
+  if (requireAuth && isProtectedRoute(req)) {
     await auth.protect()
   }
 })

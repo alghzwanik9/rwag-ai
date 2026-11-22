@@ -12,7 +12,6 @@ import {
   type ReactNode,
 } from 'react';
 import { Canvas, type RootState } from '@react-three/fiber';
-import { ScrollControls } from '@react-three/drei';
 import {
   COST_TOTAL,
   DESKTOP_CAMERA,
@@ -111,7 +110,7 @@ export default function NarrativePage() {
   const compact = useMediaFlag('(max-width: 767px)');
   const [webglFailed, setWebglFailed] = useState(false);
 
-  const scrollEl = useRef<HTMLElement | null>(null);
+  const scrollEl = useRef<HTMLDivElement | null>(null);
   const depthText = useRef<HTMLSpanElement | null>(null);
   const railMarker = useRef<HTMLDivElement | null>(null);
   const budgetText = useRef<HTMLSpanElement | null>(null);
@@ -123,7 +122,6 @@ export default function NarrativePage() {
   );
 
   const acts = compact ? MOBILE_ACTS : DESKTOP_ACTS;
-  const actsCount = acts.length;
 
   useEffect(() => {
     return () => {
@@ -149,10 +147,6 @@ export default function NarrativePage() {
     };
   }, []);
 
-  const handleScrollEl = useCallback((el: HTMLElement | null) => {
-    scrollEl.current = el;
-  }, []);
-
   const handleHudFrame = useCallback(
     (offset: number, costProgress: number) => {
       if (depthText.current) {
@@ -164,12 +158,8 @@ export default function NarrativePage() {
       if (budgetText.current) {
         budgetText.current.textContent = Math.round(COST_TOTAL * costProgress).toLocaleString('en-US');
       }
-      if (copyLayer.current) {
-        const scrollY = offset * (actsCount - 1) * window.innerHeight;
-        copyLayer.current.style.transform = `translate3d(0, ${-scrollY}px, 0)`;
-      }
     },
-    [actsCount],
+    [],
   );
 
   // Every hook above runs unconditionally, so this early return is safe.
@@ -182,9 +172,12 @@ export default function NarrativePage() {
     <div className="relative h-[100svh] w-full overflow-hidden bg-ink">
       <DimensionRail hud={hud} />
 
-      {/* HTML Copy Layer overlay - synchronized smoothly on useFrame without createRoot */}
-      <div className="pointer-events-none fixed inset-0 z-20 overflow-hidden">
-        <div ref={copyLayer} className="will-change-transform">
+      {/* Native scroll container driving the 3D narrative camera & acts directly */}
+      <div
+        ref={scrollEl}
+        className="absolute inset-0 z-20 overflow-y-auto overflow-x-hidden scroll-smooth"
+      >
+        <div ref={copyLayer}>
           <CopyLayer acts={acts} hud={hud} />
         </div>
       </div>
@@ -203,14 +196,12 @@ export default function NarrativePage() {
         >
           <color attach="background" args={['#0A1220']} />
           <fog attach="fog" args={['#0A1220', 12, 30]} />
-          <ScrollControls pages={acts.length} damping={0.25}>
-            <Scene
-              ranges={ranges}
-              cameraPath={cameraPath}
-              onScrollEl={handleScrollEl}
-              onHudFrame={handleHudFrame}
-            />
-          </ScrollControls>
+          <Scene
+            ranges={ranges}
+            cameraPath={cameraPath}
+            scrollEl={scrollEl}
+            onHudFrame={handleHudFrame}
+          />
         </Canvas>
       </ErrorBoundary>
     </div>

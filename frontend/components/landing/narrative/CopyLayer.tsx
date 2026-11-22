@@ -19,7 +19,7 @@ function ActSection({ act, index, hud }: { act: ActCopy; index: number; hud: Hud
   return (
     <section className="relative flex h-[100svh] items-center px-6 sm:px-12 lg:px-24">
       {index === 0 && (
-        <header className="pointer-events-auto absolute inset-x-0 top-0 z-30 flex flex-wrap items-center justify-between gap-3 py-5 pl-6 pr-6 sm:pr-12 md:pl-24 lg:px-24">
+        <header className="pointer-events-auto fixed inset-x-0 top-0 z-30 flex flex-wrap items-center justify-between gap-3 py-5 pl-6 pr-6 sm:pr-12 md:pl-24 lg:px-24">
           <Link
             href="/"
             className="inline-flex items-baseline gap-2.5 text-chalk transition-opacity hover:opacity-90"
@@ -149,7 +149,7 @@ export default function CopyLayer({ acts, hud }: { acts: readonly ActId[]; hud: 
   const sections = ACT_COPY.filter((act) => acts.includes(act.id));
 
   return (
-    <div dir="rtl" className="w-screen">
+    <div dir="rtl" className="w-full">
       {sections.map((act, index) =>
         act.id === 'cost' ? (
           <section

@@ -1,9 +1,9 @@
 'use client';
 
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { ContactShadows, Instance, Instances, useScroll } from '@react-three/drei';
+import { ContactShadows, Instance, Instances } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   actProgress,
@@ -40,7 +40,7 @@ const PLAN_Y = 0.018;
 type SceneProps = {
   ranges: ActRanges;
   cameraPath: readonly CameraKey[];
-  onScrollEl?: (el: HTMLElement | null) => void;
+  scrollEl: RefObject<HTMLElement | null>;
   onHudFrame?: (offset: number, costProgress: number) => void;
 };
 
@@ -142,13 +142,8 @@ function Wall({ spec }: { spec: WallSpec }) {
   );
 }
 
-export default function Scene({ ranges, cameraPath, onScrollEl, onHudFrame }: SceneProps) {
-  const scroll = useScroll();
-
-  useEffect(() => {
-    onScrollEl?.(scroll.el);
-    return () => onScrollEl?.(null);
-  }, [onScrollEl, scroll.el]);
+export default function Scene({ ranges, cameraPath, scrollEl, onHudFrame }: SceneProps) {
+  const dampedOffsetRef = useRef(0);
 
   const wallsRef = useRef<THREE.Group>(null);
   const travertineRef = useRef<THREE.MeshPhysicalMaterial>(null);
@@ -200,8 +195,17 @@ export default function Scene({ ranges, cameraPath, onScrollEl, onHudFrame }: Sc
     [],
   );
 
-  useFrame(({ camera }) => {
-    const offset = scroll.offset;
+  useFrame(({ camera }, delta) => {
+    const el = scrollEl.current;
+    const maxScroll = el ? Math.max(1, el.scrollHeight - el.clientHeight) : 1;
+    const targetOffset = el ? THREE.MathUtils.clamp(el.scrollTop / maxScroll, 0, 1) : 0;
+    dampedOffsetRef.current = THREE.MathUtils.damp(
+      dampedOffsetRef.current,
+      targetOffset,
+      6,
+      Math.min(delta, 0.1),
+    );
+    const offset = dampedOffsetRef.current;
 
     // ── HUD chrome (direct DOM mutation via owner callbacks, no React) ──
     onHudFrame?.(offset, actProgress(offset, ranges.cost));

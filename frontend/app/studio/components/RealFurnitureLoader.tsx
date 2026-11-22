@@ -120,19 +120,21 @@ function getLocalBoundingBox(object: THREE.Object3D): THREE.Box3 {
   object.updateMatrixWorld(true);
 
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh && child.visible && child.geometry) {
-      const isTransparent = child.material && (
-        child.material.transparent === true || 
-        child.material.opacity < 1 || 
-        child.name.toLowerCase().includes('shadow') ||
-        child.name.toLowerCase().includes('plane')
+    const mesh = child as THREE.Mesh;
+    if (mesh.isMesh && mesh.visible && mesh.geometry) {
+      const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
+      const isTransparent = mat && (
+        mat.transparent === true || 
+        mat.opacity < 1 || 
+        mesh.name.toLowerCase().includes('shadow') ||
+        mesh.name.toLowerCase().includes('plane')
       );
 
       if (!isTransparent) {
-        if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-        if (child.geometry.boundingBox) {
-          const childBox = child.geometry.boundingBox.clone();
-          childBox.applyMatrix4(child.matrixWorld);
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        if (mesh.geometry.boundingBox) {
+          const childBox = mesh.geometry.boundingBox.clone();
+          childBox.applyMatrix4(mesh.matrixWorld);
           box.union(childBox);
         }
       }
@@ -274,29 +276,30 @@ function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelPro
       clone.updateMatrixWorld(true);
     }
     clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
 
-        if (child.material) {
+        if (mesh.material) {
           // Clone material to ensure independent color swapping
-          child.material = child.material.clone();
-          const mat = child.material as THREE.MeshStandardMaterial;
+          mesh.material = (mesh.material as THREE.Material).clone();
+          const mat = mesh.material as THREE.MeshStandardMaterial;
 
           if ("roughness" in mat) {
             if (mat.roughness >= 0.99) mat.roughness = 0.6;
             if (mat.metalness === 0) mat.metalness = 0.05;
             mat.needsUpdate = true;
-            child.userData.originalRoughness = mat.roughness;
-            child.userData.originalMetalness = mat.metalness;
+            mesh.userData.originalRoughness = mat.roughness;
+            mesh.userData.originalMetalness = mat.metalness;
           }
 
           // Save original color and map for reset functionality
           if (mat.color) {
-            child.userData.originalColor = mat.color.clone();
+            mesh.userData.originalColor = mat.color.clone();
           }
           if ("map" in mat) {
-            child.userData.originalMap = mat.map ?? null;
+            mesh.userData.originalMap = mat.map ?? null;
           }
         }
       }
@@ -315,18 +318,20 @@ function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelPro
     // everything on single-mesh models when applying user customMaterials.
     let hasPrimaryMesh = false;
     clonedScene.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        if (!isStructuralOrNaturalMesh(child.name, mat.name)) {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh && mesh.material) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (!isStructuralOrNaturalMesh(mesh.name, mat.name)) {
           hasPrimaryMesh = true;
         }
       }
     });
 
     clonedScene.traverse((child) => {
-      if (!(child instanceof THREE.Mesh) || !child.material) return;
-      const mat = child.material as THREE.MeshStandardMaterial;
-      const isStructural = hasPrimaryMesh && isStructuralOrNaturalMesh(child.name, mat.name);
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.material) return;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const isStructural = hasPrimaryMesh && isStructuralOrNaturalMesh(mesh.name, mat.name);
 
       if (mat.color && child.userData.originalColor) {
         if (effectiveColor && (!isStructural || hasExplicitCustomMaterial)) {
@@ -413,11 +418,12 @@ function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelPro
     const s = clonedScene;
     return () => {
       s.traverse((child) => {
-        if (!(child instanceof THREE.Mesh)) return;
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((m) => m.dispose());
         } else {
-          (child.material as THREE.Material)?.dispose();
+          (mesh.material as THREE.Material)?.dispose();
         }
       });
     };
