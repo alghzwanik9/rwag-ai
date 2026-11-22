@@ -169,7 +169,7 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
             const imgSrc = item.thumbnail_url || item.image_url || item.thumbnailUrl || getPlaceholderImage(item.category || "");
 
             return (
-              <div key={safeId} className="group bg-white border border-outline-variant rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col">
+              <div key={`${safeId}-${index}`} className="group bg-white border border-outline-variant rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col">
                 <div className="relative aspect-video bg-surface-container flex items-center justify-center overflow-hidden">
                   <Image
                     unoptimized

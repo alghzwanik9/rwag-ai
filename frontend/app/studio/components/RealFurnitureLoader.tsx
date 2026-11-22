@@ -678,6 +678,16 @@ export default function RealFurnitureLoader({
   // ── Smart Rotation ('R' Key) ──────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       if (isSelected && (e.key === "r" || e.key === "R") && instanceId) {
         // Rotate exactly 45 degrees
         const newY = rotation[1] + Math.PI / 4;

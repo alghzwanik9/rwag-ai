@@ -860,17 +860,20 @@ export default function StudioClient() {
       const decor = findAsset(["vase", "camera", "decor"], "decor");
       if (decor) itemsToAdd.push({ ...decor, position: [1.5, 0, 0.2], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
     } else if (type === "Bedroom") {
+      const bed = findAsset(["bed", "سرير"], "seating");
+      if (bed) itemsToAdd.push({ ...bed, position: [0, 0, -0.9], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
+
       const chair = findAsset(["chair", "armchair", "wood"], "seating");
-      if (chair) itemsToAdd.push({ ...chair, position: [1.5, 0, -1.5], rotation: [0, -Math.PI / 4, 0], instanceId: crypto.randomUUID() });
+      if (chair) itemsToAdd.push({ ...chair, position: [1.6, 0, 0.8], rotation: [0, -Math.PI / 4, 0], instanceId: crypto.randomUUID() });
       
       const cabinet = findAsset(["drawer", "cabinet"], "storage");
-      if (cabinet) itemsToAdd.push({ ...cabinet, position: [-1.8, 0, 0.5], rotation: [0, Math.PI / 3, 0], instanceId: crypto.randomUUID() });
+      if (cabinet) itemsToAdd.push({ ...cabinet, position: [-1.8, 0, 0.5], rotation: [0, Math.PI / 2, 0], instanceId: crypto.randomUUID() });
       
       const rug = findAsset(["rug", "carpet"], "rugs");
-      if (rug) itemsToAdd.push({ ...rug, position: [0, 0.02, 0], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
+      if (rug) itemsToAdd.push({ ...rug, position: [0, 0.01, -0.3], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
       
-      const decor = findAsset(["vase", "flower", "camera"], "decor");
-      if (decor) itemsToAdd.push({ ...decor, position: [0.5, 0, -1.2], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
+      const lamp = findAsset(["lamp", "floor_lamp", "مصباح"], "lighting");
+      if (lamp) itemsToAdd.push({ ...lamp, position: [1.4, 0, -1.5], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
     } else if (type === "Kitchen") {
       const table = findAsset(["outdoor", "table", "dining"], "tables");
       if (table) itemsToAdd.push({ ...table, position: [0, 0, 0], rotation: [0, 0, 0], instanceId: crypto.randomUUID() });
@@ -945,6 +948,16 @@ export default function StudioClient() {
     //   .catch(console.error);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       if (e.key === "Backspace" || e.key === "Delete") {
         const selected = useSceneStore.getState().selectedAssetId;
         if (selected) {
