@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
         destination: `${backendUrl}/api/recommendations/:path*`,
       },
       {
+        source: "/api/furniture",
+        destination: `${backendUrl}/api/furniture`,
+      },
+      {
+        source: "/api/v1/ikea-catalog",
+        destination: `${backendUrl}/api/v1/ikea-catalog`,
+      },
+      {
         source: "/api/v1/assets",
         destination: `${backendUrl}/api/v1/assets`,
       },
