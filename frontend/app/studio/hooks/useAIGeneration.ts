@@ -62,8 +62,9 @@ async function fetchRoomLayout(
     ? `[Style Reference: ${styleReference}] ${rawPrompt}`
     : rawPrompt;
 
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
   try {
-    const res = await fetch("/api/generate-room", {
+    const res = await fetch(`${apiBase}/api/generate-room`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -75,8 +76,18 @@ async function fetchRoomLayout(
     if (res.status === 429) {
       return { ok: false, reason: 'تجاوزت الحد المسموح — انتظر دقيقة وأعد المحاولة' };
     }
+    if (res.status === 503) {
+      return { ok: false, reason: 'خوادم الذكاء الاصطناعي تواجه ضغطاً مؤقتاً — انتظر بضع ثوانٍ وأعد المحاولة' };
+    }
     if (!res.ok) {
-      return { ok: false, reason: `تعذّر تحليل الطلب — استجاب الخادم بالرمز ${res.status}` };
+      let detailMsg = '';
+      try {
+        const errJson = await res.json();
+        if (errJson?.detail && typeof errJson.detail === 'string') {
+          detailMsg = ` (${errJson.detail})`;
+        }
+      } catch {}
+      return { ok: false, reason: `تعذّر تحليل الطلب — استجاب الخادم بالرمز ${res.status}${detailMsg}` };
     }
 
     return { ok: true, data: (await res.json()) as GenerateRoomResponse };
@@ -169,6 +180,9 @@ function applyToScene(resolved: ResolvedItem[], data: GenerateRoomResponse) {
     }
     if (typeof data.room_dimensions.height === 'number' && Number.isFinite(data.room_dimensions.height)) {
       store.setWallHeight(data.room_dimensions.height);
+    }
+    if (data.room_dimensions.shape) {
+      store.setRoomShape(data.room_dimensions.shape);
     }
   }
   if (data.ambient_mode === 'morning' || data.ambient_mode === 'rainy' || data.ambient_mode === 'midnight') {
@@ -335,11 +349,17 @@ export function useAIGeneration({
       const finalState: StudioUiState = matchedCount === items.length ? 'success' : 'partial';
       patch(id, (r) => ({ ...r, state: finalState, totalCost, currency }));
 
-      showToast(
-        finalState === 'success'
-          ? '✅ اكتمل توليد الغرفة بالذكاء الاصطناعي'
-          : `⚠️ تم بناء الفراغ — ${arabicNumber(matchedCount)} من ${arabicNumber(items.length)} قطع مطابقة للمكتبة`
-      );
+      if (outcome.data?.auto_corrected) {
+        showToast(
+          `🛡️ تم التصحيح الذاتي لكود البناء SBC وNeufert بنجاح (درجة التقييم: ${outcome.data.spatial_audit?.spatial_score || 95}%)`
+        );
+      } else {
+        showToast(
+          finalState === 'success'
+            ? '✅ اكتمل توليد الغرفة بالذكاء الاصطناعي'
+            : `⚠️ تم بناء الفراغ — ${arabicNumber(matchedCount)} من ${arabicNumber(items.length)} قطع مطابقة للمكتبة`
+        );
+      }
 
       setIsLoading(false);
       onSettled?.(finalState);

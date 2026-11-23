@@ -9,6 +9,7 @@ import {
   IKEA_TEMPLATES,
   type IProductTemplate,
 } from "@/app/studio/config/catalogTemplates";
+import { resolveItem } from "@/app/studio/config/matching";
 import { formatCurrency, useSceneStore, type SupportedCurrency } from "@/lib/useSceneStore";
 
 type AssetCategoryFilter = "all" | IProductTemplate["category"];
@@ -97,7 +98,25 @@ function normalizeRemoteAsset(raw: RawBackendAsset, index: number): IProductTemp
     return n <= 20 ? Math.round(n * 1000) : Math.round(n);
   };
 
-  const modelUrl = raw.modelUrl || raw.model_url || raw.glb_url || DEFAULT_FALLBACK_GLB;
+  const candidateUrl = raw.modelUrl || raw.model_url || raw.glb_url;
+  let modelUrl = candidateUrl;
+  let category = normalizeCategory(raw.category);
+
+  if (!modelUrl || modelUrl === DEFAULT_FALLBACK_GLB) {
+    const match = resolveItem({
+      instance_id: id,
+      asset_id: (raw.category || name || id).toLowerCase(),
+      name,
+      economy: { sku: raw.sku || id }
+    }, IKEA_TEMPLATES);
+    if (match.kind === 'catalog' && match.asset.modelUrl) {
+      modelUrl = match.asset.modelUrl;
+      category = match.asset.category;
+    } else {
+      modelUrl = DEFAULT_FALLBACK_GLB;
+    }
+  }
+
   const thumbnailUrl = raw.thumbnailUrl || raw.thumbnail_url || raw.image_url || "";
 
   return {
@@ -106,7 +125,7 @@ function normalizeRemoteAsset(raw: RawBackendAsset, index: number): IProductTemp
     brand: (raw.brand || "Rwaq").trim(),
     price,
     currency: (raw.currency || "SAR").toUpperCase(),
-    category: normalizeCategory(raw.category),
+    category,
     modelUrl,
     dimensions: {
       width: normalizeDim(rawDims.width ?? rawDims.length, 1000),

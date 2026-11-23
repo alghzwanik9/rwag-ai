@@ -1,58 +1,125 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { REGION, Z } from "../config/regions";
 
 interface StudioHeaderProps {
-  /** Promoted primary action. Was a dead button at the bottom of the global sidebar. */
   onNewProject: () => void;
   onOpenProjects: () => void;
+  onUploadFloorplan?: () => void;
 }
 
 /**
- * Studio-owned top bar. The global <Header> is hidden on /studio (see
- * ConditionalShell) because it was pinned to `right-[280px]` and rendered
- * underneath the floating sidebar at `right-4`, clipping its own right edge.
+ * Studio-owned top bar with cross-page navigation connecting 3D Studio, 2D Studio,
+ * Maarad Gallery, Assets Catalog, and Projects.
  */
-export default function StudioHeader({ onNewProject, onOpenProjects }: StudioHeaderProps) {
+export default function StudioHeader({ onNewProject, onOpenProjects, onUploadFloorplan }: StudioHeaderProps) {
+  const pathname = usePathname();
+
   return (
     <header
       className={`${REGION.header} ${Z.region} flex items-center justify-between gap-4 border-b border-outline-variant/60 bg-surface/85 px-6 backdrop-blur-xl`}
+      dir="rtl"
     >
-      <div className="flex items-baseline gap-3">
-        <span className="font-headline-md text-headline-md font-bold text-on-surface">رواق</span>
-        <span className="text-label-sm text-on-surface-variant">أستوديو التصميم</span>
+      {/* Brand & Page Links */}
+      <div className="flex items-center gap-6">
+        <Link href="/" className="flex items-baseline gap-2 group transition-transform active:scale-95">
+          <span className="font-headline-md text-headline-md font-extrabold text-on-surface group-hover:text-primary transition-colors">
+            رواق
+          </span>
+          <span className="text-[11px] font-bold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full">
+            AI
+          </span>
+        </Link>
+
+        {/* Navigation Tabs */}
+        <nav className="flex items-center gap-1.5 bg-surface-container-low/70 p-1 rounded-2xl border border-outline-variant/40">
+          <Link
+            href="/studio"
+            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+              pathname === "/studio"
+                ? "bg-primary text-on-primary shadow-xs"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">view_in_ar</span>
+            الاستوديو 3D
+          </Link>
+
+          <Link
+            href="/studio2d"
+            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+              pathname === "/studio2d"
+                ? "bg-primary text-on-primary shadow-xs"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">grid_view</span>
+            الاستوديو 2D
+          </Link>
+
+          <Link
+            href="/maarad"
+            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+              pathname === "/maarad"
+                ? "bg-primary text-on-primary shadow-xs"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px] text-rwaq-gold">auto_awesome</span>
+            معرض التصاميم
+          </Link>
+
+          <Link
+            href="/assets"
+            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+              pathname === "/assets"
+                ? "bg-primary text-on-primary shadow-xs"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">category</span>
+            كتالوج الأثاث
+          </Link>
+        </nav>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Link
-          href="/maarad"
-          className="flex items-center gap-1.5 rounded-xl border border-outline-variant px-3.5 py-2.5 font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high"
-        >
-          <span className="material-symbols-outlined text-[18px] text-rwaq-gold">auto_awesome</span>
-          معرض التصاميم
-        </Link>
+      {/* Actions */}
+      <div className="flex items-center gap-2.5">
+        {onUploadFloorplan && (
+          <button
+            onClick={onUploadFloorplan}
+            className="flex items-center gap-1.5 rounded-xl border border-rwaq-gold/40 bg-rwaq-gold/10 px-3.5 py-2 font-label-md text-xs font-bold text-rwaq-gold shadow-xs transition-all hover:bg-rwaq-gold/20 active:scale-95"
+            title="رفع مخطط 2D واستخراجه إلى 3D"
+          >
+            <span className="material-symbols-outlined text-[17px]">architecture</span>
+            رفع مخطط 2D
+          </button>
+        )}
 
         <button
           onClick={onNewProject}
-          className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-label-md text-label-md text-on-primary shadow-sm transition-all hover:opacity-90 active:scale-95"
+          className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 font-label-md text-xs font-bold text-on-primary shadow-xs transition-all hover:opacity-95 active:scale-95"
+          title="بدء تصميم جديد"
         >
-          <span className="material-symbols-outlined text-[18px]">add</span>
+          <span className="material-symbols-outlined text-[17px]">add</span>
           مشروع جديد
         </button>
 
         <button
           onClick={onOpenProjects}
-          className="flex items-center gap-2 rounded-xl border border-outline-variant px-4 py-2.5 font-label-md text-label-md text-on-surface transition-colors hover:bg-surface-container-high"
+          className="flex items-center gap-1.5 rounded-xl border border-outline-variant bg-surface-container-low px-3.5 py-2 font-label-md text-xs font-bold text-on-surface transition-all hover:bg-surface-container-high active:scale-95"
+          title="استعراض وإدارة المشاريع المحفوظة"
         >
-          <span className="material-symbols-outlined text-[18px]">folder_open</span>
+          <span className="material-symbols-outlined text-[17px]">folder_open</span>
           مشاريعي
         </button>
 
-        <div className="mx-1 h-7 w-px bg-outline-variant/60" />
+        <div className="mx-1 h-6 w-px bg-outline-variant/60" />
 
-        <UserButton appearance={{ elements: { userButtonAvatarBox: "w-9 h-9 shadow-sm" } }} />
+        <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8 shadow-xs" } }} />
       </div>
     </header>
   );

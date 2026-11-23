@@ -18,6 +18,7 @@ export default function Header() {
     if (pathname === '/assets') return 'مكتبة الأصول';
     if (pathname === '/team') return 'إدارة الفريق';
     if (pathname === '/projects') return 'مشاريعي';
+    if (pathname === '/studio2d') return 'استوديو توليد الصور 2D';
     return 'مشروع التصميم الداخلي';
   };
 
@@ -26,15 +27,18 @@ export default function Header() {
       <div className="flex items-center gap-4">
         <span className="font-headline-md text-headline-md font-bold text-on-surface">{getPageTitle()}</span>
       </div>
-      <div className="flex items-center gap-6">
-        {/* The notifications / history / help buttons that used to sit here had
-            no onClick and no destination. Removed rather than left as decoration. */}
-        <div className="h-9 w-9 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden border border-outline-variant">
-          {user?.imageUrl ? (
-            <Image alt="User" className="h-full w-full object-cover" src={user.imageUrl} width={36} height={36} />
-          ) : (
-            <span className="text-sm font-bold text-on-surface-variant">{user?.firstName?.charAt(0) || "U"}</span>
-          )}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-surface-container-high border border-outline-variant/80 shadow-xs">
+          <div className="h-7 w-7 rounded-full bg-secondary/15 text-secondary flex items-center justify-center font-bold text-xs overflow-hidden">
+            {user?.imageUrl ? (
+              <Image alt="User" className="h-full w-full object-cover" src={user.imageUrl} width={28} height={28} />
+            ) : (
+              <span>{user?.firstName?.charAt(0) || "U"}</span>
+            )}
+          </div>
+          <span className="text-xs font-bold text-on-surface">
+            {user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : "المصمم"}
+          </span>
         </div>
       </div>
     </header>

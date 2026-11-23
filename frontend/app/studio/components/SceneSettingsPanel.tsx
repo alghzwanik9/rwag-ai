@@ -35,6 +35,13 @@ const CURTAIN_STYLES: { id: CurtainStyle; label: string; icon: string }[] = [
   { id: 'draped', label: 'منسدلة', icon: 'curtains' },
 ];
 
+const ROOM_SHAPES: { id: 'single' | 'corridor_room' | 'open_plan' | 'l_shape'; label: string; desc: string; icon: string }[] = [
+  { id: 'single', label: 'غرفة مستقلة', desc: 'مساحة مربعة/مستطيلة قياسية', icon: 'crop_square' },
+  { id: 'corridor_room', label: 'غرفة مع سيب / ممر', desc: 'غرفة متصلة بممر ومدخل جانبي', icon: 'view_timeline' },
+  { id: 'open_plan', label: 'صالة ومطبخ مفتوح', desc: 'مساحة معيشة مع مطبخ أمريكي', icon: 'countertops' },
+  { id: 'l_shape', label: 'مخطط زاوية (L)', desc: 'مخطط ممتد بزاوية قائمة', icon: 'turn_right' },
+];
+
 /**
  * The environment/room settings, moved out of the popover that used to hang off
  * the icon rail. Reads the store directly rather than taking twenty props —
@@ -61,6 +68,8 @@ export default function SceneSettingsPanel({ showToast }: { showToast: (msg: str
   const setRoomDepth = useSceneStore((s) => s.setRoomDepth);
   const wallHeight = useSceneStore((s) => s.wallHeight);
   const setWallHeight = useSceneStore((s) => s.setWallHeight);
+  const roomShape = useSceneStore((s) => s.roomShape || 'single');
+  const setRoomShape = useSceneStore((s) => s.setRoomShape);
   const resetToDefaults = useSceneStore((s) => s.resetToDefaults);
   const windows = useSceneStore((s) => s.windows);
   const addWindow = useSceneStore((s) => s.addWindow);
@@ -183,6 +192,41 @@ export default function SceneSettingsPanel({ showToast }: { showToast: (msg: str
 
         {tab === 'room' && (
           <div className="flex flex-col gap-3">
+            {/* ── Room Architecture / Shape Selector ── */}
+            <div>
+              <label className="mb-2 block text-[13px] font-bold text-on-surface">
+                نوع المخطط المعماري
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {ROOM_SHAPES.map((shape) => {
+                  const isActive = roomShape === shape.id;
+                  return (
+                    <button
+                      key={shape.id}
+                      onClick={() => {
+                        setRoomShape(shape.id);
+                        showToast(`تم تغيير المخطط إلى: ${shape.label}`);
+                      }}
+                      className={`flex flex-col items-start rounded-xl border p-2 text-right transition-all ${
+                        isActive
+                          ? 'border-primary bg-primary/10 text-primary shadow-xs'
+                          : 'border-outline-variant/30 bg-surface-container-low text-on-surface hover:border-outline-variant'
+                      }`}
+                    >
+                      <div className="mb-1 flex w-full items-center justify-between">
+                        <span className="material-symbols-outlined text-[20px]">{shape.icon}</span>
+                        {isActive && (
+                          <span className="material-symbols-outlined text-[16px] text-primary">check_circle</span>
+                        )}
+                      </div>
+                      <span className="text-[11px] font-bold">{shape.label}</span>
+                      <span className="mt-0.5 text-[9px] text-on-surface-variant leading-tight">{shape.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {dimensions.map((dim) => (
               <div
                 key={dim.label}

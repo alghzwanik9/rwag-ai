@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
+    "backend": "cd .. && .\\.venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload",
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3000",
     "lint": "eslint"

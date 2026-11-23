@@ -52,9 +52,9 @@ export interface RwaqMaterial {
   textureUrl?: string;
 }
 
-// ─── Window System ───────────────────────────────────────────────────────────
+// ─── Window & Door System ───────────────────────────────────────────────────────────
 
-export type WindowWall = 'back' | 'left';
+export type WindowWall = 'back' | 'left' | 'right' | 'front';
 export type WindowSize = 'small' | 'medium' | 'large';
 export type CurtainStyle = 'none' | 'sheer' | 'blackout' | 'draped';
 
@@ -67,6 +67,16 @@ export interface RoomWindow {
   curtain: CurtainStyle;
   curtainColor: string;
   isOpen: boolean;        // curtain open/closed
+}
+
+export type DoorWall = 'back' | 'left' | 'right' | 'front';
+
+export interface RoomDoor {
+  id: string;
+  wall: DoorWall;
+  positionOffset: number; // -1 to 1, relative position along the wall
+  width: number;          // in meters (e.g. 0.9)
+  height: number;         // in meters (e.g. 2.1)
 }
 
 export interface SceneStore {
@@ -91,6 +101,8 @@ export interface SceneStore {
   roomDepth: number;
   /** Room Dimensions: Wall Height */
   wallHeight: number;
+  /** Room Architectural Layout Shape */
+  roomShape: 'single' | 'corridor_room' | 'open_plan' | 'l_shape';
   /** All furniture items currently in the scene */
   sceneItems: SceneItem[];
   /** History stack for Undo/Redo */
@@ -115,6 +127,8 @@ export interface SceneStore {
   isDragging: boolean;
   /** Room Windows configuration */
   windows: RoomWindow[];
+  /** Room Doors configuration */
+  doors: RoomDoor[];
 
   // ── Derived ────────────────────────────────────────────────────────────────
   /**
@@ -151,6 +165,7 @@ export interface SceneStore {
   setRoomWidth: (w: number) => void;
   setRoomDepth: (d: number) => void;
   setWallHeight: (h: number) => void;
+  setRoomShape: (shape: 'single' | 'corridor_room' | 'open_plan' | 'l_shape') => void;
   undo: () => void;
   redo: () => void;
   resetToDefaults: () => void;
@@ -161,6 +176,10 @@ export interface SceneStore {
   removeWindow: (id: string) => void;
   updateWindow: (id: string, patch: Partial<RoomWindow>) => void;
   setWindows: (windows: RoomWindow[]) => void;
+  // Door actions
+  addDoor: (door: RoomDoor) => void;
+  removeDoor: (id: string) => void;
+  setDoors: (doors: RoomDoor[]) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -180,6 +199,7 @@ export const useSceneStore = create<SceneStore>()(
       roomWidth: 5.5,
       roomDepth: 4.8,
       wallHeight: 3.0,
+      roomShape: 'single',
       sceneItems: [],
       history: [[]],
       historyIndex: 0,
@@ -193,6 +213,7 @@ export const useSceneStore = create<SceneStore>()(
       activeMaterial: null,
       customMaterials: {},
       windows: [],
+      doors: [],
 
       // ── Derived selectors ──────────────────────────────────────────────────
       currentTotalCost: () => {
@@ -318,6 +339,7 @@ export const useSceneStore = create<SceneStore>()(
       setRoomWidth: (w) => set({ roomWidth: w }),
       setRoomDepth: (d) => set({ roomDepth: d }),
       setWallHeight: (h) => set({ wallHeight: h }),
+      setRoomShape: (shape) => set({ roomShape: shape }),
       undo: () => set((state) => {
         if (state.historyIndex > 0) {
           const newIndex = state.historyIndex - 1;
@@ -343,6 +365,7 @@ export const useSceneStore = create<SceneStore>()(
         roomDepth: 4.8,
         wallHeight: 3.0,
         windows: [],
+        doors: [],
       }),
 
       setIsDragging: (dragging) => set({ isDragging: dragging }),
@@ -373,6 +396,11 @@ export const useSceneStore = create<SceneStore>()(
       })),
 
       setWindows: (windows) => set({ windows }),
+
+      // ── Door actions ──────────────────────────────────────────
+      addDoor: (door) => set((state) => ({ doors: [...state.doors, door] })),
+      removeDoor: (id) => set((state) => ({ doors: state.doors.filter((d) => d.id !== id) })),
+      setDoors: (doors) => set({ doors }),
     }),
     {
       name: 'rwaq-scene-store',
@@ -390,6 +418,7 @@ export const useSceneStore = create<SceneStore>()(
         roomWidth: state.roomWidth,
         roomDepth: state.roomDepth,
         wallHeight: state.wallHeight,
+        roomShape: state.roomShape,
         windows: state.windows,
       }),
     }

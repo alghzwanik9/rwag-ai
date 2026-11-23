@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
-import { IProductTemplate } from '@/app/studio/config/catalogTemplates';
+import { IProductTemplate, IKEA_TEMPLATES } from '@/app/studio/config/catalogTemplates';
 import { normalizeDimensionsMm } from '@/app/studio/config/pipeline';
+import { resolveItem } from '@/app/studio/config/matching';
 import { SceneItem } from '@/lib/useSceneStore';
 
 interface IkeaAssetsLibraryProps {
@@ -196,18 +197,38 @@ export function IkeaAssetsLibrary({ onClose, addSceneItem }: IkeaAssetsLibraryPr
                       const normalizedDims = normalizeDimensionsMm(item?.dimensions);
                       const storeUrl = item?.link || item?.store_url || undefined;
 
+                      const match = resolveItem({
+                        instance_id: safeId,
+                        asset_id: (item?.category || item?.name || safeId).toLowerCase(),
+                        name: item?.name || "",
+                        economy: { sku: safeId }
+                      }, IKEA_TEMPLATES);
+
+                      const resolvedModel = (match.kind === 'catalog' && match.asset.modelUrl)
+                        ? match.asset.modelUrl
+                        : (item?.model_url || item?.model_3d_url || item?.modelUrl || DEFAULT_MODEL_URL);
+
+                      const rawCat = (item?.category || "").toLowerCase();
+                      const resolvedCategory = (match.kind === 'catalog' && match.asset.category)
+                        ? match.asset.category
+                        : rawCat.includes("table") || rawCat.includes("desk") ? "tables"
+                        : rawCat.includes("light") || rawCat.includes("lamp") ? "lighting"
+                        : rawCat.includes("rug") || rawCat.includes("carpet") ? "rugs"
+                        : rawCat.includes("storage") || rawCat.includes("cabinet") || rawCat.includes("wardrobe") || rawCat.includes("drawer") || rawCat.includes("bed") || rawCat.includes("bookcase") ? "storage"
+                        : "seating";
+
                       const newItem = {
                         id: safeId,
                         name: item?.name || "Unknown Product",
                         brand: item?.brand || "IKEA",
-                        category: (["seating", "tables", "lighting", "rugs", "storage", "decor"].includes(item?.category || "") ? item?.category : "seating") as import('@/lib/useSceneStore').SceneItem["category"],
+                        category: resolvedCategory as import('@/lib/useSceneStore').SceneItem["category"],
                         price: Number(item.price) || 0,
                         currency: 'SAR' as const,
                         instanceId: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
                         position: [0, 0, 0] as [number, number, number],
                         rotation: [0, 0, 0] as [number, number, number],
                         dimensions: normalizedDims,
-                        modelUrl: item?.model_url || item?.model_3d_url || item?.modelUrl || DEFAULT_MODEL_URL,
+                        modelUrl: resolvedModel,
                         thumbnailUrl: imgSrc,
                         store_url: storeUrl,
                         asset_id: safeId

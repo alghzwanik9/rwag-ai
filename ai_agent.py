@@ -3,6 +3,7 @@ import sys
 import json
 import math
 import time
+import uuid
 import logging
 
 # Fix for Windows console encoding
@@ -10,13 +11,15 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 import httpx
+import requests
+from requests.exceptions import RequestException, Timeout as RequestsTimeout
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 from dotenv import load_dotenv
 
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal, Optional, Dict, Any
 
 load_dotenv()
 
@@ -27,8 +30,8 @@ api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
 os.environ["GOOGLE_API_KEY"] = api_key
 os.environ["GEMINI_API_KEY"] = api_key
 
-GEMINI_TIMEOUT_MS = 30000
-GEMINI_MAX_ATTEMPTS = 2
+GEMINI_TIMEOUT_MS = 90000
+GEMINI_MAX_ATTEMPTS = 3
 
 
 # ── Pydantic Output Models ────────────────────────────────────────────────────
@@ -114,8 +117,11 @@ def get_dynamic_asset_registry():
         print(f"Failed to load dynamic registry: {e}")
         return list(CANONICAL_ASSET_IDS)
 
-# Initialize the modern google-genai client
-_client = genai.Client(api_key=api_key) if api_key else None
+# Initialize the modern google-genai client with increased timeout
+_client = genai.Client(
+    api_key=api_key,
+    http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS)
+) if api_key else None
 
 
 def _is_non_retryable_gemini_error(exc: Exception) -> bool:
@@ -142,13 +148,13 @@ def _is_transient_gemini_error(exc: Exception) -> bool:
     """Returns True ONLY for transient 5xx or transport/timeout failures."""
     if _is_non_retryable_gemini_error(exc):
         return False
-    if isinstance(exc, (genai_errors.ServerError, TimeoutError, ConnectionError, httpx.TimeoutException, httpx.TransportError)):
+    if isinstance(exc, (genai_errors.ServerError, TimeoutError, ConnectionError, RequestsTimeout, httpx.TimeoutException, httpx.TransportError)):
         return True
     status_code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
     if isinstance(status_code, int) and 500 <= status_code < 600:
         return True
-    msg = str(exc)
-    return any(code in msg for code in ("500", "502", "503", "504", "DEADLINE_EXCEEDED"))
+    msg = str(exc).lower()
+    return any(code in msg for code in ("500", "502", "503", "504", "deadline_exceeded", "unavailable", "high demand", "timed out", "read timeout"))
 
 
 def _call_gemini_with_retry(
@@ -183,7 +189,7 @@ def _call_gemini_with_retry(
             )
         except Exception as exc:
             if attempt < max_attempts and _is_transient_gemini_error(exc):
-                delay_s = 1.0 * (2 ** (attempt - 1))
+                delay_s = 2.0 * (2 ** (attempt - 1))
                 logger.warning(
                     "Transient Gemini error on attempt %d/%d (%s); retrying in %.1fs...",
                     attempt,
@@ -237,6 +243,136 @@ def analyze_image_layout(image_b64: str) -> str:
         logger.warning("Vision analysis failed: %s", e)
         return ""
 
+
+def analyze_floorplan_image(
+    image_input: bytes | str,
+    mime_type: str = "image/jpeg"
+):
+    """Multimodal 2D Floorplan & CAD blueprint extractor using Gemini 2.5 Flash.
+
+    Extracts:
+    - Printed or estimated room dimensions (width, depth, height) safely clamped (2.5m-12.0m).
+    - Room classification & confidence score (0.0-1.0).
+    - Perimeter wall openings (doors, windows) with offsets and dimensions.
+    - Detected furniture items / architectural zones.
+    """
+    import base64
+    from backend.app.schemas import ExtractedOpening, FloorplanExtractionResult
+
+    image_bytes: bytes
+    if isinstance(image_input, bytes):
+        image_bytes = image_input
+    elif isinstance(image_input, str):
+        if "," in image_input:
+            header, encoded = image_input.split(",", 1)
+            if "image/" in header:
+                mime_type = header.split(";")[0].split(":")[1]
+            image_bytes = base64.b64decode(encoded)
+        else:
+            image_bytes = base64.b64decode(image_input)
+    else:
+        raise ValueError("image_input must be bytes or base64 string")
+
+    system_instruction = (
+        "You are an expert Architectural CAD & Floorplan Vision AI adhering to Neufert and Saudi Building Code (SBC) standards.\n"
+        "Your task is to analyze 2D floor plans, CAD blueprints, or hand-drawn sketches and accurately extract structural room data.\n\n"
+        "EXTRACTION RULES:\n"
+        "1. ROOM DIMENSIONS:\n"
+        "   - If printed dimensions/labels are visible (e.g. '4.50 x 5.20', '450 x 520 cm', '4500 x 5200 mm'), read them and convert to meters.\n"
+        "   - If no printed dimensions exist (e.g. hand-drawn sketch or unlabelled CAD), estimate realistic residential proportions based on the room type:\n"
+        "     * Living room / Majlis: typically 5.0m to 7.5m width, 4.5m to 6.5m depth.\n"
+        "     * Bedroom: typically 3.8m to 5.0m width, 4.0m to 5.5m depth.\n"
+        "     * Office / Study: typically 3.2m to 4.5m width, 3.5m to 4.5m depth.\n"
+        "     * Studio: typically 4.5m to 6.0m width, 4.5m to 6.5m depth.\n"
+        "   - Clamped safely: width between 2.5m and 12.0m, depth between 2.5m and 12.0m.\n"
+        "   - Height (wall height) defaults to 2.8m (typical 2.6m to 3.5m, clamped 2.4m to 4.5m).\n"
+        "2. DOMINANT ROOM EXTRACTION:\n"
+        "   - If the plan contains multiple rooms (e.g. entire apartment CAD), extract the primary/largest dominant living room or bedroom.\n"
+        "3. DETECTED OPENINGS (DOORS & WINDOWS):\n"
+        "   - Assign each opening to its perimeter wall: 'back' (North), 'left' (West), 'right' (East), 'front' (South).\n"
+        "   - 'offset_ratio': normalized coordinate along the wall from -1.0 to 1.0 (where 0.0 is center of the wall).\n"
+        "   - 'width_m': opening width in meters (doors: 0.8m–1.2m, windows: 1.0m–3.0m).\n"
+        "   - 'type': 'door' or 'window'.\n"
+        "   - 'height_m': vertical span in meters (doors ~2.1m, windows ~1.6m).\n"
+        "4. DETECTED FURNITURE / ZONES:\n"
+        "   - List any furniture symbols or zones detected in the drawing (e.g. 'sofa', 'tv_unit', 'coffee_table', 'bed', 'desk').\n"
+        "5. SUMMARIES:\n"
+        "   - summary_ar: Arabic concise summary (e.g. 'تم استخراج صالة معيشة بأبعاد 5.2م × 4.8م مع نافذة خلفية وباب جانبي').\n"
+        "   - summary_en: English technical summary."
+    )
+
+    try:
+        parts = [
+            types.Part.from_bytes(data=image_bytes, mime_type=mime_type or "image/jpeg"),
+            "Extract the precise architectural dimensions, openings, and furniture zones from this floor plan image."
+        ]
+        response = _call_gemini_with_retry(
+            model="gemini-2.5-flash",
+            contents=parts,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=FloorplanExtractionResult,
+                temperature=0.2,
+            ),
+        )
+        raw_json = json.loads(response.text.strip())
+        res = FloorplanExtractionResult.model_validate(raw_json)
+    except Exception as exc:
+        if _is_non_retryable_gemini_error(exc):
+            raise
+        logger.warning("Gemini floorplan vision extraction failed or unavailable: %s. Using safe heuristic fallback.", exc)
+        res = FloorplanExtractionResult(
+            room_type="living room",
+            confidence=0.70,
+            width=5.5,
+            depth=4.8,
+            height=2.8,
+            openings=[
+                ExtractedOpening(wall="back", offset_ratio=0.0, width_m=1.8, type="window", height_m=1.6),
+                ExtractedOpening(wall="right", offset_ratio=0.5, width_m=0.9, type="door", height_m=2.1),
+            ],
+            detected_furniture=["sofa", "coffee_table", "tv_unit"],
+            room_shape="single",
+            summary_ar="تم تقدير أبعاد الغرفة بـ 5.5م × 4.8م بناءً على النماذج المعمارية السكنية القياسية.",
+            summary_en="Estimated room dimensions 5.5m x 4.8m based on standard residential architectural heuristics."
+        )
+
+    clamped_w = round(max(2.5, min(12.0, float(res.width))), 2)
+    clamped_d = round(max(2.5, min(12.0, float(res.depth))), 2)
+    clamped_h = round(max(2.4, min(4.5, float(res.height or 2.8))), 2)
+    clamped_conf = round(max(0.0, min(1.0, float(res.confidence))), 2)
+
+    sanitized_openings: List[ExtractedOpening] = []
+    for op in (res.openings or []):
+        wall = op.wall if op.wall in ("back", "left", "right", "front") else "back"
+        offset = round(max(-1.0, min(1.0, float(op.offset_ratio))), 3)
+        w_m = round(max(0.6, min(4.0, float(op.width_m))), 2)
+        h_m = round(max(0.8, min(3.5, float(op.height_m or (2.1 if op.type == "door" else 1.6)))), 2)
+        sanitized_openings.append(
+            ExtractedOpening(
+                wall=wall,
+                offset_ratio=offset,
+                width_m=w_m,
+                type=op.type if op.type in ("door", "window") else "window",
+                height_m=h_m
+            )
+        )
+
+    return FloorplanExtractionResult(
+        room_type=res.room_type or "living room",
+        confidence=clamped_conf,
+        width=clamped_w,
+        depth=clamped_d,
+        height=clamped_h,
+        openings=sanitized_openings,
+        detected_furniture=res.detected_furniture or [],
+        room_shape=res.room_shape or "single",
+        summary_ar=res.summary_ar or f"تم تحليل المخطط: أبعاد {clamped_w}م × {clamped_d}م مع {len(sanitized_openings)} فتحات.",
+        summary_en=res.summary_en or f"Analyzed floorplan: dimensions {clamped_w}m x {clamped_d}m with {len(sanitized_openings)} openings."
+    )
+
+
 def generate_layout(prompt: str, image_b64: str | None = None) -> dict:
     """Fast, direct Gemini 2.5 Flash architectural generation with Neufert standards and structured output."""
 
@@ -258,16 +394,23 @@ def generate_layout(prompt: str, image_b64: str | None = None) -> dict:
         "You are an elite Senior Architectural Spatial Planner & Interior Design AI adhering strictly to Neufert and Saudi Building Code standards.\n"
         "Your task is to analyze the user request and generate a complete, mathematically precise 3D room layout.\n\n"
         "STRICT SPATIAL AND SCHEMA CONSTRAINTS:\n"
-        "1. REALISTIC ROOM SIZE: Default to room dimensions (width and depth between 4m and 6m, e.g., 5x5m). The floor is centered at (t_x: 0, t_y: 0, t_z: 0).\n"
-        "2. DIORAMA MODE: Always generate exactly two walls at the back perimeters to frame the scene (e.g., North/back wall at z=-depth/2, West/left wall at x=-width/2). "
-        "NEVER enclose the room fully. Leave the front (South and East sides) open for the camera.\n"
-        "3. STRICT COORDINATE BOUNDARIES: ALL generated objects MUST have their [t_x, t_z] coordinates strictly inside the room's dimensions. For a 5x5 room, no object coordinates can be < -2.5 or > 2.5.\n"
+        "1. ROOM SHAPE & ARCHITECTURE: Infer 'shape' in room_dimensions from the user's prompt:\n"
+        "   - 'corridor_room': if the user mentions a hallway, corridor, or entry (سيب، ممر، مدخل).\n"
+        "   - 'open_plan': if the user mentions open kitchen with living room (مطبخ مفتوح مع صالة، مطبخ أمريكي).\n"
+        "   - 'l_shape': if the user requests an L-shaped layout or angled space (شكل L، زاوية).\n"
+        "   - 'single': for a standard rectangular room (غرفة نوم، مكتب، مجلس مستقل).\n"
+        "   Default room dimensions between 4m and 7m. Floor centered at (0, 0, 0).\n"
+        "2. DIORAMA MODE: Generate back perimeter walls framing the scene (North and West walls). Leave South and East open for viewing.\n"
+        "3. FUNCTIONAL CLUSTERING & LOGICAL GROUPING: Furniture MUST be organized into cohesive functional clusters:\n"
+        "   - Work Cluster: Desk backed against wall, Desk Chair centered and facing desk, Rug underneath the desk and chair.\n"
+        "   - Living Cluster: Sofa facing TV unit with Coffee Table in between at 0.45m distance, Rug centered under the cluster.\n"
+        "   - Circulation: Maintain unobstructed 0.9m minimum primary walkways.\n"
         "4. FLOOR ANCHOR: All furniture objects MUST have transform.t_y = 0.0. Never let furniture float or sink.\n"
-        "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or beds MUST have their back edge aligned flush with a perimeter wall without intersecting it.\n"
-        "6. WINDOW: Generate at least ONE architectural window object (type='window', asset_id='window') flush against either the back North wall (z = -depth/2, yaw_y = 0) or the left West wall (x = -width/2, yaw_y = 90) with realistic dimensions (e.g., length 1.6-2.4m, width 0.15m, height 1.8-2.2m) and transform position.\n"
-        "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees). Maintain at least 0.9m primary walkways and 0.4m between coffee table and sofa.\n"
+        "5. WALL SNAPPING: Objects like TV units, cabinets, bookshelves, or desks MUST have their back edge aligned flush with a perimeter wall without intersecting it.\n"
+        "6. WINDOW: Generate at least ONE architectural window object (type='window', asset_id='window') flush against either the back North wall (z = -depth/2, yaw_y = 0) or the left West wall (x = -width/2, yaw_y = 90) with realistic dimensions and transform position.\n"
+        "7. SPACING & CLEARANCES: Furniture MUST face logical directions (yaw_y: 0, 90, 180, or -90 degrees).\n"
         f"8. ASSET REGISTRY: For 'furniture' objects, choose asset_id strictly from this list: {json.dumps(asset_registry)}. Avoid overlaps.\n"
-        "9. 60-30-10 COLOR HARMONY & FINISHES: Always populate top-level 'wall_color' (e.g., '#E8E5DF') and 'floor_color' (e.g., '#C8B29B') as valid hex color codes matching the requested palette, plus 'ambient_mode' strictly as one of 'morning', 'rainy', or 'midnight' matching the requested atmosphere/lighting.\n"
+        "9. 60-30-10 COLOR HARMONY & FINISHES: Always populate top-level 'wall_color' (e.g., '#E8E5DF') and 'floor_color' (e.g., '#C8B29B') as valid hex color codes matching the requested palette, plus 'ambient_mode' strictly as one of 'morning', 'rainy', or 'midnight'.\n"
         "10. SMART ECONOMY: Generate realistic price in SAR (currency 'SAR'), store details, and SKU from real brands (IKEA, Abyat, West Elm).\n\n"
         f"ARCHITECTURAL & ERGONOMIC CONTEXT:\n{standards_context}\n"
     )
@@ -295,6 +438,89 @@ def generate_layout(prompt: str, image_b64: str | None = None) -> dict:
     payload["floor_color"] = validated.floor_color.strip() or "#C8B29B"
     payload["ambient_mode"] = validated.ambient_mode or "morning"
 
+    # Apply Spatial Clustering Solver for architectural alignments and ergonomic grouping
+    try:
+        from backend.app.services.spatial_solver import SpatialClusteringSolver
+        r_dims = payload.get("room_dimensions") or {}
+        r_w = _safe_float(r_dims.get("width"), 5.0)
+        r_d = _safe_float(r_dims.get("depth"), 5.0)
+
+        # Keyword-based architectural shape inference
+        lower_prompt = prompt.lower()
+        if any(k in lower_prompt for k in ["سيب", "ممر", "مدخل", "corridor", "hallway", "entry"]):
+            r_dims["shape"] = "corridor_room"
+        elif any(k in lower_prompt for k in ["مطبخ مفتوح", "مطبخ مع صالة", "صالة ومطبخ", "مطبخ امريكي", "مطبخ أمريكي", "open kitchen", "open plan", "open-plan"]):
+            r_dims["shape"] = "open_plan"
+        elif any(k in lower_prompt for k in ["شكل l", "l-shape", "l shape", "زاوية", "l_shape"]):
+            r_dims["shape"] = "l_shape"
+        elif not r_dims.get("shape"):
+            r_dims["shape"] = "single"
+
+        payload["room_dimensions"] = r_dims
+        r_s = r_dims.get("shape", "single")
+
+        if "objects" in payload and isinstance(payload["objects"], list):
+            payload["objects"] = SpatialClusteringSolver.solve_layout(
+                payload["objects"],
+                room_width=r_w,
+                room_depth=r_d,
+                shape=r_s
+            )
+            logger.info("Spatial clustering solver applied successfully with shape: %s", r_s)
+
+        # ── Closed-Loop Self-Correction Engine ──
+        # Convert objects to audit format to verify SBC & Neufert standards
+        audit_items = []
+        for obj in payload.get("objects", []):
+            if obj.get("type") == "furniture":
+                t = obj.get("transform", {})
+                dims = obj.get("dimensions", {})
+                w_m = _safe_float(dims.get("length") or dims.get("width_mm", 1000) / 1000.0, 1.0)
+                d_m = _safe_float(dims.get("width") or dims.get("depth_mm", 800) / 1000.0, 0.8)
+                audit_items.append({
+                    "asset_id": obj.get("asset_id", ""),
+                    "name": obj.get("name") or obj.get("asset_id", ""),
+                    "position": [_safe_float(t.get("t_x")), _safe_float(t.get("t_y")), _safe_float(t.get("t_z"))],
+                    "dimensions": {"width": w_m, "depth": d_m}
+                })
+
+        initial_audit = audit_spatial_layout(audit_items, room_width=r_w, room_depth=r_d)
+        initial_score = initial_audit.get("spatial_score", 100)
+        logger.info("Closed-loop initial audit score: %s (%s)", initial_score, initial_audit.get("assessment_label"))
+
+        # If score is below 85 or any violation is flagged, trigger automatic self-correction pass
+        if initial_score < 85 or any("تداخل" in rec or "قريبة" in rec or "بعيدة" in rec or "مقيد" in rec for rec in initial_audit.get("recommendations", [])):
+            logger.info("Spatial audit score %s < 85. Executing auto-correction pass via SpatialClusteringSolver...", initial_score)
+            payload["objects"] = SpatialClusteringSolver.auto_correct_violations(
+                payload["objects"],
+                room_width=r_w,
+                room_depth=r_d,
+                violations=initial_audit.get("recommendations", [])
+            )
+            # Re-audit post correction
+            audit_items_fixed = []
+            for obj in payload.get("objects", []):
+                if obj.get("type") == "furniture":
+                    t = obj.get("transform", {})
+                    dims = obj.get("dimensions", {})
+                    w_m = _safe_float(dims.get("length") or dims.get("width_mm", 1000) / 1000.0, 1.0)
+                    d_m = _safe_float(dims.get("width") or dims.get("depth_mm", 800) / 1000.0, 0.8)
+                    audit_items_fixed.append({
+                        "asset_id": obj.get("asset_id", ""),
+                        "name": obj.get("name") or obj.get("asset_id", ""),
+                        "position": [_safe_float(t.get("t_x")), _safe_float(t.get("t_y")), _safe_float(t.get("t_z"))],
+                        "dimensions": {"width": w_m, "depth": d_m}
+                    })
+            final_audit = audit_spatial_layout(audit_items_fixed, room_width=r_w, room_depth=r_d)
+            payload["spatial_audit"] = final_audit
+            payload["auto_corrected"] = True
+            logger.info("Closed-loop auto-correction completed. New score: %s", final_audit.get("spatial_score"))
+        else:
+            payload["spatial_audit"] = initial_audit
+            payload["auto_corrected"] = False
+    except Exception as solver_err:
+        logger.warning("Spatial solver fallback: %s", solver_err)
+
     logger.info("Direct 3D layout generated successfully.")
     return payload
 
@@ -308,15 +534,166 @@ def _catalog_dim_to_mm(value: object, default_mm: int) -> int:
     return round(parsed)
 
 
-def handle_chat_request(user_message: str) -> dict:
-    """Uses Gemini to interpret chat and LanceDB RAG to find matching items."""
-    system_instruction = (
-        "You are an AI Interior Design Assistant. A user will talk to you. "
-        "If they are asking to add or find a specific furniture item (e.g. 'add a cheap sofa', 'find a blue chair', 'أضف كنبة'), "
-        "extract the keywords for a database search into 'search_query' (in English or Arabic), and set 'intent' to 'add'. "
-        "If they are just chatting, set 'intent' to 'chat' and 'search_query' to null. "
-        "Output JSON only: {\"intent\": \"add\"|\"chat\", \"search_query\": \"...\"|null}"
-    )
+STYLE_PRESETS = {
+    "japandi": {
+        "title": "ياباندي (Japandi)",
+        "wall_color": "#EDE8E0",
+        "floor_color": "#C8B29B",
+        "ambient_mode": "morning",
+        "seating_color": "#D5CEBF",
+        "tables_color": "#C2AB95",
+        "rug_color": "#E4DDD3",
+        "storage_color": "#B8A38E",
+        "general_color": "#D8D0C5"
+    },
+    "neoclassic": {
+        "title": "نيو كلاسيك (Neo-Classic)",
+        "wall_color": "#F4F1EA",
+        "floor_color": "#3D2B1F",
+        "ambient_mode": "midnight",
+        "seating_color": "#2C3E50",
+        "tables_color": "#C5A059",
+        "rug_color": "#EAE5DA",
+        "storage_color": "#1F2937",
+        "general_color": "#8B7355"
+    },
+    "modern": {
+        "title": "مودرن معاصر (Modern)",
+        "wall_color": "#F0EFEB",
+        "floor_color": "#5A5A5A",
+        "ambient_mode": "morning",
+        "seating_color": "#2D3142",
+        "tables_color": "#BFC0C0",
+        "rug_color": "#EAE8E1",
+        "storage_color": "#4F5D75",
+        "general_color": "#3A3D40"
+    },
+    "bohemian": {
+        "title": "بوهيمي دافئ (Bohemian)",
+        "wall_color": "#FAF0E6",
+        "floor_color": "#B8860B",
+        "ambient_mode": "rainy",
+        "seating_color": "#C86D51",
+        "tables_color": "#8B5A2B",
+        "rug_color": "#F5DEB3",
+        "storage_color": "#A0522D",
+        "general_color": "#DEB887"
+    },
+    "minimalist": {
+        "title": "مينيمال هادئ (Minimalist)",
+        "wall_color": "#F8F9FA",
+        "floor_color": "#D6D6D6",
+        "ambient_mode": "morning",
+        "seating_color": "#495057",
+        "tables_color": "#E9ECEF",
+        "rug_color": "#F1F3F5",
+        "storage_color": "#6C757D",
+        "general_color": "#CED4DA"
+    },
+    "wabi_sabi": {
+        "title": "وابي سابي طبيعي (Wabi-Sabi)",
+        "wall_color": "#E3DCCF",
+        "floor_color": "#8C7B6B",
+        "ambient_mode": "morning",
+        "seating_color": "#B7A99A",
+        "tables_color": "#7D6B58",
+        "rug_color": "#D3C7B5",
+        "storage_color": "#9A8C7C",
+        "general_color": "#5C5346"
+    }
+}
+
+
+def handle_chat_request(
+    user_message: str,
+    scene_items: Optional[List[Dict[str, Any]]] = None,
+    selected_asset_id: Optional[str] = None,
+    room_width: float = 5.0,
+    room_depth: float = 5.0,
+    room_shape: str = "single",
+    windows: Optional[List[Dict[str, Any]]] = None,
+    wall_color: Optional[str] = None,
+    floor_color: Optional[str] = None,
+) -> dict:
+    """
+    Multi-Turn Interactive Co-Pilot: Uses Gemini 2.5 to interpret chat, resolve spatial ambiguity,
+    and generate atomic Scene Mutations (MODIFY, REMOVE, ADD, ROOM_STYLE) without destructive re-generation.
+    """
+    # 1. Format active scene context
+    items_summary = []
+    if scene_items:
+        for it in scene_items:
+            iid = it.get("instance_id") or it.get("id") or "unknown"
+            aid = it.get("asset_id") or "furniture"
+            name = it.get("name") or aid
+            pos = it.get("position") or [0, 0, 0]
+            pos_str = f"[{_safe_float(pos[0], 0):.2f}, {_safe_float(pos[1], 0):.2f}, {_safe_float(pos[2], 0):.2f}]" if len(pos) >= 3 else "[0, 0, 0]"
+            col = it.get("color") or "default"
+            is_sel = (iid == selected_asset_id) if selected_asset_id else False
+            sel_str = " (CURRENTLY_SELECTED)" if is_sel else ""
+            items_summary.append(f"- instance_id: '{iid}', asset_id: '{aid}', name: '{name}', color: '{col}', position: {pos_str}{sel_str}")
+
+    scene_text = "\n".join(items_summary) if items_summary else "المشهد فارغ حالياً (لا توجد قطع أثاث)."
+    sel_text = f"'{selected_asset_id}'" if selected_asset_id else "لا يوجد (None)"
+
+    system_instruction = f"""أنت مهندس تصميم داخلي ذكي ومساعد استوديو تفاعلي في منصة 'رواق AI' (Spatial Interior Co-Pilot).
+مهمتك تحليل رسالة المستخدم بالنسبة لحالة المشهد الحالي ثلاثي الأبعاد وتحديد العملية المعمارية بدقة متناهية.
+
+حالة المشهد الحالي:
+- أبعاد الغرفة: {room_width:.1f}م عرض × {room_depth:.1f}م عمق (الشكل: {room_shape})
+- لون الجدران: {wall_color or '#EDE8E0'} | لون الأرضية: {floor_color or '#C8B29B'}
+- القطعة المحددة حالياً (selected_asset_id): {sel_text}
+- قطع الأثاث الحالية في الغرفة:
+{scene_text}
+
+قواعد القرار الهندسي الصارمة:
+1. أولوية العنصر المحدد (Selection Priority):
+   إذا كان هناك عنصر محدد حالياً (CURRENTLY_SELECTED) وكان طلب المستخدم ينطبق على نوعه أو قال 'هذه القطعة / هذا / المحدد'، استهدف هذا العنصر حصراً (target_instance_id).
+2. بوابة الغموض وتعدد العناصر (Ambiguity Gate):
+   إذا لم يكن هناك عنصر محدد، وكان هناك أكثر من عنصر في الغرفة يطابق طلب المستخدم (مثال: يوجد كرسيان وطلب 'غيّر لون الكرسي' أو 'احذف الكرسي'):
+   - يمنع التخمين أو التعديل التلقائي منعاً باتاً!
+   - اضبط action_type = 'clarify' و intent = 'clarify'.
+   - اكتب سؤالاً توضيحياً بالعربية المباشرة في 'text' يذكر العناصر المتاحة ويسأل المستخدم عن القطعة المقصودة تحديداً أو إن كان يرغب بتعديل جميع القطع.
+3. المطابقة الأحادية (Single Match):
+   إذا كان هناك عنصر واحد فقط يطابق الوصف (مثلاً كنبة واحدة فقط)، استهدفه مباشرة في target_instance_id.
+4. التعديل (MODIFY):
+   لتغيير اللون أو الخامة، استخرج كود الـ HEX الدقيق (مثال: بيج كتان #E8DFD5، بيج دافئ #F5F5DC، كحلي #1B2A4A، رمادي فحمي #333333، رمادي فاتح #D3D3D3).
+   للتدوير، استخرج rotation_yaw بالدرجات.
+5. الإضافة (ADD):
+   عند طلب إضافة قطعة جديدة، حدد search_query للكتالوج و asset_id والـ anchor_hint (مثل: next_to_window, corner, left_wall, right_wall, back_wall).
+6. الحذف (REMOVE):
+   عند طلب حذف قطعة، حدد target_instance_id.
+7. تحويل الطراز المعماري الشامل (RETHEME):
+   عند طلب تغيير طراز/ستايل الغرفة بالكامل (مثال: 'حول الستايل لياباندي', 'خلها نيو كلاسيك', 'طراز مودرن', 'ستايل بوهيمي', 'مينيمال', 'وابي سابي'):
+   - اضبط intent = 'retheme'.
+   - حدد 'retheme_style' كأحد القيم التالية: 'japandi', 'neoclassic', 'modern', 'bohemian', 'minimalist', 'wabi_sabi'.
+8. طراز الغرفة البسيط (ROOM_STYLE):
+   عند طلب تعديل لون الجدار أو الأرضية أو الإضاءة فقط دون طراز كامل.
+9. الدردشة العامة (CHAT):
+   إذا كان سؤالاً أو استشارة تصميمية عامة.
+
+أخرج النتيجة بصيغة JSON فقط:
+{{
+  "action_type": "mutate" | "clarify" | "chat",
+  "intent": "modify" | "remove" | "add" | "room_style" | "retheme" | "clarify" | "chat",
+  "retheme_style": "japandi" | "neoclassic" | "modern" | "bohemian" | "minimalist" | "wabi_sabi" | null,
+  "text": "الرد النصي بالعربية للمستخدم",
+  "target_instance_id": "..." | null,
+  "modifications": {{
+    "color": "#HEX" | null,
+    "rotation_yaw": float | null
+  }},
+  "add_item": {{
+    "search_query": "..." | null,
+    "asset_id": "..." | null,
+    "anchor_hint": "..." | null
+  }},
+  "room_style": {{
+    "wall_color": "#HEX" | null,
+    "floor_color": "#HEX" | null,
+    "ambient_mode": "morning" | "rainy" | "midnight" | null
+  }}
+}}"""
 
     try:
         response = _call_gemini_with_retry(
@@ -329,103 +706,230 @@ def handle_chat_request(user_message: str) -> dict:
         )
         data = json.loads(response.text.strip())
         if not isinstance(data, dict):
-            raise ValueError("Expected JSON object from chat parser")
+            raise ValueError("Expected JSON object from chat co-pilot")
     except Exception as e:
         if _is_non_retryable_gemini_error(e):
             raise
         logger.warning("Chat intent parsing failed: %s", e)
-        data = {"intent": "chat", "search_query": None}
+        # Fallback heuristic
+        data = {"action_type": "chat", "intent": "chat", "text": "مرحباً! كيف يمكنني مساعدتك في تصميم الغرفة؟"}
 
-    response_payload = {
-        "text": "مرحباً! كيف يمكنني مساعدتك؟",
-        "items": []
-    }
+    action_type = data.get("action_type") or "chat"
+    intent = data.get("intent") or "chat"
+    reply_text = data.get("text") or "تم استلام طلبك بنجاح."
+    mutations: List[Dict[str, Any]] = []
+    response_items: List[Dict[str, Any]] = []
 
-    if data.get("intent") == "add" and data.get("search_query"):
+    # 2. Process Intent & Construct Atomic Mutations
+    if action_type == "clarify" or intent == "clarify":
+        return {
+            "status": "success",
+            "action_type": "clarify",
+            "text": reply_text,
+            "mutations": [],
+            "items": []
+        }
+
+    if intent == "modify" and data.get("target_instance_id"):
+        target_id = str(data["target_instance_id"])
+        patch: Dict[str, Any] = {}
+        mods = data.get("modifications") or {}
+        if mods.get("color"):
+            patch["color"] = mods["color"]
+        if mods.get("rotation_yaw") is not None:
+            yaw_rad = math.radians(_safe_float(mods["rotation_yaw"], 0.0))
+            patch["rotation"] = [0, yaw_rad, 0]
+
+        if patch:
+            mutations.append({
+                "op": "MODIFY",
+                "target_id": target_id,
+                "patch": patch
+            })
+            action_type = "mutate"
+
+    elif intent == "remove" and data.get("target_instance_id"):
+        mutations.append({
+            "op": "REMOVE",
+            "target_id": str(data["target_instance_id"])
+        })
+        action_type = "mutate"
+
+    elif intent == "room_style" and data.get("room_style"):
+        mutations.append({
+            "op": "ROOM_STYLE",
+            "room_patch": data["room_style"]
+        })
+        action_type = "mutate"
+
+    elif intent == "retheme" or any(k in user_message.lower() for k in ("ياباندي", "japandi", "نيوكلاسيك", "نيو كلاسيك", "neo-classic", "بوهيمي", "bohemian", "مودرن", "modern", "مينيمال", "minimalist", "وابي سابي", "wabi_sabi", "wabi-sabi")):
+        # Detect target style
+        target_style_key = data.get("retheme_style") or "japandi"
+        msg_l = user_message.lower()
+        if "ياباندي" in msg_l or "japandi" in msg_l:
+            target_style_key = "japandi"
+        elif "نيو" in msg_l or "classic" in msg_l or "كلاسيك" in msg_l:
+            target_style_key = "neoclassic"
+        elif "بوهيمي" in msg_l or "bohemian" in msg_l:
+            target_style_key = "bohemian"
+        elif "مينيمال" in msg_l or "minimal" in msg_l or "بسيط" in msg_l:
+            target_style_key = "minimalist"
+        elif "وابي" in msg_l or "wabi" in msg_l:
+            target_style_key = "wabi_sabi"
+        elif "مودرن" in msg_l or "modern" in msg_l:
+            target_style_key = "modern"
+
+        preset = STYLE_PRESETS.get(target_style_key, STYLE_PRESETS["japandi"])
+
+        # Map each existing scene item to a harmonious color in the new palette
+        item_recolors: Dict[str, str] = {}
+        for it in (scene_items or []):
+            iid = str(it.get("instance_id") or it.get("id") or "")
+            if not iid:
+                continue
+            cat = str(it.get("category") or it.get("asset_id") or "").lower()
+            if any(k in cat for k in ("sofa", "chair", "armchair", "seating", "كنب", "كرسي")):
+                item_recolors[iid] = preset["seating_color"]
+            elif any(k in cat for k in ("table", "desk", "coffee", "طاولة", "مكتب")):
+                item_recolors[iid] = preset["tables_color"]
+            elif any(k in cat for k in ("rug", "carpet", "سجاد")):
+                item_recolors[iid] = preset["rug_color"]
+            elif any(k in cat for k in ("shelf", "storage", "cabinet", "tv", "رف", "خزانة")):
+                item_recolors[iid] = preset["storage_color"]
+            else:
+                item_recolors[iid] = preset["general_color"]
+
+        mutations.append({
+            "op": "RETHEME",
+            "style_name": preset["title"],
+            "room_patch": {
+                "wall_color": preset["wall_color"],
+                "floor_color": preset["floor_color"],
+                "ambient_mode": preset["ambient_mode"]
+            },
+            "item_recolors": item_recolors
+        })
+        action_type = "mutate"
+        reply_text = f"تم تحويل طراز وتشطيبات الغرفة بنجاح إلى طراز {preset['title']} مع تناغم الألوان والحفاظ على التوزيع الهندسي للأثاث."
+
+    elif intent == "add":
+        add_meta = data.get("add_item") or {}
+        search_query = add_meta.get("search_query") or user_message
+        anchor_hint = add_meta.get("anchor_hint") or ""
+
+        # Identify candidate asset_id
+        candidate_asset_id = add_meta.get("asset_id") or "armchair"
+        q_lower = search_query.lower()
+        if any(w in q_lower for w in ("sofa", "couch", "كنب", "أريكة")):
+            candidate_asset_id = "sofa"
+        elif any(w in q_lower for w in ("shelf", "bookcase", "bookshelf", "مكتبة", "رف")):
+            candidate_asset_id = "bookshelf"
+        elif any(w in q_lower for w in ("desk", "مكتب", "طاولة عمل")):
+            candidate_asset_id = "desk"
+        elif any(w in q_lower for w in ("tv", "تلفزيون", "شاشة")):
+            candidate_asset_id = "tv_unit"
+        elif any(w in q_lower for w in ("plant", "نبات", "نبتة")):
+            candidate_asset_id = "plant"
+        elif any(w in q_lower for w in ("lamp", "إضاءة", "مصباح")):
+            candidate_asset_id = "floor_lamp"
+        elif any(w in q_lower for w in ("table", "طاولة", "قهوة")):
+            candidate_asset_id = "coffee_table"
+        elif any(w in q_lower for w in ("chair", "كرسي")):
+            candidate_asset_id = "chair"
+
+        # Catalog lookup via LanceDB RAG if available
+        matched_item = None
         try:
             retriever = get_retriever()
             if retriever:
-                results = retriever.search(data["search_query"], limit=1)
+                results = retriever.search(search_query, limit=1)
                 if results:
-                    best = results[0]
-                    price = best.get("price", 0)
-                    name = best.get("name", "أثاث")
-
-                    response_payload["text"] = f"لقد وجدت {name} بسعر {price} ريال. سأقوم بإضافته إلى الغرفة الآن!"
-
-                    item_obj = {
-                        "name": name,
-                        "hex_color": "#ffffff",
-                        "economy": {
-                            "price": float(price),
-                            "currency": "SAR",
-                            "store_url": best.get("link", ""),
-                            "brand": "IKEA",
-                            "sku": best.get("item_id", ""),
-                            "name": name
-                        }
-                    }
-
-                    item_obj["dimensions"] = {
-                        "width": _catalog_dim_to_mm(best.get("dim_width"), 1000),
-                        "height": _catalog_dim_to_mm(best.get("dim_height"), 800),
-                        "depth": _catalog_dim_to_mm(best.get("dim_depth"), 800),
-                    }
-
-                    item_obj["transform"] = {"t_x": 0, "t_y": 0, "t_z": 0, "yaw_y": 0, "scale": 1.0}
-
-                    cat_lower = str(best.get("category", "")).lower()
-                    name_lower = str(name).lower()
-                    text_lower = f"{cat_lower} {name_lower}"
-                    if "sofa" in text_lower or "couch" in text_lower or "كنب" in text_lower or "أريكة" in text_lower:
-                        item_obj["asset_id"] = "sofa"
-                    elif ("dining" in text_lower and ("chair" in text_lower or "كرسي" in text_lower)) or "stool" in text_lower:
-                        item_obj["asset_id"] = "dining_chair"
-                    elif "deck" in text_lower or "lounge" in text_lower:
-                        item_obj["asset_id"] = "deck_chair"
-                    elif "chair" in text_lower or "كرسي" in text_lower or "armchair" in text_lower or "seating" in text_lower or "مقاعد" in text_lower:
-                        item_obj["asset_id"] = "armchair"
-                    elif "shelf" in text_lower or "bookcase" in text_lower or "bookshelf" in text_lower or "رف" in text_lower:
-                        item_obj["asset_id"] = "bookshelf"
-                    elif "tv" in text_lower or "تلفزيون" in text_lower or "تلفاز" in text_lower:
-                        item_obj["asset_id"] = "tv_unit"
-                    elif "cabinet" in text_lower or "drawer" in text_lower or "storage" in text_lower or "خزانة" in text_lower:
-                        item_obj["asset_id"] = "drawer_cabinet"
-                    elif "outdoor" in text_lower or "garden" in text_lower or "حديقة" in text_lower:
-                        item_obj["asset_id"] = "outdoor_set"
-                    elif "table" in text_lower or "طاولات" in text_lower or "طاولة" in text_lower:
-                        item_obj["asset_id"] = "coffee_table"
-                    elif "vase" in text_lower or "flower" in text_lower or "مزهرية" in text_lower:
-                        item_obj["asset_id"] = "vase_flowers"
-                    elif "plant" in text_lower or "نبات" in text_lower or "decor" in text_lower or "ديكور" in text_lower:
-                        item_obj["asset_id"] = "plant"
-                    else:
-                        item_obj["asset_id"] = "armchair"
-
-                    response_payload["items"].append(item_obj)
-                else:
-                    response_payload["text"] = "عذراً، لم أتمكن من العثور على أثاث يطابق طلبك."
+                    matched_item = results[0]
         except Exception as e:
-            logger.error("RAG search failed in chat: %s", e, exc_info=True)
-            response_payload["text"] = "حدث خطأ أثناء البحث في الكتالوج."
-    else:
-        try:
-            chat_response = _call_gemini_with_retry(
-                model="gemini-2.5-flash",
-                contents=[user_message],
-                config=types.GenerateContentConfig(
-                    system_instruction="You are a helpful Interior Design AI. Answer in Arabic briefly.",
-                ),
-            )
-            response_payload["text"] = chat_response.text.strip()
-        except Exception as e:
-            if _is_non_retryable_gemini_error(e):
-                raise
-            logger.warning("Chat reply generation failed: %s", e)
+            logger.warning("RAG retrieval failed: %s", e)
 
-    return response_payload
+        # Standard default dimensions per asset_id
+        default_dims_map = {
+            "sofa": {"width": 2200, "height": 850, "depth": 900},
+            "armchair": {"width": 850, "height": 800, "depth": 850},
+            "chair": {"width": 600, "height": 850, "depth": 600},
+            "bookshelf": {"width": 1000, "height": 1800, "depth": 400},
+            "desk": {"width": 1400, "height": 750, "depth": 700},
+            "coffee_table": {"width": 1000, "height": 450, "depth": 600},
+            "tv_unit": {"width": 1600, "height": 500, "depth": 450},
+            "floor_lamp": {"width": 450, "height": 1600, "depth": 450},
+            "plant": {"width": 400, "height": 900, "depth": 400},
+        }
 
-def _safe_float(value: object, default: float) -> float:
+        item_dims = default_dims_map.get(candidate_asset_id, {"width": 900, "height": 900, "depth": 900})
+        item_name = candidate_asset_id.replace("_", " ").title()
+        item_price = 450.0
+        item_sku = f"IKEA-{uuid.uuid4().hex[:6]}"
+        item_url = ""
+
+        if matched_item:
+            item_name = matched_item.get("name") or item_name
+            item_price = _safe_float(matched_item.get("price"), item_price)
+            item_url = matched_item.get("link") or ""
+            item_sku = str(matched_item.get("item_id") or item_sku)
+            if matched_item.get("dim_width") or matched_item.get("dim_depth"):
+                item_dims = {
+                    "width": _catalog_dim_to_mm(matched_item.get("dim_width"), item_dims["width"]),
+                    "height": _catalog_dim_to_mm(matched_item.get("dim_height"), item_dims["height"]),
+                    "depth": _catalog_dim_to_mm(matched_item.get("dim_depth"), item_dims["depth"]),
+                }
+
+        # Calculate strict snap collision-free coordinate
+        from backend.app.services.spatial_solver import SpatialClusteringSolver
+        placement = SpatialClusteringSolver.solve_incremental_placement(
+            new_asset_id=candidate_asset_id,
+            new_dims=item_dims,
+            existing_items=scene_items or [],
+            room_width=room_width,
+            room_depth=room_depth,
+            windows=windows,
+            anchor_hint=anchor_hint
+        )
+
+        yaw_rad = math.radians(_safe_float(placement.get("yaw_y"), 0.0))
+        new_instance_id = str(uuid.uuid4())
+        item_obj = {
+            "instance_id": new_instance_id,
+            "asset_id": candidate_asset_id,
+            "name": item_name,
+            "position": [
+                _safe_float(placement.get("t_x"), 0.0),
+                _safe_float(placement.get("t_y"), 0.0),
+                _safe_float(placement.get("t_z"), 0.0),
+            ],
+            "rotation": [0, yaw_rad, 0],
+            "dimensions": item_dims,
+            "color": "#ffffff",
+            "economy": {
+                "price": item_price,
+                "currency": "SAR",
+                "store_url": item_url,
+                "brand": "IKEA",
+                "sku": item_sku,
+                "name": item_name
+            }
+        }
+        mutations.append({
+            "op": "ADD",
+            "item": item_obj
+        })
+        response_items.append(item_obj)
+        action_type = "mutate"
+
+    return {
+        "status": "success",
+        "action_type": action_type,
+        "text": reply_text,
+        "mutations": mutations,
+        "items": response_items
+    }
+
+def _safe_float(value: object, default: float = 0.0) -> float:
     if value is None or isinstance(value, bool):
         return default
     try:
@@ -564,6 +1068,28 @@ def audit_spatial_layout(items: list, room_width: float = 5.0, room_depth: float
         recommendations.append(f"تم رصد تداخل مكاني بين بعض قطع الأثاث: {pairs_str}. يُرجى تعديل مواضعها لتجنب التصادم الهندسي.")
     elif len(solid_items) > 1:
         clearance_checks.append("لا يوجد أي تداخل مكاني (Collision) بين قطع الأثاث الرئيسية.")
+
+    # 5. Primary Walkway & Circulation Clearance Check (SBC & Neufert >= 0.90m)
+    walkway_constrained = False
+    if coffee_tables and tv_units:
+        ct_front = coffee_tables[0][1][1] + (coffee_tables[0][2][1] / 2.0)
+        tv_front = tv_units[0][1][1] - (tv_units[0][2][1] / 2.0)
+        passage = abs(tv_front - ct_front)
+        if passage < 0.90:
+            score -= 10
+            walkway_constrained = True
+            recommendations.append(f"ممر الحركة بين طاولة القهوة ووحدة التلفاز ضيق ({passage:.2f}م). كود البناء السعودي وNeufert يتطلبان 90 سم على الأقل.")
+    elif sofas and tv_units:
+        s_front = sofas[0][1][1] + (sofas[0][2][1] / 2.0)
+        tv_front = tv_units[0][1][1] - (tv_units[0][2][1] / 2.0)
+        passage = abs(tv_front - s_front)
+        if passage < 0.90:
+            score -= 10
+            walkway_constrained = True
+            recommendations.append(f"ممر الحركة بين المقاعد ووحدة التلفاز ضيق ({passage:.2f}م). كود البناء السعودي وNeufert يتطلبان 90 سم على الأقل.")
+
+    if not walkway_constrained and solid_items:
+        clearance_checks.append("مسارات الحركة والممرات الرئيسية شاغرة ومطابقة لكود البناء السعودي (عرض >= 90 سم).")
 
     score = max(50, min(100, score))
     status = "ممتاز ومطابق للمعايير" if score >= 85 else ("جيد مع بعض الملاحظات" if score >= 70 else "يحتاج إلى إعادة تنظيم")

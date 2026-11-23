@@ -89,7 +89,9 @@ def test_generate_layout(monkeypatch):
     assert res["wall_color"] == "#F2ECE4"
     assert res["floor_color"] == "#C8B29B"
     assert res["ambient_mode"] == "morning"
-    assert res["room_dimensions"] == {"width": 5.0, "depth": 5.0}
+    assert res["room_dimensions"]["width"] == 5.0
+    assert res["room_dimensions"]["depth"] == 5.0
+    assert res["room_dimensions"]["shape"] == "single"
     assert len(res["objects"]) == 1
     assert res["objects"][0]["asset_id"] == "sofa"
     assert res["objects"][0]["dimensions"] == {"length": 2.2, "width": 0.95, "height": 0.83}
@@ -102,7 +104,7 @@ def test_generate_layout_fallback_on_api_error(monkeypatch):
 
     with pytest.raises(RuntimeError, match="API unavailable"):
         generate_room_layout("تصميم غرفة معيشة مع كنبة زرقاء")
-    assert mock_client.models.generate_content.call_count == 1
+    assert mock_client.models.generate_content.call_count == 3
 
     mock_429_client = MagicMock()
     mock_429_client.models.generate_content.side_effect = RuntimeError(

@@ -13,7 +13,7 @@ import CopilotSuggestions from "@/components/CopilotSuggestions";
 import MaterialPalette from "@/components/MaterialPalette";
 import ProjectsModal from "@/components/ProjectsModal";
 import PrintReport from "@/components/PrintReport";
-import { useSceneStore, useFormattedTotalCost } from "@/lib/useSceneStore";
+import { useSceneStore, useFormattedTotalCost, formatCurrency } from "@/lib/useSceneStore";
 import { TemplateType } from "@/lib/templates";
 import { MAARAD_ROOMS } from "@/lib/maaradRooms";
 import RealRoom from "./components/RealRoom";
@@ -30,6 +30,9 @@ import StudioHeader from "./components/StudioHeader";
 import ConversationPanel from "./components/ConversationPanel";
 import SceneDetailsDrawer from "./components/SceneDetailsDrawer";
 import SceneToolbar from "./components/SceneToolbar";
+import CirculationHeatmap from "./components/CirculationHeatmap";
+import { RenderComparisonModal } from "./components/RenderComparisonModal";
+import { FloorplanUploadModal } from "./components/FloorplanUploadModal";
 
 
 const AMBIENT_PRESETS = {
@@ -532,7 +535,11 @@ export default function StudioClient() {
   const searchParams = useSearchParams();
   const activeReference = searchParams.get("reference");
   const presetParam = searchParams.get("preset");
+  const promptParam = searchParams.get("prompt");
+  const imageParam = searchParams.get("image");
+  const autoParam = searchParams.get("auto");
   const presetLoadedRef = useRef<string | null>(null);
+  const incomingPromptHandledRef = useRef<string | null>(null);
 
   const [isToastVisible, setIsToastVisible] = useState(false);
   const [toastMessage, setToastMessage]   = useState("");
@@ -545,9 +552,19 @@ export default function StudioClient() {
 
   const [isMaterialPaletteOpen, setIsMaterialPaletteOpen] = useState(false);
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
+  const [showWalkwayHeatmap, setShowWalkwayHeatmap] = useState(false);
   const [isTransitioning, setIsTransitioning]         = useState(false);
   /** Collapsed by default; auto-opens when a generation settles. */
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // ── Neural Render Bridge (AI Realistic Render) ──
+  const [isAIRenderModalOpen, setIsAIRenderModalOpen] = useState(false);
+  const [isFloorplanModalOpen, setIsFloorplanModalOpen] = useState(false);
+  const [isAIRendering, setIsAIRendering] = useState(false);
+  const [renderBeforeImage, setRenderBeforeImage] = useState<string | null>(null);
+  const [renderAfterImage, setRenderAfterImage] = useState<string | null>(null);
+  const [renderPromptUsed, setRenderPromptUsed] = useState<string>("");
+  const [renderSourceNote, setRenderSourceNote] = useState<string>("");
 
   const exportGroupRef = useRef<THREE.Group>(null);
   const arBlobUrlRef = useRef<string | null>(null);
@@ -568,12 +585,40 @@ export default function StudioClient() {
   const clearScene       = useSceneStore((s) => s.clearScene);
   const addSceneItem     = useSceneStore((s) => s.addSceneItem);
   const ambientMode      = useSceneStore((s) => s.ambientMode);
+  const wallColor        = useSceneStore((s) => s.wallColor);
+  const floorColor       = useSceneStore((s) => s.floorColor);
   const undo             = useSceneStore((s) => s.undo);
   const redo             = useSceneStore((s) => s.redo);
   const viewMode         = useSceneStore((s) => s.viewMode);
   const setViewMode      = useSceneStore((s) => s.setViewMode);
   const resetToDefaults  = useSceneStore((s) => s.resetToDefaults);
   const formattedTotal   = useFormattedTotalCost();
+  const selectedAssetId    = useSceneStore((s) => s.selectedAssetId);
+  const setSelectedAssetId = useSceneStore((s) => s.setSelectedAssetId);
+  const updateSceneItem    = useSceneStore((s) => s.updateSceneItem);
+  const removeSceneItem    = useSceneStore((s) => s.removeSceneItem);
+
+  const selectedAsset = useMemo(() => {
+    if (!selectedAssetId) return null;
+    return sceneItems.find((it) => it.instanceId === selectedAssetId) || null;
+  }, [selectedAssetId, sceneItems]);
+
+  const handleRotateSelected = useCallback((deltaY: number) => {
+    if (!selectedAsset) return;
+    const currentRot = selectedAsset.rotation || [0, 0, 0];
+    const newY = currentRot[1] + deltaY;
+    updateSceneItem(selectedAsset.instanceId, {
+      rotation: [currentRot[0], newY, currentRot[2]],
+    });
+  }, [selectedAsset, updateSceneItem]);
+
+  const handleNudgeSelected = useCallback((dx: number, dz: number) => {
+    if (!selectedAsset) return;
+    const currentPos = selectedAsset.position || [0, 0, 0];
+    updateSceneItem(selectedAsset.instanceId, {
+      position: [currentPos[0] + dx, currentPos[1] || 0, currentPos[2] + dz],
+    });
+  }, [selectedAsset, updateSceneItem]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -653,6 +698,26 @@ export default function StudioClient() {
       cancelled = true;
     };
   }, [presetParam, setPrompt, showToast]);
+
+  // Auto-load prompt and concept image from Studio2D (/studio2d -> /studio?prompt=...&image=...)
+  useEffect(() => {
+    if (!promptParam || incomingPromptHandledRef.current === promptParam) return;
+    incomingPromptHandledRef.current = promptParam;
+
+    setPrompt(promptParam);
+    if (imageParam) {
+      setImageBase64(imageParam);
+    }
+    setIsDrawerOpen(true);
+    showToast("✨ تم استيراد فكرة التصميم من استوديو 2D إلى الاستوديو ثلاثي الأبعاد!");
+
+    if (autoParam === "true") {
+      const timer = setTimeout(() => {
+        handleGenerate();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [promptParam, imageParam, autoParam, setPrompt, setImageBase64, showToast, handleGenerate]);
 
   /**
    * Dev-only state override: /studio?state=partial renders a fixture so every
@@ -771,16 +836,92 @@ export default function StudioClient() {
       const exportRoot = new THREE.Group();
       exportRoot.name = "RwaqScene";
 
+      const isDrawable = (img: any): boolean => {
+        if (!img) return false;
+        if (typeof HTMLImageElement !== 'undefined' && img instanceof HTMLImageElement) {
+          return img.complete && (img.naturalWidth > 0 || img.width > 0);
+        }
+        if (typeof HTMLCanvasElement !== 'undefined' && img instanceof HTMLCanvasElement) {
+          return img.width > 0 && img.height > 0;
+        }
+        if (typeof ImageBitmap !== 'undefined' && img instanceof ImageBitmap) {
+          return img.width > 0 && img.height > 0;
+        }
+        return false;
+      };
+
       rootGroup.traverse((obj) => {
         if (!(obj instanceof THREE.Mesh) || !obj.visible || !obj.geometry) return;
+        const lowerName = (obj.name || "").toLowerCase();
+        if (
+          lowerName.includes("contactshadow") ||
+          lowerName.includes("helper") ||
+          lowerName.includes("shadow") ||
+          lowerName.includes("circulation") ||
+          lowerName.includes("heatmap") ||
+          lowerName.includes("flow") ||
+          lowerName.includes("gizmo") ||
+          lowerName.includes("grid")
+        ) return;
+
+        // Skip any child belonging to ContactShadows or utility groups
+        let p: THREE.Object3D | null = obj.parent;
+        let isHelper = false;
+        while (p) {
+          const pName = (p.name || "").toLowerCase();
+          if (
+            pName.includes("contactshadow") ||
+            pName.includes("helper") ||
+            pName.includes("shadow") ||
+            pName.includes("circulation") ||
+            pName.includes("heatmap") ||
+            pName.includes("flow") ||
+            pName.includes("gizmo") ||
+            pName.includes("grid")
+          ) {
+            isHelper = true;
+            break;
+          }
+          p = p.parent;
+        }
+        if (isHelper) return;
+
         const mat = obj.material;
         if (!mat) return;
         const mats = Array.isArray(mat) ? mat : [mat];
         if (mats.some((m) => m instanceof THREE.ShaderMaterial)) return;
-        const lowerName = obj.name.toLowerCase();
-        if (lowerName.includes("contactshadow") || lowerName.includes("helper")) return;
 
-        const clonedMesh = new THREE.Mesh(obj.geometry, obj.material);
+        // Sanitize material: ensure textures are real canvas/image sources to prevent GLTFExporter drawImage errors
+        const cleanMats = mats.map((m) => {
+          if (!m) return new THREE.MeshStandardMaterial({ color: 0xd4cdbf });
+          const clone = m.clone();
+          const texKeys = [
+            'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap',
+            'bumpMap', 'displacementMap', 'lightMap', 'alphaMap'
+          ] as const;
+          for (const key of texKeys) {
+            const tex = (clone as any)[key];
+            if (tex) {
+              if (!isDrawable(tex.image)) {
+                (clone as any)[key] = null;
+              }
+            }
+          }
+
+          // In three-stdlib GLTFExporter, metalnessMap and roughnessMap are combined via context.drawImage.
+          // If either lacks a valid drawable image, remove BOTH to avoid drawImage TypeError.
+          const hasValidMetal = clone.metalnessMap && isDrawable(clone.metalnessMap.image);
+          const hasValidRough = clone.roughnessMap && isDrawable(clone.roughnessMap.image);
+          if (!hasValidMetal || !hasValidRough) {
+            clone.metalnessMap = null;
+            clone.roughnessMap = null;
+          }
+
+          return clone;
+        });
+
+        const finalMat = Array.isArray(mat) ? cleanMats : cleanMats[0];
+        const clonedMesh = new THREE.Mesh(obj.geometry.clone(), finalMat);
         clonedMesh.name = obj.name || "mesh";
         clonedMesh.matrixAutoUpdate = false;
         clonedMesh.matrix.copy(obj.matrixWorld);
@@ -790,7 +931,24 @@ export default function StudioClient() {
       });
 
       const exporter = new GLTFExporter();
-      const result = await exporter.parseAsync(exportRoot, { binary: true, onlyVisible: true });
+      let result: any;
+      try {
+        result = await exporter.parseAsync(exportRoot, { binary: true, onlyVisible: true });
+      } catch (parseErr) {
+        console.warn("[StudioClient] First parseAsync failed, falling back to clean textureless export:", parseErr);
+        // Stripping all textures guarantees geometry and basic material colors export without canvas/image failures
+        exportRoot.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            const oldMat = Array.isArray(child.material) ? child.material[0] : child.material;
+            child.material = new THREE.MeshStandardMaterial({
+              color: (oldMat as any)?.color || 0xd4cdbf,
+              roughness: 0.65,
+              metalness: 0.1,
+            });
+          }
+        });
+        result = await exporter.parseAsync(exportRoot, { binary: true, onlyVisible: true });
+      }
 
       if (result instanceof ArrayBuffer) {
         const blob = new Blob([result], { type: "model/gltf-binary" });
@@ -810,6 +968,90 @@ export default function StudioClient() {
       setIsExportingAR(false);
     }
   }, [modelUrl, showToast]);
+
+  // ── Neural Render Bridge: Capture 3D viewport & generate photorealistic render ──
+  const handleAIRender = useCallback(async () => {
+    if (isAIRendering) return;
+    setIsAIRendering(true);
+    showToast("📸 جاري التقاط زاوية الكاميرا الحالية وتوليد رندرة سينمائية واقعية...");
+
+    try {
+      // 1. Temporarily hide walkway heatmap during capture for clean architectural framing
+      const wasHeatmapVisible = showWalkwayHeatmap;
+      if (wasHeatmapVisible) {
+        setShowWalkwayHeatmap(false);
+        await new Promise((r) => setTimeout(r, 60));
+      }
+
+      // 2. Request clean WebGL snapshot from SnapshotManager
+      const snapshotBase64: string = await new Promise((resolve) => {
+        let done = false;
+        const cb = (dataUrl: string) => {
+          if (!done) {
+            done = true;
+            resolve(dataUrl);
+          }
+        };
+        window.dispatchEvent(new CustomEvent("rwaq-get-snapshot-data", { detail: { callback: cb } }));
+        setTimeout(() => {
+          if (!done) {
+            done = true;
+            resolve("");
+          }
+        }, 2500);
+      });
+
+      if (wasHeatmapVisible) {
+        setShowWalkwayHeatmap(true);
+      }
+
+      if (!snapshotBase64) {
+        showToast("⚠️ تعذر التقاط إطار الكاميرا بدقة");
+        setIsAIRendering(false);
+        return;
+      }
+
+      setRenderBeforeImage(snapshotBase64);
+
+      // 3. Send to structure-preserving backend endpoint
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const payload = {
+        image_base64: snapshotBase64,
+        room_style: activeReference || "مودرن فاخر",
+        wall_color: wallColor,
+        floor_color: floorColor,
+        ambient_mode: ambientMode,
+        items: sceneItems.map((item) => ({
+          name: item.name,
+          category: item.category,
+          color: item.color,
+          dimensions: item.dimensions,
+        })),
+      };
+
+      const res = await fetch(`${apiUrl}/api/v1/studio/render-from-3d`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+
+      const data = await res.json();
+      setRenderAfterImage(data.image_url);
+      setRenderPromptUsed(data.prompt_used || "");
+      setRenderSourceNote(data.note || "");
+      setIsAIRenderModalOpen(true);
+      showToast("✨ اكتملت الرندرة السينمائية الواقعية بنجاح!");
+    } catch (err) {
+      console.error("[StudioClient] handleAIRender error:", err);
+      showToast("⚠️ تعذر إتمام الرندرة الواقعية حالياً");
+    } finally {
+      setIsAIRendering(false);
+    }
+  }, [isAIRendering, showWalkwayHeatmap, activeReference, wallColor, floorColor, ambientMode, sceneItems, showToast]);
 
   const handleNewProject = () => {
     clearScene();
@@ -978,6 +1220,7 @@ export default function StudioClient() {
         <StudioHeader
           onNewProject={handleNewProject}
           onOpenProjects={() => setIsProjectsModalOpen(true)}
+          onUploadFloorplan={() => setIsFloorplanModalOpen(true)}
         />
 
         <ConversationPanel
@@ -1030,6 +1273,9 @@ export default function StudioClient() {
                       <SceneErrorBoundary>
                         {modelUrl ? <RoomModel url={modelUrl} /> : <EmptyRoom />}
                       </SceneErrorBoundary>
+
+                      {/* ── Floor Circulation Flow & Walkway Heatmap ── */}
+                      <CirculationHeatmap visible={showWalkwayHeatmap} />
                       
                       {/* ── Dynamic Real Furniture Items ── */}
                       {sceneItems.map((item) => (
@@ -1087,6 +1333,110 @@ export default function StudioClient() {
                 <p className="font-label-md text-label-md">يتم الآن المعالجة بذكاء أستوديو التصميم...</p>
               </div>
             )}
+            {/* Selected Asset Contextual Control Dock */}
+            {selectedAsset && (
+              <div className={`pointer-events-none absolute bottom-22 left-1/2 -translate-x-1/2 ${Z.sceneToolbar} z-30 animate-in fade-in slide-in-from-bottom-2 duration-200`}>
+                <div className="pointer-events-auto flex items-center gap-2.5 bg-surface/95 dark:bg-surface-dim/95 border border-primary/35 rounded-2xl px-4 py-2 shadow-2xl backdrop-blur-xl" dir="rtl">
+                  {/* Asset Info */}
+                  <div className="flex items-center gap-2 border-l border-outline-variant/60 pl-3">
+                    <div className="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
+                      <span className="material-symbols-outlined text-[19px]">chair</span>
+                    </div>
+                    <div className="flex flex-col text-right">
+                      <span className="text-xs font-bold text-on-surface line-clamp-1 max-w-[130px]">{selectedAsset.name}</span>
+                      <span className="text-[10px] text-secondary font-mono font-bold">
+                        {formatCurrency(selectedAsset.price, 'SAR')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Rotation buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleRotateSelected(-Math.PI / 4)}
+                      title="تدوير 45° يسار"
+                      className="px-2.5 py-1.5 rounded-xl text-on-surface hover:bg-surface-container-high active:scale-95 transition-all flex items-center gap-1 text-xs font-bold"
+                    >
+                      <span className="material-symbols-outlined text-[17px]">rotate_left</span>
+                      <span className="text-[10px]">45°-</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRotateSelected(Math.PI / 4)}
+                      title="تدوير 45° يمين (أو اضغط R)"
+                      className="px-2.5 py-1.5 rounded-xl text-on-surface hover:bg-surface-container-high active:scale-95 transition-all flex items-center gap-1 text-xs font-bold"
+                    >
+                      <span className="material-symbols-outlined text-[17px]">rotate_right</span>
+                      <span className="text-[10px]">45°+</span>
+                    </button>
+                  </div>
+
+                  <div className="w-px h-5 bg-outline-variant/60"></div>
+
+                  {/* Fine Nudge Movement */}
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleNudgeSelected(-0.1, 0)}
+                      title="تحريك يسار 10 سم"
+                      className="p-1.5 rounded-lg text-on-surface hover:bg-surface-container-high active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleNudgeSelected(0.1, 0)}
+                      title="تحريك يمين 10 سم"
+                      className="p-1.5 rounded-lg text-on-surface hover:bg-surface-container-high active:scale-95"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+                    </button>
+                  </div>
+
+                  <div className="w-px h-5 bg-outline-variant/60"></div>
+
+                  {/* Material / Color */}
+                  <button
+                    type="button"
+                    onClick={() => setIsMaterialPaletteOpen(true)}
+                    title="تغيير اللون والخامة"
+                    className="px-2.5 py-1.5 rounded-xl text-on-surface hover:bg-surface-container-high active:scale-95 transition-all flex items-center gap-1 text-xs font-bold"
+                  >
+                    <span className="material-symbols-outlined text-[17px] text-secondary">palette</span>
+                    <span className="text-[10px]">الخامة</span>
+                  </button>
+
+                  <div className="w-px h-5 bg-outline-variant/60"></div>
+
+                  {/* Delete Item */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      removeSceneItem(selectedAsset.instanceId);
+                      setSelectedAssetId(null);
+                      showToast("🗑️ تم حذف القطعة من المشهد");
+                    }}
+                    title="حذف القطعة (Delete)"
+                    className="p-1.5 rounded-xl text-error hover:bg-error/10 active:scale-95 transition-all flex items-center justify-center"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
+
+                  {/* Deselect / Done */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAssetId(null)}
+                    title="إنهاء التحديد"
+                    className="px-3 py-1.5 rounded-xl bg-primary text-on-primary hover:opacity-90 active:scale-95 transition-all flex items-center gap-1 text-xs font-bold"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">check</span>
+                    <span className="text-[11px]">تم</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <SceneToolbar
               onUndo={() => { undo(); showToast("↩️ تراجع"); }}
               onRedo={() => { redo(); showToast("↪️ إعادة"); }}
@@ -1094,6 +1444,18 @@ export default function StudioClient() {
               onToggleViewMode={handleToggleViewMode}
               onResetView={resetCamera}
               onScreenshot={() => window.dispatchEvent(new CustomEvent("rwaq-snapshot"))}
+              showWalkwayHeatmap={showWalkwayHeatmap}
+              onToggleWalkwayHeatmap={() => {
+                setShowWalkwayHeatmap((v) => {
+                  const next = !v;
+                  showToast(next ? "🛣️ تم تفعيل مخطط مسارات الحركة (كود البناء SBC)" : "إخفاء مخطط مسارات الحركة");
+                  return next;
+                });
+              }}
+              onAIRender={handleAIRender}
+              isAIRendering={isAIRendering}
+              onUploadFloorplan={() => setIsFloorplanModalOpen(true)}
+              onOpenFurnitureLibrary={() => setIsModalOpen(true)}
             />
 
             {!isChatbotOpen && (
@@ -1187,6 +1549,24 @@ export default function StudioClient() {
       <SpatialAuditModal
         isOpen={isAuditModalOpen}
         onClose={() => setIsAuditModalOpen(false)}
+        showToast={showToast}
+      />
+
+      {/* ── الرندرة الواقعية بالذكاء الاصطناعي (Neural Render Bridge) ── */}
+      <RenderComparisonModal
+        isOpen={isAIRenderModalOpen}
+        onClose={() => setIsAIRenderModalOpen(false)}
+        beforeImageUrl={renderBeforeImage}
+        afterImageUrl={renderAfterImage}
+        roomStyle={activeReference || "مودرن فاخر"}
+        sourceNote={renderSourceNote}
+        promptUsed={renderPromptUsed}
+      />
+
+      {/* ── تحويل المخطط 2D إلى 3D (Floorplan Vision Modal) ── */}
+      <FloorplanUploadModal
+        isOpen={isFloorplanModalOpen}
+        onClose={() => setIsFloorplanModalOpen(false)}
         showToast={showToast}
       />
 

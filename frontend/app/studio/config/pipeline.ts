@@ -99,6 +99,8 @@ export interface AIResponseWindow {
 export interface AIResponseItem {
   instance_id: string;
   asset_id: string;
+  name?: string;
+  color?: string;
   position?: [number, number, number];
   rotation?: [number, number, number];
   dimensions?: RawDimensionsInput;
@@ -115,10 +117,23 @@ export interface AIResponseItem {
 export interface GenerateRoomResponse {
   items?: AIResponseItem[];
   windows?: AIResponseWindow[];
-  room_dimensions?: { width: number; depth: number; height?: number };
+  room_dimensions?: {
+    width: number;
+    depth: number;
+    height?: number;
+    shape?: 'single' | 'corridor_room' | 'open_plan' | 'l_shape';
+  };
   ambient_mode?: 'morning' | 'rainy' | 'midnight';
   floor_color?: string;
   wall_color?: string;
+  spatial_audit?: {
+    spatial_score?: number;
+    assessment_label?: string;
+    density_percentage?: number;
+    recommendations?: string[];
+    passed_checks?: string[];
+  };
+  auto_corrected?: boolean;
 }
 
 export type StageId = 'analyze' | 'match' | 'build' | 'cost';

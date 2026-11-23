@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import { useGLTF, Html, useHelper } from "@react-three/drei";
+import { useGLTF, useHelper } from "@react-three/drei";
 import { ThreeEvent, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, type RwaqMaterial } from "@/lib/useSceneStore";
@@ -118,15 +118,16 @@ function getLocalBoundingBox(object: THREE.Object3D): THREE.Box3 {
   const box = new THREE.Box3();
   box.makeEmpty();
   object.updateMatrixWorld(true);
+  const inverseRoot = object.matrixWorld.clone().invert();
 
   object.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (mesh.isMesh && mesh.visible && mesh.geometry) {
       const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
       const isTransparent = mat && (
-        mat.transparent === true || 
-        mat.opacity < 1 || 
+        (mat.transparent === true && mat.opacity < 0.1) || 
         mesh.name.toLowerCase().includes('shadow') ||
+        mesh.name.toLowerCase().includes('collider') ||
         mesh.name.toLowerCase().includes('plane')
       );
 
@@ -134,7 +135,8 @@ function getLocalBoundingBox(object: THREE.Object3D): THREE.Box3 {
         if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
         if (mesh.geometry.boundingBox) {
           const childBox = mesh.geometry.boundingBox.clone();
-          childBox.applyMatrix4(mesh.matrixWorld);
+          const meshToRoot = mesh.matrixWorld.clone().premultiply(inverseRoot);
+          childBox.applyMatrix4(meshToRoot);
           box.union(childBox);
         }
       }
@@ -772,17 +774,8 @@ export default function RealFurnitureLoader({
           onSelect?.(meta);
         }}
       >
-        {/* ── Fallback: invalid / loading / error ── */}
+        {/* ── Fallback: invalid / loading / error (procedural 3D box, no DOM overhead) ── */}
         {(isInvalidUrl || loadState === "idle" || loadState === "error") && fallbackBox}
-
-        {/* ── Loading / Error / Missing Label ── */}
-        {(isInvalidUrl || loadState === "idle" || loadState === "error") && (
-          <Html center position={[0, fh + 0.1, 0]}>
-            <div className="text-[10px] text-gray-700 bg-white/90 px-2 py-1 rounded shadow-sm whitespace-nowrap border border-gray-200" dir="rtl">
-              {isInvalidUrl ? "🛋️ تصميم 3D غير متوفر" : loadState === "error" ? "⚠️ خطأ في التحميل" : "⏳ جاري التحميل..."}
-            </div>
-          </Html>
-        )}
 
       {/* ── Silent pre-load while idle (invisible until calibration resolves) ── */}
       {!isInvalidUrl && loadState === "idle" && (
@@ -812,42 +805,6 @@ export default function RealFurnitureLoader({
             </group>
           </ModelErrorBoundary>
         </React.Suspense>
-      )}
-
-      {/* ── Contextual HUD (Only when selected) ── */}
-      {isSelected && calibration && (
-        <Html position={[0, calibration.scale[1] * (dimensions?.height || 1000) / 1000 + 0.5, 0]} center>
-          <div className="flex flex-col gap-2 pointer-events-auto items-center">
-            <div className="flex gap-2 bg-surface p-2 rounded-xl border border-outline-variant shadow-lg" dir="rtl">
-              <div className="flex items-center px-2 text-sm text-on-surface-variant font-medium">
-                اسحب للتحريك • R للتدوير
-              </div>
-              <div className="w-px bg-outline-variant my-1"></div>
-              <button 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  setSelectedAssetId(null);
-                }} 
-                className="p-2 rounded-lg text-primary hover:bg-primary/10 flex items-center justify-center transition-colors"
-                title="تأكيد التحريك (إلغاء التحديد)"
-              >
-                <span className="material-symbols-outlined text-[18px]">check_circle</span>
-              </button>
-              <div className="w-px bg-outline-variant my-1"></div>
-              <button 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  if (instanceId) removeSceneItem(instanceId); 
-                  setSelectedAssetId(null);
-                }} 
-                className="p-2 rounded-lg text-error hover:bg-error/10 flex items-center justify-center transition-colors"
-                title="حذف القطعة"
-              >
-                <span className="material-symbols-outlined text-[18px]">delete</span>
-              </button>
-            </div>
-          </div>
-        </Html>
       )}
     </group>
     </RigidBody>

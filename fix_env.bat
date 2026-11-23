@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: Always ensure we are in the project root directory
+cd /d "%~dp0"
+
 echo ============================================
 echo  Rwaq AI - Local Development Launcher
 echo ============================================
@@ -29,7 +32,7 @@ call .venv\Scripts\activate.bat
 
 echo.
 echo [2/3] Starting FastAPI backend on http://127.0.0.1:8000 ...
-start "Rwaq-Backend" cmd /k "call .venv\Scripts\activate.bat && uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload"
+start "Rwaq-Backend" cmd /k "call .venv\Scripts\activate.bat && python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload"
 
 echo.
 echo [3/3] Starting Next.js frontend on http://localhost:3000 ...

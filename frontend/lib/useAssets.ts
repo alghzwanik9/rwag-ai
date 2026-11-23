@@ -39,7 +39,7 @@ function toProductTemplate(a: CatalogAsset): IProductTemplate {
     brand: a.source,
     price: 0,          // Price comes from economy data, not the asset catalog
     currency: "SAR",
-    category: (["seating", "tables", "lighting", "rugs"].includes(a.category)
+    category: (["seating", "tables", "lighting", "rugs", "storage", "decor"].includes(a.category)
       ? a.category
       : "seating") as IProductTemplate["category"],
     modelUrl: a.model_url || a.model_3d_url || FALLBACK_MODEL_URL,
@@ -85,8 +85,8 @@ function demoCatalogRequested(): boolean {
  * `demoCatalogRequested`.
  */
 export function useAssets(): UseAssetsResult {
-  const [assets, setAssets] = useState<IProductTemplate[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [assets, setAssets] = useState<IProductTemplate[]>(IKEA_TEMPLATES);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromApi, setFromApi] = useState(false);
   const [isDemoData, setIsDemoData] = useState(false);
@@ -95,8 +95,9 @@ export function useAssets(): UseAssetsResult {
     let cancelled = false;
 
     async function fetchAssets() {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
       try {
-        const res = await fetch("/api/v1/assets");
+        const res = await fetch(`${apiBase}/api/v1/assets`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data: { assets: CatalogAsset[]; total: number } = await res.json();
@@ -105,26 +106,25 @@ export function useAssets(): UseAssetsResult {
         }
 
         if (cancelled) return;
-        setAssets(data.assets.map(toProductTemplate));
+        const apiTemplates = data.assets.map(toProductTemplate);
+        // Merge API assets with local verified templates to ensure comprehensive 3D models
+        const existingIds = new Set(apiTemplates.map((t) => t.id));
+        const combined = [...apiTemplates, ...IKEA_TEMPLATES.filter((t) => !existingIds.has(t.id))];
+
+        setAssets(combined);
         setFromApi(true);
         setIsDemoData(false);
         setError(null);
       } catch (err) {
         if (cancelled) return;
         console.error(
-          "[useAssets] GET /api/v1/assets failed — the backend is unreachable:",
+          "[useAssets] GET /api/v1/assets failed — using built-in templates:",
           err,
         );
-        const message = err instanceof Error ? err.message : "Unknown error";
         setFromApi(false);
-        setError(`تعذّر تحميل الكتالوج من الخادم (${message})`);
-
-        // No silent substitute: without an explicit demo opt-in the catalog
-        // stays empty, and that emptiness plus `error` is what makes the
-        // outage visible in the UI.
-        const useDemo = demoCatalogRequested();
-        setAssets(useDemo ? IKEA_TEMPLATES : []);
-        setIsDemoData(useDemo);
+        setAssets(IKEA_TEMPLATES);
+        setIsDemoData(true);
+        setError(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }

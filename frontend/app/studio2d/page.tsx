@@ -108,7 +108,8 @@ export default function Studio2D() {
         }
       };
 
-      const res = await fetch("/api/v1/studio/generate", {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(`${apiBase}/api/v1/studio/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -189,15 +190,15 @@ export default function Studio2D() {
       )}
 
       {/* Left Pane: Chat & Settings */}
-      <div className="w-full md:w-[420px] bg-white border-l border-gray-200 flex flex-col h-full shrink-0 shadow-lg">
+      <div className="w-full md:w-[380px] lg:w-[420px] bg-white border-l border-gray-200 flex flex-col h-full shrink-0 shadow-lg">
         {/* Header */}
         <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[#4A90E2]">
+          <div className="flex items-center gap-2 text-secondary">
             <span className="material-symbols-outlined text-2xl">camera</span>
-            <h2 className="font-bold text-lg text-black">استوديو توليد الصور 2D</h2>
+            <h2 className="font-bold text-base text-black">استوديو توليد الصور 2D</h2>
           </div>
-          <Link href="/studio" className="text-sm font-bold text-gray-500 hover:text-black flex items-center gap-1">
-            استوديو 3D
+          <Link href="/studio" className="text-xs font-bold text-secondary bg-secondary/10 hover:bg-secondary/20 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors">
+            <span>استوديو 3D</span>
             <span className="material-symbols-outlined text-sm">arrow_left</span>
           </Link>
         </div>
@@ -380,60 +381,79 @@ export default function Studio2D() {
         </div>
       </div>
 
-      {/* Right Pane: Visual Canvas Gallery */}
-      <div className="grow bg-[#F5F7FA] p-8 overflow-y-auto flex flex-col">
-        <div className="mb-6 flex justify-between items-center">
+      {/* Visual Canvas Gallery */}
+      <div className="flex-1 min-w-0 bg-[#F5F7FA] p-4 sm:p-6 lg:p-8 overflow-y-auto flex flex-col">
+        <div className="mb-6 flex justify-between items-center gap-4">
           <div>
             <h2 className="text-xl font-black text-black">معرض التصاميم المولدة</h2>
-            <p className="text-gray-400 text-xs mt-0.5">تظهر هنا الصور التي قمت بتوليدها في هذه الجلسة.</p>
+            <p className="text-gray-500 text-xs mt-0.5">تظهر هنا الصور التي قمت بتوليدها في هذه الجلسة.</p>
           </div>
-          <span className="bg-[#4A90E2]/10 text-[#4A90E2] px-3 py-1 rounded-full text-xs font-bold">
+          <span className="bg-secondary/10 text-secondary border border-secondary/20 px-3 py-1 rounded-full text-xs font-bold shrink-0">
             عدد الصور: {generatedImages.length}
           </span>
         </div>
 
         {generatedImages.length === 0 ? (
-          <div className="grow flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 shadow-sm p-12">
+          <div className="grow flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-200/60 shadow-xs p-12">
             <span className="material-symbols-outlined text-gray-300 text-7xl mb-4">wallpaper</span>
             <h3 className="font-bold text-lg text-gray-700 mb-2">استوديو التوليد فارغ</h3>
             <p className="text-gray-400 text-sm max-w-md text-center leading-relaxed">
-              اكتب وصف التصميم الذي تفكر به في صندوق المحادثة على اليسار، ثم انقر على **توليد صورة** لتراها تظهر هنا فورياً بجودة عالية.
+              اكتب وصف التصميم الذي تفكر به في صندوق المحادثة، ثم انقر على <strong className="text-gray-700 font-bold">توليد صورة</strong> لتراها تظهر هنا فورياً بجودة عالية.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
             {generatedImages.map((img) => (
               <div
                 key={img.id}
                 onClick={() => setSelectedImage(img)}
-                className="group bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-md hover:shadow-xl transition-all cursor-pointer relative"
+                className="group bg-white rounded-2xl overflow-hidden border border-gray-200/80 shadow-xs hover:shadow-xl transition-all duration-300 cursor-pointer relative flex flex-col"
               >
-                <div className="relative h-60 w-full overflow-hidden bg-gray-100">
+                <div className="relative aspect-4/3 w-full overflow-hidden bg-gray-100">
                   <Image src={img.image_url} alt="Generated interior" fill className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" unoptimized />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                  <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2.5">
                     <button
                       onClick={(e) => { e.stopPropagation(); downloadImage(img.image_url, showToast); }}
-                      className="bg-white p-2.5 rounded-full hover:bg-gray-100 text-black shadow-lg"
+                      className="bg-white/90 hover:bg-white p-2.5 rounded-full text-black shadow-lg transition-transform hover:scale-110"
                       title="تحميل الصورة"
                     >
                       <span className="material-symbols-outlined text-[18px]">download</span>
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleGenerateVariations(img); }}
-                      className="bg-[#4A90E2] p-2.5 rounded-full hover:bg-[#357abd] text-white shadow-lg"
+                      className="bg-secondary hover:bg-secondary/90 p-2.5 rounded-full text-white shadow-lg transition-transform hover:scale-110"
                       title="توليد تعديلات"
                     >
                       <span className="material-symbols-outlined text-[18px]">brush</span>
                     </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.location.href = `/studio?prompt=${encodeURIComponent(img.prompt_used)}&image=${encodeURIComponent(img.image_url)}&auto=true`;
+                      }}
+                      className="bg-black hover:bg-black/80 text-white p-2.5 rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110"
+                      title="تحويل وبناء في الاستوديو 3D"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-rwaq-gold">view_in_ar</span>
+                    </button>
                   </div>
                 </div>
-                <div className="p-4">
-                  <p className="text-gray-700 text-xs font-bold line-clamp-2 leading-relaxed" dir="rtl">
+                <div className="p-4 flex flex-col justify-between grow">
+                  <p className="text-gray-800 text-xs font-bold line-clamp-2 leading-relaxed" dir="rtl">
                     {img.prompt_used}
                   </p>
-                  <div className="mt-2 flex justify-between items-center text-[10px] text-gray-400 font-medium">
+                  <div className="mt-3 pt-2.5 border-t border-gray-100 flex justify-between items-center text-[10px] text-gray-500 font-medium">
                     <span>{img.created_at}</span>
-                    <span className="text-[#4A90E2] font-bold">بواسطة Flux Schnell</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.location.href = `/studio?prompt=${encodeURIComponent(img.prompt_used)}&image=${encodeURIComponent(img.image_url)}&auto=true`;
+                      }}
+                      className="text-black bg-gray-100 hover:bg-secondary/10 hover:text-secondary px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[13px] text-rwaq-gold">view_in_ar</span>
+                      بناء 3D
+                    </button>
                   </div>
                 </div>
               </div>
@@ -477,26 +497,38 @@ export default function Studio2D() {
             </div>
 
             {/* Modal Actions */}
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between gap-4">
-              <button
-                onClick={() => handleGenerateVariations(selectedImage)}
-                className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-sm">brush</span>
-                توليد تعديلات (Variations)
-              </button>
-              
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex flex-wrap justify-between items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    window.location.href = `/studio?prompt=${encodeURIComponent(selectedImage.prompt_used)}&image=${encodeURIComponent(selectedImage.image_url)}&auto=true`;
+                  }}
+                  className="bg-black hover:bg-black/85 text-white font-bold text-xs px-5 py-3 rounded-xl transition-all shadow-md flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base text-rwaq-gold">view_in_ar</span>
+                  تحويل وبناء في الاستوديو 3D
+                </button>
+
+                <button
+                  onClick={() => handleGenerateVariations(selectedImage)}
+                  className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">brush</span>
+                  توليد تعديلات
+                </button>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={() => downloadImage(selectedImage.image_url, showToast)}
-                  className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 font-bold text-xs px-5 py-3 rounded-xl transition-all flex items-center gap-1.5"
+                  className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 font-bold text-xs px-4 py-3 rounded-xl transition-all flex items-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-sm">download</span>
                   تحميل الصورة
                 </button>
                 <button
                   onClick={() => setSelectedImage(null)}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-xs px-5 py-3 rounded-xl transition-all"
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-xs px-4 py-3 rounded-xl transition-all"
                 >
                   إغلاق
                 </button>

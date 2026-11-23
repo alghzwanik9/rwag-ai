@@ -9,12 +9,16 @@ interface SceneToolbarProps {
   onToggleViewMode: () => void;
   onResetView: () => void;
   onScreenshot: () => void;
+  showWalkwayHeatmap?: boolean;
+  onToggleWalkwayHeatmap?: () => void;
+  onAIRender?: () => void;
+  isAIRendering?: boolean;
+  onUploadFloorplan?: () => void;
+  onOpenFurnitureLibrary?: () => void;
 }
 
 /**
- * Five actions, floating over the bottom-centre of the canvas. Every other
- * action from the old fourteen-icon rail moved into the scene drawer or the
- * header. Each handler here is one that already worked; nothing is a stub.
+ * Toolbar floating over the bottom-centre of the canvas.
  */
 export default function SceneToolbar({
   onUndo,
@@ -23,10 +27,43 @@ export default function SceneToolbar({
   onToggleViewMode,
   onResetView,
   onScreenshot,
+  showWalkwayHeatmap = false,
+  onToggleWalkwayHeatmap,
+  onAIRender,
+  isAIRendering = false,
+  onUploadFloorplan,
+  onOpenFurnitureLibrary,
 }: SceneToolbarProps) {
   const actions = [
     { icon: 'undo', label: 'تراجع (Ctrl+Z)', onClick: onUndo, active: false },
     { icon: 'redo', label: 'إعادة (Ctrl+Y)', onClick: onRedo, active: false },
+    {
+      icon: 'chair',
+      label: 'إضافة أثاث من المكتبة',
+      onClick: onOpenFurnitureLibrary || (() => {}),
+      active: false,
+      highlight: true,
+    },
+    {
+      icon: 'architecture',
+      label: 'رفع مخطط 2D إلى 3D',
+      onClick: onUploadFloorplan || (() => {}),
+      active: false,
+      highlight: true,
+    },
+    {
+      icon: 'auto_awesome',
+      label: isAIRendering ? 'جاري المعالجة السينمائية...' : 'رندرة سينمائية واقعية (AI Render)',
+      onClick: onAIRender || (() => {}),
+      active: isAIRendering,
+      highlight: true,
+    },
+    {
+      icon: 'alt_route',
+      label: showWalkwayHeatmap ? 'إخفاء مسارات الحركة' : 'مخطط مسارات الحركة (≥ 0.90م)',
+      onClick: onToggleWalkwayHeatmap || (() => {}),
+      active: showWalkwayHeatmap,
+    },
     {
       icon: viewMode === 'fpv' ? 'cancel' : 'directions_walk',
       label: viewMode === 'fpv' ? 'إنهاء التجول' : 'وضع التجول',
@@ -51,7 +88,11 @@ export default function SceneToolbar({
             title={action.label}
             className={`group/tool relative flex h-11 w-11 items-center justify-center rounded-xl transition-all active:scale-95 ${
               action.active
-                ? 'bg-primary text-on-primary shadow-sm'
+                ? action.highlight
+                  ? 'bg-rwaq-gold text-black shadow-md animate-pulse'
+                  : 'bg-primary text-on-primary shadow-sm'
+                : action.highlight
+                ? 'text-rwaq-gold hover:bg-rwaq-gold/15'
                 : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
             }`}
           >
