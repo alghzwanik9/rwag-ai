@@ -248,18 +248,27 @@ export default function RealRoom() {
     <group>
       {/* ── Studio Ground Pedestal (Clean Minimalist Floor Trim) ── */}
       <mesh
-        position={[isCorridor ? corridorCenterX / 2 : roomXOffset, -0.02, 0]}
+        position={[isCorridor ? corridorCenterX / 2 : roomXOffset, -0.015, 0]}
         receiveShadow
       >
         <boxGeometry
           args={[
-            roomWidth + (isCorridor ? corridorWidth + 0.4 : 0.4),
-            0.04,
-            roomDepth + (isCorridor ? corridorExtraDepth + 0.4 : 0.4),
+            roomWidth + (isCorridor ? corridorWidth + 0.16 : 0.16),
+            0.03,
+            roomDepth + (isCorridor ? corridorExtraDepth + 0.16 : 0.16),
           ]}
         />
-        <meshStandardMaterial color="#22242B" roughness={0.7} metalness={0.15} />
+        <meshStandardMaterial color="#E8E4DC" roughness={0.85} metalness={0.02} />
       </mesh>
+
+      {/* ── Soft Architectural Contact Shadows Under Ground Pedestal / Slab ── */}
+      <ContactShadows
+        position={[isCorridor ? corridorCenterX / 2 : roomXOffset, -0.032, 0]}
+        opacity={0.28}
+        scale={Math.max(roomWidth, roomDepth) * 1.3}
+        blur={3.0}
+        far={2.2}
+      />
 
       {/* ── 1. MAIN ROOM FLOOR ── */}
       <RigidBody type="fixed" colliders="cuboid">
@@ -428,7 +437,7 @@ export default function RealRoom() {
           <boxGeometry args={[roomWidth, 0.08, 0.04]} />
           <meshStandardMaterial color={displayWall} roughness={0.7} />
         </mesh>
-        <pointLight position={[0, -0.1, 0.15]} color="#FFE4C4" intensity={0.6} distance={6} decay={2} />
+        <pointLight position={[0, -0.08, 0.25]} color="#FFF0DC" intensity={0.25} distance={4} decay={2} />
       </group>
 
       {/* ── 9. MODERN ARCHITECTURAL BASEBOARDS ── */}

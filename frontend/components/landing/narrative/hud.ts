@@ -1,19 +1,22 @@
-import type { RefObject } from 'react';
+import type { MutableRefObject, RefObject } from 'react';
 
 /**
- * Bridge between the R3F scene and fixed DOM chrome (dimension rail, budget
- * counter, scroll CTA). The scene writes into these refs' current nodes
- * directly inside `useFrame` — no React state, no re-renders on scroll.
+ * Zero-re-render bridge between the R3F 3D scene loop and fixed DOM HUD chrome.
+ * `Scene` writes directly to DOM refs on `useFrame` for locked 60fps performance.
  */
 export interface HudRefs {
-  /** ScrollControls' scroll container, stashed by the scene for the CTA. */
+  /** Native scroll container driving the 5-Act spline camera. */
   scrollEl: RefObject<HTMLElement | null>;
-  /** Numeric readout on the dimension rail ("0.0 m" → "5.0 m"). */
+  /** Numeric distance readout on the left dimension gauge ("0.0 m" -> "12.0 m"). */
   depthText: RefObject<HTMLSpanElement | null>;
-  /** Moving marker on the dimension rail (top offset in %). */
+  /** Moving brass marker on the left dimension gauge (top offset in %). */
   railMarker: RefObject<HTMLDivElement | null>;
-  /** Live budget figure in the Act 5 card. */
+  /** Live SAR budget total counter in the Act 05 pricing card. */
   budgetText: RefObject<HTMLSpanElement | null>;
-  /** HTML copy container transformed smoothly on scroll frames. */
-  copyLayer?: RefObject<HTMLDivElement | null>;
+  /** Live Style Morph progress percentage badge in Act 04. */
+  morphLabel?: RefObject<HTMLSpanElement | null>;
+  /** Normalized pointer parallax coordinates [-1, 1] updated outside React state. */
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  /** Shared live style morph factor [0 -> 1] for Scene & Furniture sync. */
+  morphFactorRef: MutableRefObject<number>;
 }

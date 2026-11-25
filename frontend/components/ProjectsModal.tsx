@@ -20,6 +20,7 @@ interface SavedRoomSettings {
   wallColor?: string;
   ambientMode?: 'morning' | 'rainy' | 'midnight';
   windows?: RoomWindow[];
+  doors?: any[];
 }
 
 interface Project {
@@ -113,6 +114,7 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
             wallColor,
             ambientMode,
             windows,
+            doors: useSceneStore.getState().doors,
           },
         })
       });
@@ -171,6 +173,9 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
           }
           if (Array.isArray(room.windows)) {
             setWindows(room.windows);
+          }
+          if (Array.isArray(room.doors)) {
+            useSceneStore.getState().setDoors(room.doors);
           }
         }
 
@@ -266,14 +271,30 @@ export default function ProjectsModal({ isOpen, onClose, onShowToast, setModelUr
                     <p className="text-xs text-on-surface-variant mb-4 font-mono">
                       {new Date(proj.savedAt).toLocaleDateString('ar-SA')} - {proj.totalCost} ر.س
                     </p>
-                    <button 
-                      onClick={() => handleLoad(proj.id)}
-                      disabled={isLoading}
-                      className="w-full bg-secondary-container text-on-secondary-container py-2 rounded-lg text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-secondary/20 flex justify-center items-center gap-2"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">download</span>
-                      تحميل التصميم
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button 
+                        onClick={() => handleLoad(proj.id)}
+                        disabled={isLoading}
+                        className="flex-1 bg-secondary-container text-on-secondary-container py-2 rounded-lg text-xs font-bold hover:bg-secondary hover:text-white transition-colors flex justify-center items-center gap-1.5"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">download</span>
+                        تحميل التصميم
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          const url = `${window.location.origin}/studio?share=${proj.id}`;
+                          if (navigator?.clipboard?.writeText) {
+                            await navigator.clipboard.writeText(url);
+                            onShowToast("🔗 تم نسخ رابط المشاركة 3D إلى الحافظة!");
+                          }
+                        }}
+                        className="px-3 py-2 border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container-high flex items-center gap-1 text-on-surface transition-colors"
+                        title="نسخ رابط المشاركة 3D"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">share</span>
+                        مشاركة
+                      </button>
+                    </div>
                   </div>
                 ))
               ) : (

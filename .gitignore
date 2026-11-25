@@ -15,6 +15,7 @@ __pycache__/
 
 # Data & Outputs
 .lancedb/
+.local_projects_store.json
 outputs/
 graphify-out/
 *.blend

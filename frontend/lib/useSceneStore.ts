@@ -180,6 +180,20 @@ export interface SceneStore {
   addDoor: (door: RoomDoor) => void;
   removeDoor: (id: string) => void;
   setDoors: (doors: RoomDoor[]) => void;
+  // Project loading
+  loadProjectScene: (payload: {
+    sceneItems?: SceneItem[];
+    roomWidth?: number;
+    roomDepth?: number;
+    wallHeight?: number;
+    floorColor?: string;
+    wallColor?: string;
+    ambientMode?: 'morning' | 'rainy' | 'midnight';
+    windows?: RoomWindow[];
+    doors?: RoomDoor[];
+    customMaterials?: Record<string, RwaqMaterial>;
+    activeSceneId?: string | null;
+  }) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -401,6 +415,26 @@ export const useSceneStore = create<SceneStore>()(
       addDoor: (door) => set((state) => ({ doors: [...state.doors, door] })),
       removeDoor: (id) => set((state) => ({ doors: state.doors.filter((d) => d.id !== id) })),
       setDoors: (doors) => set({ doors }),
+
+      // ── Project Load action ───────────────────────────────────
+      loadProjectScene: (payload) => set((state) => {
+        const items = payload.sceneItems || [];
+        return {
+          sceneItems: items,
+          roomWidth: payload.roomWidth ?? state.roomWidth,
+          roomDepth: payload.roomDepth ?? state.roomDepth,
+          wallHeight: payload.wallHeight ?? state.wallHeight,
+          floorColor: payload.floorColor ?? state.floorColor,
+          wallColor: payload.wallColor ?? state.wallColor,
+          ambientMode: payload.ambientMode ?? state.ambientMode,
+          windows: payload.windows || [],
+          doors: payload.doors || [],
+          customMaterials: payload.customMaterials || {},
+          activeSceneId: payload.activeSceneId ?? state.activeSceneId,
+          history: [items],
+          historyIndex: 0,
+        };
+      }),
     }),
     {
       name: 'rwaq-scene-store',

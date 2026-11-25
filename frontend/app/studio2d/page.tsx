@@ -17,6 +17,27 @@ interface GeneratedImage {
   created_at: string;
 }
 
+const CURATED_INITIAL_DESIGNS: GeneratedImage[] = [
+  {
+    id: "init_1",
+    image_url: "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1600&q=85",
+    prompt_used: "مجلس ضيافة عربي معاصر، كنب مخمل كحلي، رخام وطاولات حجرية مع إضاءة دافئة 3000K",
+    created_at: "تصميم مقترح",
+  },
+  {
+    id: "init_2",
+    image_url: "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1600&q=85",
+    prompt_used: "صالة جلوس بطراز ياباندي هادئ، أخشاب بلوط طبيعية، نباتات زيتون داخلية ونوافذ واسعة",
+    created_at: "تصميم مقترح",
+  },
+  {
+    id: "init_3",
+    image_url: "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&w=1600&q=85",
+    prompt_used: "جناح نوم ماستر فاخر بتدرجات البيج والرمادي الدافئ، إضاءة ليلية ناعمة وأرضيات باركيه",
+    created_at: "تصميم مقترح",
+  },
+];
+
 const downloadImage = (url: string, showToast: (msg: string) => void) => {
   const link = document.createElement("a");
   link.href = url;
@@ -39,7 +60,7 @@ export default function Studio2D() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>(CURATED_INITIAL_DESIGNS);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,7 +205,7 @@ export default function Studio2D() {
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 left-6 z-50 bg-[#1E1E1E] text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 border border-white/10 animate-bounce">
-          <span className="material-symbols-outlined text-[#4A90E2]">info</span>
+          <span className="material-symbols-outlined text-secondary">info</span>
           <span className="text-sm font-bold">{toastMessage}</span>
         </div>
       )}
@@ -211,7 +232,7 @@ export default function Studio2D() {
             <select
               value={roomType}
               onChange={e => setRoomType(e.target.value)}
-              className="bg-white border border-gray-200 rounded-lg p-2 text-xs focus:ring-0 focus:border-[#4A90E2]"
+              className="bg-white border border-gray-200 rounded-lg p-2 text-xs focus:ring-0 focus:border-secondary"
             >
               <option value="Living Room">غرفة جلوس</option>
               <option value="Bedroom">غرفة نوم</option>
@@ -228,7 +249,7 @@ export default function Studio2D() {
             <select
               value={decorStyle}
               onChange={e => setDecorStyle(e.target.value)}
-              className="bg-white border border-gray-200 rounded-lg p-2 text-xs focus:ring-0 focus:border-[#4A90E2]"
+              className="bg-white border border-gray-200 rounded-lg p-2 text-xs focus:ring-0 focus:border-secondary"
             >
               <option value="Modern">مودرن</option>
               <option value="Minimalist">بسيط</option>
@@ -245,7 +266,7 @@ export default function Studio2D() {
             <select
               value={colorPalette}
               onChange={e => setColorPalette(e.target.value)}
-              className="bg-white border border-gray-200 rounded-lg p-2 text-xs focus:ring-0 focus:border-[#4A90E2]"
+              className="bg-white border border-gray-200 rounded-lg p-2 text-xs focus:ring-0 focus:border-secondary"
             >
               <option value="Warm Neutrals">ألوان دافئة</option>
               <option value="Cool Tones">ألوان باردة</option>
@@ -331,12 +352,12 @@ export default function Studio2D() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="flex bg-[#F5F7FA] rounded-xl overflow-hidden border border-gray-200 focus-within:border-[#4A90E2] p-1">
+            <div className="flex bg-[#F5F7FA] rounded-xl overflow-hidden border border-gray-200 focus-within:border-secondary p-1">
               {/* Vision upload */}
               <button
                 onClick={handleImageUploadClick}
                 disabled={isUploading}
-                className={`material-symbols-outlined p-2 hover:bg-gray-200 rounded-full transition-colors ${uploadedImageUrl ? 'text-[#4A90E2]' : 'text-gray-400'}`}
+                className={`material-symbols-outlined p-2 hover:bg-gray-200 rounded-full transition-colors ${uploadedImageUrl ? 'text-secondary' : 'text-gray-400'}`}
                 title="رفع صورة مرجعية (Img2Img)"
               >
                 image
@@ -371,7 +392,7 @@ export default function Studio2D() {
               <button
                 onClick={handleGenerateImage}
                 disabled={isGenerating}
-                className="flex-1 bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1"
+                className="flex-1 bg-secondary hover:bg-secondary/90 text-white font-bold py-2.5 rounded-xl text-sm transition-all flex items-center justify-center gap-1 shadow-xs"
               >
                 <span className="material-symbols-outlined text-sm">palette</span>
                 توليد صورة
@@ -488,7 +509,7 @@ export default function Studio2D() {
             {/* Modal Detail Info */}
             <div className="p-6 text-right">
               <h4 className="font-bold text-gray-800 text-sm mb-2 flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                <span className="material-symbols-outlined text-[#4A90E2] text-lg">description</span>
+                <span className="material-symbols-outlined text-secondary text-lg">description</span>
                 الوصف المستخدم للتوليد
               </h4>
               <p className="text-gray-600 text-sm leading-relaxed" dir="rtl">
@@ -511,7 +532,7 @@ export default function Studio2D() {
 
                 <button
                   onClick={() => handleGenerateVariations(selectedImage)}
-                  className="bg-[#4A90E2] hover:bg-[#357abd] text-white font-bold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                  className="bg-secondary hover:bg-secondary/90 text-white font-bold text-xs px-4 py-3 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-sm">brush</span>
                   توليد تعديلات

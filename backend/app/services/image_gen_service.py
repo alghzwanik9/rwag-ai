@@ -1,11 +1,91 @@
 import os
 import re
+import io
+import base64
+import urllib.parse
 import httpx
 from typing import Optional, Dict, Any
+from PIL import Image, ImageEnhance
 
 from backend.app.config import FAL_KEY, GEMINI_API_KEY
 
-STYLE_TRANSLATIONS = {
+# High-resolution architectural photography presets for graceful fallback when AI generation is unavailable
+ARCHITECTURAL_PRESETS: Dict[str, list[str]] = {
+    "Living Room": [
+        "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?q=80&w=1200&auto=format&fit=crop",
+    ],
+    "Bedroom": [
+        "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1540518614846-7ede433c4576?q=80&w=1200&auto=format&fit=crop",
+    ],
+    "Kitchen": [
+        "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1600585152220-90363fe7e115?q=80&w=1200&auto=format&fit=crop",
+    ],
+    "Majlis": [
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?q=80&w=1200&auto=format&fit=crop",
+    ],
+    "Office": [
+        "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1593062096033-9a26b09da705?q=80&w=1200&auto=format&fit=crop",
+    ],
+    "Dining Room": [
+        "https://images.unsplash.com/photo-1617806118233-18e1de247200?q=80&w=1200&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1615876234886-fd9a39fda97f?q=80&w=1200&auto=format&fit=crop",
+    ]
+}
+
+def get_architectural_preset_fallback(prompt: str, settings: Optional[Dict[str, Any]] = None) -> str:
+    import random
+    rt = (settings or {}).get("roomType", "Living Room")
+    p_lower = (prompt or "").lower()
+    if "مجلس" in p_lower or "majlis" in p_lower:
+        candidates = ARCHITECTURAL_PRESETS["Majlis"]
+    elif "مطبخ" in p_lower or "kitchen" in p_lower:
+        candidates = ARCHITECTURAL_PRESETS["Kitchen"]
+    elif "نوم" in p_lower or "سرير" in p_lower or "bedroom" in p_lower:
+        candidates = ARCHITECTURAL_PRESETS["Bedroom"]
+    elif "مكتب" in p_lower or "office" in p_lower:
+        candidates = ARCHITECTURAL_PRESETS["Office"]
+    elif "طعام" in p_lower or "dining" in p_lower:
+        candidates = ARCHITECTURAL_PRESETS["Dining Room"]
+    else:
+        candidates = ARCHITECTURAL_PRESETS.get(rt, ARCHITECTURAL_PRESETS["Living Room"])
+    return random.choice(candidates)
+
+
+def apply_architectural_lighting_pass(data_url: str) -> str:
+    """
+    Applies a high-contrast architectural studio lighting pass to the 3D snapshot,
+    enhancing contrast, edge sharpness, and subtle warm color tones to ground the geometry
+    while strictly preserving the user's 3D furniture layout and perspective.
+    """
+    try:
+        header, b64_str = data_url.split(",", 1) if "," in data_url else ("", data_url)
+        raw_bytes = base64.b64decode(b64_str)
+        img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+
+        # High-contrast architectural lighting pass
+        img = ImageEnhance.Contrast(img).enhance(1.24)
+        img = ImageEnhance.Sharpness(img).enhance(1.35)
+        img = ImageEnhance.Color(img).enhance(1.12)
+        img = ImageEnhance.Brightness(img).enhance(1.04)
+
+        out_buf = io.BytesIO()
+        img.save(out_buf, format="PNG", optimize=True)
+        enhanced_b64 = base64.b64encode(out_buf.getvalue()).decode("utf-8")
+        return f"data:image/png;base64,{enhanced_b64}"
+    except Exception as e:
+        print(f"[image_gen_service] Lighting pass fallback warning: {e}")
+        return data_url
+
+
+STYLE_TRANSLATIONS: Dict[str, str] = {
     "Living Room": "living room",
     "Bedroom": "bedroom",
     "Kitchen": "kitchen",
@@ -24,6 +104,7 @@ STYLE_TRANSLATIONS = {
     "Earthy": "earthy organic palette (terracotta, olive green, warm stone)",
     "Bold Contrast": "bold contrast palette (charcoal, walnut wood, brass accents)"
 }
+
 
 def enhance_interior_prompt(user_prompt: str, settings: Optional[Dict[str, Any]] = None) -> str:
     room_type = "living room"
@@ -101,64 +182,22 @@ async def generate_studio_image(
         except Exception as e:
             print(f"[FAL.ai] Error generating image: {e}")
 
-    # Room-type-specific architectural presets when Fal.ai is unreachable or quota-exhausted (403)
-    room_fallbacks: Dict[str, list[str]] = {
-        "Kitchen": [
-            "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1600585152220-90363fe7e115?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1565538810643-b5bdb714032a?q=80&w=1200&auto=format&fit=crop",
-        ],
-        "Bedroom": [
-            "https://images.unsplash.com/photo-1616594039964-ae9021a400a0?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1540518614846-7ede433c4576?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1615874959474-d609969a20ed?q=80&w=1200&auto=format&fit=crop",
-        ],
-        "Bathroom": [
-            "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1620626011761-996317b8d101?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?q=80&w=1200&auto=format&fit=crop",
-        ],
-        "Office": [
-            "https://images.unsplash.com/photo-1524758631624-e2822e304c36?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1593062096033-9a26b09da705?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?q=80&w=1200&auto=format&fit=crop",
-        ],
-        "Dining Room": [
-            "https://images.unsplash.com/photo-1617806118233-18e1de247200?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1615876234886-fd9a39fda97f?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1604578762246-41134e37f9cc?q=80&w=1200&auto=format&fit=crop",
-        ],
-        "Living Room": [
-            "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=1200&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?q=80&w=1200&auto=format&fit=crop",
-        ],
-    }
-    import random
-    requested_room = (settings or {}).get("roomType", "Living Room")
-    p_lower = (prompt or "").lower()
-    if "مطبخ" in p_lower or "kitchen" in p_lower:
-        requested_room = "Kitchen"
-    elif "نوم" in p_lower or "سرير" in p_lower or "bedroom" in p_lower:
-        requested_room = "Bedroom"
-    elif "حمام" in p_lower or "دورة مياه" in p_lower or "bathroom" in p_lower:
-        requested_room = "Bathroom"
-    elif "مكتب" in p_lower or "office" in p_lower:
-        requested_room = "Office"
-    elif "طعام" in p_lower or "سفرة" in p_lower or "dining" in p_lower:
-        requested_room = "Dining Room"
+    # ── Fallback Handling when Fal.ai is missing or fails ──
+    processed_fallback: Optional[str] = None
+    if base_image_url and base_image_url.startswith("data:image"):
+        processed_fallback = apply_architectural_lighting_pass(base_image_url)
+    else:
+        # High-res curated architectural photography fallback
+        processed_fallback = get_architectural_preset_fallback(enhanced_prompt, settings)
 
-    candidates = room_fallbacks.get(requested_room, room_fallbacks["Living Room"])
-    selected_fallback = random.choice(candidates)
-    
     return {
         "status": "success",
-        "image_url": selected_fallback,
+        "image_url": processed_fallback,
         "prompt_used": prompt or "تصميم مساحة داخلية متناسقة",
         "enhanced_prompt": enhanced_prompt,
-        "note": "تم استخدام معاينة عالية الجودة نظراً لعدم توفر استجابة فورية من خادم التوليد."
+        "is_mock_fallback": True,
+        "note": "معاينة تجريبية (أضف FAL_KEY في .env لتفعيل الرندرة المطابقة 1:1)",
+        "env_hint": "FAL_KEY=fal_your_api_key_here"
     }
 
 
@@ -202,12 +241,15 @@ def build_3d_render_prompt(metadata: Optional[Dict[str, Any]] = None) -> str:
 
 async def render_photorealistic_from_3d(
     image_base64: str,
+    depth_map_base64: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Neural Render Bridge:
-    Takes the base64 snapshot of the 3D Studio viewport and uses Fal.ai Flux Image-to-Image
-    with architectural structural guidance to generate a photorealistic render matching the exact camera view.
+    Takes the base64 snapshot of the 3D Studio viewport and synthesizes a photorealistic render.
+    If depth_map_base64 is provided, routes through Fal.ai Depth ControlNet pipeline
+    for exact 1:1 architectural geometry preservation, falling back gracefully to standard
+    image-to-image or curated presets if unavailable.
     """
     metadata = metadata or {}
     prompt = build_3d_render_prompt(metadata)
@@ -218,13 +260,54 @@ async def render_photorealistic_from_3d(
     if not data_url.startswith("data:image"):
         data_url = f"data:image/png;base64,{data_url}"
 
+    depth_data_url: Optional[str] = None
+    if depth_map_base64:
+        d_clean = depth_map_base64.strip()
+        if d_clean:
+            depth_data_url = d_clean if d_clean.startswith("data:image") else f"data:image/png;base64,{d_clean}"
+
     if fal_api_key:
+        headers = {
+            "Authorization": f"Key {fal_api_key}",
+            "Content-Type": "application/json"
+        }
+
+        # ── 1. If Depth Map is provided, attempt Depth-Guided ControlNet ──
+        if depth_data_url:
+            try:
+                # Primary depth endpoint: Flux Control LoRA Depth with calibrated conditioning
+                depth_endpoint = "https://fal.run/fal-ai/flux-control-lora-depth"
+                depth_payload = {
+                    "prompt": prompt,
+                    "control_image_url": depth_data_url,
+                    "image_url": data_url,
+                    "conditioning_scale": 0.80,
+                    "controlnet_conditioning_scale": 0.80,
+                    "num_inference_steps": 28,
+                    "guidance_scale": 3.5,
+                    "enable_safety_checker": True
+                }
+
+                async with httpx.AsyncClient(timeout=90.0) as client:
+                    resp = await client.post(depth_endpoint, headers=headers, json=depth_payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        images = data.get("images", [])
+                        if images and len(images) > 0:
+                            return {
+                                "status": "success",
+                                "image_url": images[0].get("url"),
+                                "prompt_used": prompt,
+                                "source": "fal_ai_depth_control",
+                                "depth_guided": True
+                            }
+                    else:
+                        print(f"[FAL.ai] Depth Control returned status {resp.status_code}: {resp.text}. Falling back to img2img.")
+            except Exception as e_depth:
+                print(f"[FAL.ai] Depth Control failed ({e_depth}), falling back to img2img.")
+
+        # ── 2. Standard Structure-Preserving Image-to-Image (Flux Dev) ──
         try:
-            headers = {
-                "Authorization": f"Key {fal_api_key}",
-                "Content-Type": "application/json"
-            }
-            # Use flux dev image-to-image with structure preservation
             endpoint = "https://fal.run/fal-ai/flux/dev/image-to-image"
             payload = {
                 "image_url": data_url,
@@ -246,39 +329,33 @@ async def render_photorealistic_from_3d(
                             "status": "success",
                             "image_url": image_url,
                             "prompt_used": prompt,
-                            "source": "fal_ai"
+                            "source": "fal_ai",
+                            "depth_guided": False
                         }
                 else:
                     print(f"[FAL.ai] Image-to-Image returned status {response.status_code}: {response.text}")
         except Exception as e:
             print(f"[FAL.ai] Error during 3D photorealistic render: {e}")
 
-    # Fallback if Fal.ai is missing or fails: pick curated luxury render matching ambient mode
-    ambient = metadata.get("ambient_mode") or "morning"
-    curated_renders = {
-        "morning": [
-            "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?q=80&w=1400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=1400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?q=80&w=1400&auto=format&fit=crop"
-        ],
-        "midnight": [
-            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=1400&auto=format&fit=crop"
-        ],
-        "rainy": [
-            "https://images.unsplash.com/photo-1513694203232-719a280e022f?q=80&w=1400&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1505691938895-1758d7feb511?q=80&w=1400&auto=format&fit=crop"
-        ]
-    }
-    fallback_pool = curated_renders.get(ambient, curated_renders["morning"])
-    import random
-    fallback_url = random.choice(fallback_pool)
+    # ── Fallback Handling: Honest & Smart 3D Snapshot Lighting Pass ──
+    # When FAL_KEY is missing or unreachable, preserve 100% geometry parity
+    # by applying an architectural studio lighting pass to the captured 3D snapshot
+    # rather than displaying an unrelated pre-baked stock photograph.
+    processed_url = data_url
+    if data_url and data_url.startswith("data:image"):
+        processed_url = apply_architectural_lighting_pass(data_url)
+    else:
+        # Curated architectural photography fallback
+        processed_url = get_architectural_preset_fallback(prompt)
 
     return {
         "status": "success",
-        "image_url": fallback_url,
+        "image_url": processed_url,
         "prompt_used": prompt,
-        "source": "curated_architectural_render",
-        "note": "تم استخدام معاينة سينمائية نظراً لعدم توفر مفتاح FAL_KEY أو انشغال الخادم السحابي."
+        "source": "preview_simulation",
+        "depth_guided": bool(depth_data_url),
+        "is_mock_fallback": True,
+        "note": "معاينة تجريبية (أضف FAL_KEY في .env لتفعيل الرندرة المطابقة 1:1)",
+        "env_hint": "FAL_KEY=fal_your_api_key_here"
     }
 

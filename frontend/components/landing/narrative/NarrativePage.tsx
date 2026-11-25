@@ -13,22 +13,24 @@ import {
 } from 'react';
 import { Canvas, type RootState } from '@react-three/fiber';
 import {
+  ACT_RANGES,
+  ALL_ACTS,
   COST_TOTAL,
-  DESKTOP_CAMERA,
-  DESKTOP_RANGES,
-  MOBILE_CAMERA,
-  MOBILE_RANGES,
-  ROOM,
-  type ActId,
+  DESKTOP_SPLINE,
+  MOBILE_SPLINE,
+  PAVILION,
+  activeActIndexFor,
+  sectionOffset,
 } from './config';
 import type { HudRefs } from './hud';
 import CopyLayer from './CopyLayer';
 import DimensionRail from './DimensionRail';
 import Scene from './Scene';
 import StaticFallback from './StaticFallback';
+import TourControls from './TourControls';
 
-const DESKTOP_ACTS: readonly ActId[] = ['void', 'bounds', 'material', 'layout', 'cost'];
-const MOBILE_ACTS: readonly ActId[] = ['void', 'material', 'cost'];
+/** Full 5-Act Auto-Tour duration in milliseconds. */
+const AUTO_TOUR_DURATION_MS = 28000;
 
 function useMediaFlag(query: string): boolean {
   const [matches, setMatches] = useState(false);
@@ -42,31 +44,10 @@ function useMediaFlag(query: string): boolean {
   return matches;
 }
 
-/** All three live at module scope so `useSyncExternalStore` sees stable identities. */
 const subscribeToNothing = () => () => {};
 const readMotionParam = () => new URLSearchParams(window.location.search).get('motion');
 const motionParamOnServer = () => null;
 
-/**
- * `?motion=off` opts into the static page. Nothing else selects it.
- *
- * The OS `prefers-reduced-motion` setting deliberately does NOT gate the
- * scene: Windows turns that flag on machine-wide as part of unrelated
- * animation preferences, so honouring it silently removed the narrative for
- * people who had never asked to lose it. The static page is still built and
- * still reachable — it is a choice the visitor makes, not a state the system
- * imposes.
- *
- * Read straight off `window.location` rather than through `useSearchParams`,
- * which would opt this route out of static rendering unless the whole tree
- * were wrapped in a Suspense boundary. The flag is only ever needed on the
- * client, so there is nothing to gain from the router here. Nothing is
- * subscribed to either: the query string cannot change without a navigation
- * that remounts this component.
- *
- * The server snapshot is `null`, so the static HTML and the hydration pass
- * agree; React then re-reads the client snapshot.
- */
 function useMotionParam(): string | null {
   return useSyncExternalStore(subscribeToNothing, readMotionParam, motionParamOnServer);
 }
@@ -81,10 +62,6 @@ type ErrorBoundaryState = {
   hasError: boolean;
 };
 
-/**
- * Catches WebGL initialization or runtime 3D rendering errors from `<Canvas>`
- * and degrades cleanly to `<StaticFallback />` instead of crashing the landing page.
- */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false };
 
@@ -109,19 +86,101 @@ export default function NarrativePage() {
   const motion = useMotionParam();
   const compact = useMediaFlag('(max-width: 767px)');
   const [webglFailed, setWebglFailed] = useState(false);
+  const [isAutoTour, setIsAutoTour] = useState(false);
+  const [activeActIndex, setActiveActIndex] = useState(0);
 
   const scrollEl = useRef<HTMLDivElement | null>(null);
   const depthText = useRef<HTMLSpanElement | null>(null);
   const railMarker = useRef<HTMLDivElement | null>(null);
   const budgetText = useRef<HTMLSpanElement | null>(null);
-  const copyLayer = useRef<HTMLDivElement | null>(null);
+  const morphLabel = useRef<HTMLSpanElement | null>(null);
+  const pointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const morphFactorRef = useRef(0);
+  const activeActRef = useRef(0);
   const contextLostCleanupRef = useRef<(() => void) | null>(null);
+
   const hud = useMemo<HudRefs>(
-    () => ({ scrollEl, depthText, railMarker, budgetText, copyLayer }),
+    () => ({
+      scrollEl,
+      depthText,
+      railMarker,
+      budgetText,
+      morphLabel,
+      pointerRef,
+      morphFactorRef,
+    }),
     [],
   );
 
-  const acts = compact ? MOBILE_ACTS : DESKTOP_ACTS;
+  // Pointer parallax listener (writes directly to ref, zero React renders)
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      if (window.innerWidth <= 0 || window.innerHeight <= 0) return;
+      pointerRef.current.x = (event.clientX / window.innerWidth) * 2 - 1;
+      pointerRef.current.y = -((event.clientY / window.innerHeight) * 2 - 1);
+    };
+    const onPointerLeave = () => {
+      pointerRef.current.x = 0;
+      pointerRef.current.y = 0;
+    };
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerleave', onPointerLeave, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerleave', onPointerLeave);
+    };
+  }, []);
+
+  // Auto-Tour smooth spline driver; stops cleanly if user grabs manual scroll
+  useEffect(() => {
+    if (!isAutoTour) return;
+    const el = scrollEl.current;
+    if (!el) return;
+
+    const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
+    if (el.scrollTop >= maxScroll - 8) {
+      el.scrollTop = 0;
+    }
+
+    let rafId = 0;
+    let lastTime = performance.now();
+    const pxPerMs = maxScroll / AUTO_TOUR_DURATION_MS;
+
+    const step = (now: number) => {
+      const dt = Math.min(now - lastTime, 64);
+      lastTime = now;
+
+      const currentMax = Math.max(1, el.scrollHeight - el.clientHeight);
+      const nextTop = el.scrollTop + pxPerMs * dt;
+      if (nextTop >= currentMax) {
+        el.scrollTop = currentMax;
+        setIsAutoTour(false);
+        return;
+      }
+      el.scrollTop = nextTop;
+      rafId = requestAnimationFrame(step);
+    };
+
+    const cancelOnManualInput = () => setIsAutoTour(false);
+    const cancelOnScrollKey = (e: KeyboardEvent) => {
+      if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(e.key)) {
+        setIsAutoTour(false);
+      }
+    };
+
+    el.addEventListener('wheel', cancelOnManualInput, { passive: true });
+    el.addEventListener('touchstart', cancelOnManualInput, { passive: true });
+    window.addEventListener('keydown', cancelOnScrollKey);
+
+    rafId = requestAnimationFrame(step);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      el.removeEventListener('wheel', cancelOnManualInput);
+      el.removeEventListener('touchstart', cancelOnManualInput);
+      window.removeEventListener('keydown', cancelOnScrollKey);
+    };
+  }, [isAutoTour]);
 
   useEffect(() => {
     return () => {
@@ -147,10 +206,27 @@ export default function NarrativePage() {
     };
   }, []);
 
+  const handleToggleAutoTour = useCallback(() => {
+    setIsAutoTour((prev) => !prev);
+  }, []);
+
+  const handleStartAutoTour = useCallback(() => {
+    setIsAutoTour(true);
+  }, []);
+
+  const handleSelectAct = useCallback((index: number) => {
+    setIsAutoTour(false);
+    const el = scrollEl.current;
+    if (!el) return;
+    const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
+    const targetTop = sectionOffset(index, ALL_ACTS.length) * maxScroll;
+    el.scrollTo({ top: targetTop, behavior: 'smooth' });
+  }, []);
+
   const handleHudFrame = useCallback(
-    (offset: number, costProgress: number) => {
+    (offset: number, costProgress: number, morphProgress: number) => {
       if (depthText.current) {
-        depthText.current.textContent = `${(offset * ROOM.depth).toFixed(1)} m`;
+        depthText.current.textContent = `${(offset * PAVILION.walkthroughMeters).toFixed(1)} m`;
       }
       if (railMarker.current) {
         railMarker.current.style.top = `${(offset * 100).toFixed(2)}%`;
@@ -158,48 +234,68 @@ export default function NarrativePage() {
       if (budgetText.current) {
         budgetText.current.textContent = Math.round(COST_TOTAL * costProgress).toLocaleString('en-US');
       }
+      if (morphLabel.current) {
+        morphLabel.current.textContent =
+          morphProgress > 0.55
+            ? 'مجلس أندلسي فاخر 2700K'
+            : morphProgress > 0.25
+              ? 'جاري التحوّل بين الطرز...'
+              : 'ياباندي هادئ 4000K';
+      }
+
+      const nextAct = activeActIndexFor(offset, ALL_ACTS.length);
+      if (nextAct !== activeActRef.current) {
+        activeActRef.current = nextAct;
+        setActiveActIndex(nextAct);
+      }
     },
     [],
   );
 
-  // Every hook above runs unconditionally, so this early return is safe.
   if (motion === 'off' || webglFailed) return <StaticFallback />;
 
-  const ranges = compact ? MOBILE_RANGES : DESKTOP_RANGES;
-  const cameraPath = compact ? MOBILE_CAMERA : DESKTOP_CAMERA;
+  const splinePath = compact ? MOBILE_SPLINE : DESKTOP_SPLINE;
 
   return (
     <div className="relative h-[100svh] w-full overflow-hidden bg-ink">
+      {/* Left architectural scroll depth gauge (top-24 offset prevents header overlap) */}
       <DimensionRail hud={hud} />
 
-      {/* Native scroll container driving the 3D narrative camera & acts directly */}
+      {/* Interactive Auto-Tour toggle + 5-Act clickable progress dots */}
+      <TourControls
+        activeActIndex={activeActIndex}
+        isAutoTour={isAutoTour}
+        onToggleAutoTour={handleToggleAutoTour}
+        onSelectAct={handleSelectAct}
+      />
+
+      {/* Native scroll container driving the 5-Act 3D spline camera directly */}
       <div
         ref={scrollEl}
-        className="absolute inset-0 z-20 overflow-y-auto overflow-x-hidden scroll-smooth"
+        className="absolute inset-0 z-20 overflow-y-auto overflow-x-hidden"
       >
-        <div ref={copyLayer}>
-          <CopyLayer acts={acts} hud={hud} />
-        </div>
+        <CopyLayer
+          acts={ALL_ACTS}
+          hud={hud}
+          onStartAutoTour={handleStartAutoTour}
+        />
       </div>
 
-      {/* Enables the shadow map the Act 3 key light casts into.
-          "percentage" (PCFShadowMap) rather than a bare `shadows`: the boolean
-          form selects PCFSoftShadowMap, which this three version dropped from
-          its shader define table — it silently degrades to BasicShadowMap,
-          giving single-tap aliased edges and ignoring `shadow-radius`. */}
       <ErrorBoundary fallback={<StaticFallback />} onError={handleWebglFailed}>
         <Canvas
           shadows="percentage"
           dpr={[1, 2]}
-          camera={{ fov: 42, near: 0.1, far: 60 }}
+          camera={{ fov: compact ? 50 : 42, near: 0.1, far: 80 }}
           onCreated={handleCanvasCreated}
         >
           <color attach="background" args={['#0A1220']} />
-          <fog attach="fog" args={['#0A1220', 12, 30]} />
+          <fog attach="fog" args={['#0A1220', 14, 38]} />
           <Scene
-            ranges={ranges}
-            cameraPath={cameraPath}
+            ranges={ACT_RANGES}
+            splinePath={splinePath}
             scrollEl={scrollEl}
+            pointerRef={pointerRef}
+            morphFactorRef={morphFactorRef}
             onHudFrame={handleHudFrame}
           />
         </Canvas>

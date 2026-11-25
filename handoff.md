@@ -1,95 +1,113 @@
-# Rwaq AI - Engineering Handoff Document
+# Rwaq AI — Engineering Handoff Document
 
 ---
 
 ## 1) Goal
-The core goal of **Rwaq AI (رواق)** is to deliver an intelligent, Saudi Building Code (SBC 201/1101) compliant interior design platform that bridges interactive CAD/3D spatial planning with 8K photorealistic neural AI rendering. 
+The core goal of **Rwaq AI (منصة رِواق)** is to deliver an intelligent, Saudi Building Code (SBC 201/1101) compliant interior design platform that bridges natural Arabic prompts and 2D floorplan vision with an interactive 3D physical studio, 8K Depth-guided 1:1 neural rendering, print-ready executive BOQ/blueprint PDF submittals, AR preview, and cloud persistence with shareable client links.
 
-Key product objectives include:
-* **Interactive 3D Spatial Planning**: Real-time WebGL studio (Three.js / React Three Fiber / Rapier physics) for dimensionally accurate room configuration, SBC walkway clearance verification ($\ge 0.90\text{m}$), and live budget tracking.
-* **2D Floorplan Vision to 3D**: Automatic extraction of room dimensions, wall openings (doors and windows), and furniture zones from CAD blueprints or hand-drawn sketches using Gemini 2.5 Flash Multimodal Vision.
-* **Semantic Catalog Grounding (RAG)**: Real-world Saudi market integration grounded in LanceDB with 3,694 IKEA products with SAR pricing and dimensions.
-* **8K Photorealistic AI Neural Render**: Transforming lightweight 3D compositions and depth maps into architectural-grade photorealistic photographs with natural lighting and material depth.
-* **UX & Stability Polish**: Eliminating runtime crashes, providing direct tactile object manipulation in the 3D viewport, fixing responsive layout bottlenecks, and presenting clean architectural room aesthetics.
+Key product objectives:
+* **Cinematic 3D Architectural Walkthrough Landing Page**: Interactive multi-room WebGL showcase telling the full end-to-end Rwaq AI platform journey (Arabic prompt / 2D floorplan -> 3D physical studio -> SBC 201 audit -> 1:1 Neural Render -> SAR BOQ & AR).
+* **Interactive 3D Spatial Planning**: Real-time WebGL studio (Three.js / React Three Fiber / Rapier physics) for dimensionally accurate room configuration, SBC walkway clearance verification (`>= 0.90m`), and live SAR budget tracking.
+* **2D Floorplan Vision to 3D**: Automatic extraction of room dimensions, wall openings (doors/windows), and furniture zones from CAD blueprints or hand-drawn sketches via Gemini 2.5 Flash Multimodal Vision.
+* **Semantic Catalog Grounding (RAG)**: Real-world Saudi market catalog grounded in LanceDB (3,694 IKEA products with SAR pricing and real dimensions).
+* **8K Photorealistic Neural Render & Depth ControlNet (1:1)**: Transforming 3D studio captures and real-time normalized depth maps into photorealistic renders with 1:1 geometric fidelity.
+* **Interior Layering & Architectural Dressing**: Style-matched decorative layers (rugs, indoor plants, ambient floor lamps, eye-level wall art) strictly respecting SBC walkway clearances.
+* **Executive BOQ & Blueprint PDF Submittals**: Multi-page A4 architectural reports with 2D top-down blueprints, exterior dimension witness lines, 3D views, SBC 201 badges, itemized SAR BOQ, and 15% VAT breakdown.
+* **Cloud Persistence & Public Shareable 3D Links**: Resilient project saving (Supabase + local JSON fallback), unauthenticated read/clone share links (`/studio?share=<id>`), and `/projects` management dashboard.
 
 ---
 
 ## 2) Current State
+* **Git Branch & Sync**: All Tracks 1–7 implemented and ready on `main` (pushed to `origin/main`).
 * **Server Health & Runtime**:
-  * **Backend (FastAPI)**: Running smoothly at `http://127.0.0.1:8000` via Uvicorn reload daemon.
-  * **Frontend (Next.js 16.4.6 Turbopack)**: Running at `http://localhost:3000` with hot-module replacement active.
-* **Test & Build Verification**:
-  * **Backend Tests**: 62 tests passing (`62 passed in 17.31s` via `pytest tests/`).
-  * **Frontend Type Checking**: 0 TypeScript errors (`npx --prefix frontend tsc -p frontend/tsconfig.json --noEmit` exits with code `0`).
-* **Resolved Issues**:
-  * **React 19 / Drei Unmount Crash**: Completely eliminated the fatal `Attempted to synchronously unmount a root while React was already rendering` error caused by Drei's `<Html>` inside R3F.
-  * **Studio 2D Layout Distortion**: Fixed squished cards in `/studio2d` gallery; cards now dynamically adjust using an auto-fill responsive grid (`minmax(280px, 1fr)`) with strict `aspect-4/3` thumbnail ratios.
-  * **In-Scene Furniture Controls**: Implemented a floating 2D contextual control dock directly above the main toolbar upon selecting any furniture item, providing instant rotation (`+45°` / `-45°`), 10cm fine directional nudging, material customization, and deletion.
-  * **Asset Library 3D Model Mapping**: Catalog products (beds, dining tables, wardrobes, bookcases, TV benches) now resolve dynamically to authentic 3D `.glb` assets from the high-res and Kenney kits rather than falling back to an armchair.
-  * **Architectural Room Aesthetics**: Cleaned up `RealRoom.tsx` by removing the clunky hardcoded slat block, removing the neon yellow cove strip, replacing the giant 3m concrete slab with a sleek dark pedestal (`#22242B`), and tuning floor satin roughness.
+  * **Backend (FastAPI)**: Configured for `http://127.0.0.1:8000` via Uvicorn reload.
+  * **Frontend (Next.js 16.4.6 Turbopack)**: Configured for `http://localhost:3000`.
+* **Verification Status**:
+  * **Frontend TypeScript (`npx tsc --noEmit`)**: Passing — 0 errors (exit code `0`).
+  * **Frontend ESLint (Landing Narrative Modules)**: Passing — 0 errors, 0 warnings across all 11 landing files.
+  * **3D Showcase Assets**: All 11 unique `.glb` models referenced by the landing walkthrough verified present under `frontend/public/assets/` (`MISSING_GLB_COUNT=0`); itemized landing BOQ verified at `11,090 SAR`.
+  * **Backend Test Suite**: 71 tests passing (`pytest tests/`).
+* **Delivered Tracks (7/7 Complete)**:
+  * `[x]` **Track 1**: Interior Layering & Dressing (Decorative Accessories & Styling Layer)
+  * `[x]` **Track 2**: Executive BOQ & Architectural Blueprint PDF Export
+  * `[x]` **Track 3**: Project Cloud Save & Shareable 3D Links
+  * `[x]` **Track 4**: Depth Pass / Structural Conditioning for Neural AI Render
+  * `[x]` **Track 5**: Studio UI/UX & Visual Polish (Header, Lighting, Toolbar & Honest AI)
+  * `[x]` **Track 6**: Studio Presets Bar, Architectural Inspiration & Full-Screen Immersion
+  * `[x]` **Track 7**: Cinematic Multi-Room 3D Architectural Walkthrough Landing Page
 
 ---
 
 ## 3) Active Files
-* [`frontend/app/studio/components/RealFurnitureLoader.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RealFurnitureLoader.tsx): Handles physical & procedural 3D model loading, boundary clamping, and manual transform synchronization; stripped of Drei `<Html>` roots to guarantee 100% stability.
-* [`frontend/app/studio/StudioClient.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/StudioClient.tsx): Main 3D studio client coordinating R3F canvas, Rapier physics, contextual Selected Asset Dock, SceneToolbar, floorplan vision modal, and AI render modal.
-* [`frontend/app/studio/components/SceneToolbar.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/SceneToolbar.tsx): Central bottom floating toolbar with direct access to library ("إضافة أثاث من المكتبة"), 2D-to-3D floorplan vision upload, AI render, walkway heatmap, and undo/redo.
-* [`frontend/app/studio/components/RealRoom.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RealRoom.tsx): Architectural room shell rendering walls, floor, baseboards, doors, windows, and subtle cove lighting.
-* [`frontend/app/studio2d/page.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio2d/page.tsx): 2D AI studio page featuring chat ideation, prompt chips, and responsive auto-fill generated design gallery.
-* [`frontend/app/studio/components/RenderComparisonModal.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RenderComparisonModal.tsx): Side-by-side & interactive split slider modal comparing 3D viewport snapshot with 8K photorealistic AI neural render.
-* [`frontend/components/IkeaAssetsLibrary.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/IkeaAssetsLibrary.tsx): In-studio modal for browsing and searching 3,694 IKEA products with semantic 3D template matching.
-* [`frontend/app/assets/page.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/assets/page.tsx): Standalone asset library page with remote asset normalization and fallback resolution.
-* [`frontend/components/Header.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/Header.tsx): Global navigation header with dynamic page titles and stylized user profile pill.
-* [`backend/app/api/routes.py`](file:///d:/DEV/ACTIVE/rwaq-ai/backend/app/api/routes.py): FastAPI endpoints for floorplan-to-3d vision pipeline, IKEA catalog, AI generation, and neural render.
-* [`backend/app/schemas.py`](file:///d:/DEV/ACTIVE/rwaq-ai/backend/app/schemas.py): Pydantic validation models for floorplan vision extraction and spatial responses.
-* [`backend/app/ai_agent.py`](file:///d:/DEV/ACTIVE/rwaq-ai/backend/app/ai_agent.py): Gemini 2.5 Flash multimodal vision extractor and prompt generation logic.
+### Landing Page — Cinematic Multi-Room 3D Walkthrough
+* [`frontend/app/page.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/page.tsx): Landing route entry and SEO metadata for the full Rwaq AI platform narrative.
+* [`frontend/components/landing/narrative/config.ts`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/config.ts): Dual-suite pavilion dimensions, desktop/mobile 5-Act Catmull-Rom spline keyframes, 18 calibrated `.glb` furniture specs across Zone A & Zone B, Suite 2 Japandi-to-Andalusian morph palettes, refined Arabic copy, and `11,090 SAR` BOQ.
+* [`frontend/components/landing/narrative/textures.ts`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/textures.ts): Zero-dependency procedural PBR `CanvasTexture` generators (honed travertine, Calacatta warm marble, micro-grain plaster bump, oak grain, SBC & sightline floor stamps).
+* [`frontend/components/landing/narrative/Furniture.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/Furniture.tsx): High-res `.glb` showcase loader with bounding-box mm-to-m floor anchoring, per-asset `Suspense` + `GlbErrorBoundary`, and ref-driven Suite 2 style morph tinting.
+* [`frontend/components/landing/narrative/Scene.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/Scene.tsx): Connected dual-suite 3D architectural pavilion (Main Living Lounge + walnut/brass entry & inter-room portals + Andalusian/Japandi Majlis Suite with triple arched niches), damped mouse parallax, glowing 3D SBC 201 walkway (`>= 0.90m`) & TV sightline (`3.95m`) audit overlay, and live Suite 2 Style Morph.
+* [`frontend/components/landing/narrative/DimensionRail.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/DimensionRail.tsx): Left scroll-depth gauge positioned at `top-24 bottom-10` to eliminate overlap with the top-left `"الاستوديو"` button.
+* [`frontend/components/landing/narrative/TourControls.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/TourControls.tsx): Floating bottom dock with interactive `"جولة تلقائية / Auto-Tour"` toggle and 5 clickable Act indicator dots.
+* [`frontend/components/landing/narrative/CopyLayer.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/CopyLayer.tsx): 5-Act Arabic storytelling sections, Act 01 pipeline strip, Act 03 SBC 201 & Neufert Certified panel, Act 04 live Style Morph & Depth ControlNet 1:1 badge, and Act 05 live SAR BOQ card (`11,090 SAR`, PDF BOQ & AR highlights, single bold CTA).
+* [`frontend/components/landing/narrative/NarrativePage.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/NarrativePage.tsx): Native scroll controller, `requestAnimationFrame` Auto-Tour driver (yielding immediately to manual wheel/touch/keyboard input), pointer parallax refs, active act state sync, and WebGL `ErrorBoundary`.
+* [`frontend/components/landing/narrative/hud.ts`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/hud.ts): Zero-re-render DOM & 3D ref bridge interface (`HudRefs`).
+* [`frontend/components/landing/narrative/StaticFallback.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/landing/narrative/StaticFallback.tsx): Reduced-motion / WebGL fallback synced with the 5-Act Arabic copy and single-CTA SAR BOQ card.
+
+### 3D Studio, Cloud Persistence, PDF Submittals & Neural Render
+* [`frontend/app/studio/StudioClient.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/StudioClient.tsx): Interactive 3D studio, Depth Pass snapshot capture, `?share=<id>` / `?project=<id>` loading, clone-to-edit banner, and multi-page PDF assembly.
+* [`frontend/app/studio/components/StudioHeader.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/StudioHeader.tsx): Two-zone responsive studio header with Save, Share, Upload 2D, and consolidated Export dropdown.
+* [`frontend/app/studio/components/RealRoom.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RealRoom.tsx): Studio room geometry, contact shadows, windows, doors, and diffused lighting.
+* [`frontend/app/studio/components/RealFurnitureLoader.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RealFurnitureLoader.tsx): Calibrated `.glb` loader with Rapier physics, wall-clamped dragging, and material swapping.
+* [`frontend/app/studio/components/RoomPresetsBar.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RoomPresetsBar.tsx) & [`InspirationModal.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/InspirationModal.tsx): Floating 1-click room templates, shapes bar, and Saudi/Gulf architectural style references.
+* [`frontend/app/studio/components/RenderComparisonModal.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/studio/components/RenderComparisonModal.tsx): 3-mode render comparison (including 1:1 Depth Pass view and honest fallback alert when `FAL_KEY` is unset).
+* [`frontend/components/BlueprintCanvas2D.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/BlueprintCanvas2D.tsx) & [`ExecutivePdfTemplate.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/components/ExecutivePdfTemplate.tsx): 2D architectural blueprint engine and A4 RTL executive PDF report.
+* [`frontend/lib/localProjectsStore.ts`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/lib/localProjectsStore.ts), [`frontend/app/api/projects/`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/api/projects/route.ts), & [`frontend/app/projects/page.tsx`](file:///d:/DEV/ACTIVE/rwaq-ai/frontend/app/projects/page.tsx): Dual-tier Supabase + local JSON persistence, public share endpoint, and projects dashboard.
+* [`backend/app/services/image_gen_service.py`](file:///d:/DEV/ACTIVE/rwaq-ai/backend/app/services/image_gen_service.py), [`backend/app/services/spatial_solver.py`](file:///d:/DEV/ACTIVE/rwaq-ai/backend/app/services/spatial_solver.py), & [`ai_agent.py`](file:///d:/DEV/ACTIVE/rwaq-ai/ai_agent.py): Fal.ai Depth ControlNet pipeline, honest PIL studio lighting fallback, and SBC spatial/dressing solver.
 
 ---
 
 ## 4) Changes Made
-1. **Eliminated Drei `<Html>` Unmount Crash**:
-   - Removed transient loading and error `<Html>` tags, as well as the in-canvas contextual HUD `<Html>` inside `RealFurnitureLoader.tsx`. Replaced with zero-DOM procedural 3D bounding geometry during loading, preventing React 19 root unmount collisions.
-2. **Added 2D Selected Asset Control Dock**:
-   - Built an accessible, responsive HTML dock in `StudioClient.tsx` that floats right above the toolbar upon selecting any furniture item, exposing rotation (`45°+`, `45°-`), fine directional nudge buttons, material palette access, and delete.
-3. **Direct Library Button on Main Toolbar**:
-   - Added "إضافة أثاث من المكتبة" (`chair` icon) directly onto `SceneToolbar.tsx`, eliminating the need to search through collapsed drawer menus.
-4. **Semantic 3D Model Mapping in Library**:
-   - Integrated `resolveItem` with `IKEA_TEMPLATES` inside `IkeaAssetsLibrary.tsx` and `frontend/app/assets/page.tsx`. Beds, tables, wardrobes, TV stands, and bookcases now load their authentic `.glb` models rather than defaulting to `armchair_wood.glb`.
-5. **Refined Studio 2D Layout**:
-   - Replaced static breakpoint columns in `studio2d/page.tsx` with `grid-cols-[repeat(auto-fill,minmax(280px,1fr))]`, fixed card aspect ratios to `aspect-4/3`, and gave the chat column flexible width (`w-full md:w-[380px] lg:w-[420px]`).
-6. **Cleaned Architectural Room Finishes**:
-   - Removed the hardcoded 18-slat brown accent panel in `RealRoom.tsx`, replaced the unshaded yellow cove light with a recessed crown trim and warm point light, scaled down the pedestal to a clean carbon trim (`#22242B`), and tuned floor satin roughness to `0.35`.
-7. **Polished Render Comparison Modal**:
-   - Expanded the footer to `max-w-2xl` with flexible wrapping, an amber server status badge, and `ltr font-mono` formatting for architectural prompts.
+* **Track 1 — Interior Layering & Dressing**: Added style-curated dressing layers (rugs at `y = 0.005m`, indoor plants, ambient lamps, eye-level wall art) via idempotent `get_missing_dressing_items` while excluding rugs/wall art from floor collision checks.
+* **Track 2 — Executive BOQ & Blueprint PDF Export**: Built `BlueprintCanvas2D.tsx` (dimension witness lines, door arcs, SBC corridors) and multi-page RTL A4 `ExecutivePdfTemplate.tsx` with 15% VAT breakdown and `html2canvas`/`jsPDF` export.
+* **Track 3 — Cloud Save & Shareable 3D Links**: Implemented dual-tier Supabase + `localProjectsStore.ts` persistence, public `/api/projects/share/[id]` route, in-studio Save/Share flows, client preview banner with "Clone to Edit", and `/projects` dashboard.
+* **Track 4 — Depth Pass / 1:1 Structural Conditioning**: Added Three.js linear view-space depth pass capture in `StudioClient.tsx`, 3-column Depth inspection in `RenderComparisonModal.tsx`, and Fal.ai `flux-control-lora-depth` routing (`0.80` conditioning scale).
+* **Track 5 — Studio UI/UX & Honest AI**: Decluttered `StudioHeader`, upgraded studio backgrounds and rectangular Lightformer IBL (removing wall orb artifacts), compacted `SceneToolbar`, elevated chatbot trigger, and replaced misleading stock-photo fallbacks with an honest PIL studio-lit preview pass when `FAL_KEY` is absent.
+* **Track 6 — Presets Bar, Inspiration & Full-Screen Immersion**: Added floating `RoomPresetsBar`, Saudi/Gulf `InspirationModal`, collapsed `ConversationPanel` by default for full-viewport 3D immersion, and modernized `/studio2d`.
+* **Track 7 — Cinematic Multi-Room 3D Walkthrough Landing Page**:
+  1. Built dual-suite connected 3D pavilion (Living Lounge + Andalusian/Japandi Majlis) joined by thick walnut-and-brass architectural portals, procedural PBR stone/marble/plaster/oak textures, 3000K warm cove lights, and 18 calibrated `.glb` furniture models.
+  2. Choreographed 5-Act centripetal `CatmullRomCurve3` spline camera with damped mouse parallax, animated 3D SBC 201 walkway (`1.12m >= 0.90m`) & TV sightline (`3.95m`) overlays in Act 03, and dynamic Japandi-to-Andalusian material/lighting Style Morph in Act 04.
+  3. Fixed left `Scroll Depth` gauge overlap with `"الاستوديو"` button (`top-24`), removed duplicate secondary buttons below the Act 05 pricing card, added floating `TourControls` (`"جولة تلقائية"` Auto-Tour + 5 clickable Act dots), and refined all 5-Act Arabic storytelling copy (`11,090 SAR` live BOQ, PDF BOQ & AR highlights, single bold CTA).
+  4. Added `.local_projects_store.json` to `.gitignore` so local runtime test projects stay out of git history.
 
 ---
 
 ## 5) Failed Attempts
-1. **Retaining `<Html>` for Error/Selection HUD in `RealFurnitureLoader`**:
-   - *Attempt*: Kept Drei's `<Html>` only for error or selection HUD inside R3F.
-   - *Failure*: React 19's concurrent root reconciliation still threw `Attempted to synchronously unmount a root while React was already rendering` whenever an item was deselected, moved, or deleted.
-   - *Resolution*: Completely removed Drei `<Html>` from the R3F canvas and rendered all HUDs as pure HTML overlays in `StudioClient.tsx`.
-2. **Windows PowerShell `&&` Command Chaining**:
-   - *Attempt*: Executed `cd frontend && npx tsc --noEmit`.
-   - *Failure*: PowerShell 5.1 parser error (`The token '&&' is not a valid statement separator`).
-   - *Resolution*: Switched to prefix-based single commands: `npx --prefix frontend tsc -p frontend/tsconfig.json --noEmit`.
-3. **Passing Undeclared `category` to `AIResponseItem`**:
-   - *Attempt*: Passed `category` directly in `resolveItem({ asset_id, category, ... })`.
-   - *Failure*: TypeScript compiler error `error TS2353: Object literal may only specify known properties, and 'category' does not exist in type 'AIResponseItem'`.
-   - *Resolution*: Passed the category into the token extraction pipeline via `asset_id: (raw.category || name || id).toLowerCase()`, which properly matches canonical synonyms.
-4. **Static Breakpoint Grid in Studio 2D Gallery**:
-   - *Attempt*: Relied on Tailwind's `md:grid-cols-2`.
-   - *Failure*: Because the sidebar (`280px`) and chat pane (`420px`) consume viewport width, the remaining gallery space on laptop screens was ~240px, forcing each card into a squished 106px sliver.
-   - *Resolution*: Implemented container-agnostic auto-fill CSS grid with `minmax(280px, 1fr)`.
+1. **Relying Exclusively on Supabase Remote Host without Local Fallback**:
+   * *Attempt*: Directly querying the remote Supabase host from Next.js API routes.
+   * *Failure*: Threw `TypeError: fetch failed (getaddrinfo ENOTFOUND)` whenever the remote project was paused/unreachable.
+   * *Resolution*: Introduced `localProjectsStore.ts` local-first JSON fallback with automatic remote sync when Supabase is available.
+2. **Duplicate `handleSaveProject` Declaration in `StudioClient.tsx`**:
+   * *Attempt*: Adding new `handleSaveProject` while a legacy placeholder remained lower in the file.
+   * *Failure*: TypeScript threw `TS2451: Cannot redeclare block-scoped variable 'handleSaveProject'`.
+   * *Resolution*: Consolidated save + thumbnail capture into a single memoized callback.
+3. **Legacy Stock-Photo Test Assertion in `tests/test_image_gen.py`**:
+   * *Attempt*: Retaining old Unsplash fallback assertion after introducing honest PIL studio preview.
+   * *Failure*: `pytest tests/test_image_gen.py` failed on fallback provider assertion.
+   * *Resolution*: Updated test to assert `preview_simulation`, data URL output, and `is_mock_fallback`.
+4. **React 19 Compiler ESLint Purity Violations in Upgraded 3D Landing (`CopyLayer.tsx`, `Scene.tsx`)**:
+   * *Attempt*: Passing `ref={hud.morphLabel}` directly from a prop object in `StyleMorphBadge`, mutating `.material.opacity` directly on `useDashedLine` hook return values inside `useFrame`, and mutating a `useMemo`-returned `scratch` vector bag inside `useFrame`.
+   * *Failure*: `npx eslint` reported 8 errors (`react-hooks/refs` and `react-hooks/immutability`).
+   * *Resolution*: Destructured `const { morphLabel } = hud` in `StyleMorphBadge`, routed dashed-line opacity updates through `groupRef.current.traverse` with `userData.auditOpacityScale`, and stored frame scratch vectors/colors in `useRef` — achieving 0 errors and 0 warnings.
 
 ---
 
 ## 6) Next Steps
-1. **Interior Layering & Dressing (Decorations & Styling)**:
-   - Add interior styling presets and accessories (indoor plants, Persian & modern rugs, wall art, floor lamps, table decor) to prevent scenes from looking barren or purely geometric.
-2. **Executive BOQ & Blueprint PDF Export**:
-   - Build an official one-click PDF export containing the 2D dimensional floorplan, complete bill of quantities (BOQ) with SAR prices and IKEA purchase links, and an SBC compliance certification badge.
-3. **Project Cloud Save & Share**:
-   - Implement persistent project saving in database with a unique sharable link, allowing clients and contractors to view and walk through designs in 3D.
-4. **Fine-Tuned Depth Control for AI Render**:
-   - Integrate depth pass export (ControlNet depth map) into the backend FAL/Gemini render pipeline for 1:1 camera angle and spatial accuracy matching.
+1. **Visual & Interactive Browser QA on Live Dev Server (`http://localhost:3000`)**:
+   * Inspect all 5 Acts on desktop (`1440×900`) and mobile (`390×844`), verify portal camera clearance during Auto-Tour playback, confirm zero header/gauge overlap, and verify smooth Act 04 Suite 2 Style Morph & Act 05 `11,090 SAR` count-up.
+2. **Production Neural Render Activation**:
+   * Configure a live `FAL_KEY` in `.env` (and deployment environment secrets) to verify end-to-end Fal.ai `flux-control-lora-depth` 1:1 photorealistic renders against captured 3D studio Depth Maps.
+3. **Supabase Production Schema & Auth Sync**:
+   * Ensure the production Supabase instance is active with the `projects` table schema (`doors`, `windows`, `scene_items`, `thumbnail_url`) and RLS policies aligned with Clerk JWTs so cloud saves sync seamlessly beyond the local fallback store.
+4. **Performance & Production Build Gate**:
+   * Run a full `npm run build` in `frontend/` and Lighthouse / WebGL FPS audit (check `.glb` Draco compression opportunities for `sofa_khronos.glb` at 4.1 MB and `coffee_table_art.glb` at 2.95 MB to speed up first-load streaming on slower connections).
+5. **E2E Smoke Suite**:
+   * Add Playwright E2E checks covering Landing Auto-Tour & Act navigation, `/studio` preset hydration, share link cloning (`/studio?share=<id>`), and PDF BOQ export.

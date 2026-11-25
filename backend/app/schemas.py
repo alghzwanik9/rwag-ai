@@ -59,6 +59,7 @@ class SpatialAuditRequest(BaseModel):
 
 class StudioRenderFrom3DRequest(BaseModel):
     image_base64: str
+    depth_map_base64: Optional[str] = None
     room_style: Optional[str] = "Modern Luxury"
     wall_color: Optional[str] = None
     floor_color: Optional[str] = None

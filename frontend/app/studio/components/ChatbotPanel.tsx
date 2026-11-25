@@ -121,6 +121,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
         const mutations: SceneMutation[] = data.mutations || [];
 
         if (mutations.length > 0) {
+          let addedCount = 0;
           mutations.forEach((mutation) => {
             switch (mutation.op) {
               case "MODIFY": {
@@ -143,6 +144,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
               case "ADD": {
                 const item: AIResponseItem = mutation.item;
                 if (!item) break;
+                addedCount++;
                 const resolution = resolveItem(item, catalogAssets);
                 const storeUrl =
                   item.store_url ||
@@ -170,7 +172,7 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
                     brand: item.economy?.brand || "Rwaq AI",
                     price: item.economy?.price || 0,
                     currency: item.economy?.currency || "SAR",
-                    category: "seating",
+                    category: item.asset_id === "wall_art" ? "decor" : (item.asset_id === "rug" ? "rugs" : "seating"),
                     modelUrl: PLACEHOLDER_MODEL_URL,
                     thumbnailUrl: "",
                     store_url: storeUrl,
@@ -180,7 +182,6 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
                     color: item.color || "#ffffff",
                   });
                 }
-                showToast("✨ تم إضافة القطعة إلى المشهد بنجاح");
                 break;
               }
               case "ROOM_STYLE": {
@@ -207,6 +208,11 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
               }
             }
           });
+          if (addedCount > 1) {
+            showToast(`✨ تم استكمال ${addedCount} عناصر ديكور وتنسيق معماري بنجاح`);
+          } else if (addedCount === 1) {
+            showToast("✨ تم إضافة القطعة إلى المشهد بنجاح");
+          }
         }
       } else {
         setMessages((prev) => [
@@ -313,24 +319,31 @@ export function ChatbotPanel({ isOpen, setIsOpen, showToast }: ChatbotPanelProps
         <div className="px-4 py-2 bg-surface-container-low/50 border-t border-outline-variant/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           <button
             type="button"
-            onClick={() => setInput("غيّر لون الكنب إلى بيج كتان")}
-            className="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container text-[11px] text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
+            onClick={() => setInput("أضف لمسات ديكور وإكسسوارات للغرفة")}
+            className="whitespace-nowrap px-2.5 py-1 rounded-full bg-primary/15 text-primary text-[11px] font-medium hover:bg-primary/25 transition-colors border border-primary/20"
           >
-            🎨 تغيير لون الكنب
+            ✨ لمسات ديكور وإكسسوارات
           </button>
           <button
             type="button"
-            onClick={() => setInput("أضف مكتبة كتب خشبية بجانب النافذة")}
+            onClick={() => setInput("حول الستايل لياباندي")}
             className="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container text-[11px] text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
           >
-            📚 مكتبة بجانب النافذة
+            🌿 طراز ياباندي
+          </button>
+          <button
+            type="button"
+            onClick={() => setInput("غيّر لون الكنب إلى بيج كتان")}
+            className="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container text-[11px] text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
+          >
+            🎨 لون الكنب بيج
           </button>
           <button
             type="button"
             onClick={() => setInput("أضف نبتة داخلية في الزاوية")}
             className="whitespace-nowrap px-2.5 py-1 rounded-full bg-surface-container text-[11px] text-on-surface-variant hover:text-primary hover:bg-primary/10 transition-colors"
           >
-            🌿 نبتة بالزاوية
+            🪴 نبتة بالزاوية
           </button>
         </div>
 

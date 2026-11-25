@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, Suspense, useRef, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 import { Canvas, useFrame, useThree, ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, PointerLockControls, useGLTF, Environment, Lightformer, ContactShadows } from "@react-three/drei";
@@ -33,35 +33,39 @@ import SceneToolbar from "./components/SceneToolbar";
 import CirculationHeatmap from "./components/CirculationHeatmap";
 import { RenderComparisonModal } from "./components/RenderComparisonModal";
 import { FloorplanUploadModal } from "./components/FloorplanUploadModal";
+import RoomPresetsBar from "./components/RoomPresetsBar";
+import InspirationModal, { ArchitecturalStylePreset } from "./components/InspirationModal";
+import { drawBlueprintToCanvas } from "@/components/BlueprintCanvas2D";
+import ExecutivePdfTemplate, { BOQItemRow, ExecutivePdfTemplateProps } from "@/components/ExecutivePdfTemplate";
 
 
 const AMBIENT_PRESETS = {
   morning: {
-    bg: new THREE.Color('#16181F'),
+    bg: new THREE.Color('#EDEAE4'),
     ambientColor: new THREE.Color('#FFF8EB'),
-    ambientIntensity: 0.75,
-    dirColor: new THREE.Color('#FFF4E0'),
-    dirIntensity: 1.9,
+    ambientIntensity: 0.85,
+    dirColor: new THREE.Color('#FFF5E6'),
+    dirIntensity: 1.8,
     dirPos: new THREE.Vector3(7, 11, 6),
-    fogColor: new THREE.Color('#16181F'),
+    fogColor: new THREE.Color('#EDEAE4'),
   },
   rainy: {
-    bg: new THREE.Color('#161A20'),
+    bg: new THREE.Color('#CBD5E1'),
     ambientColor: new THREE.Color('#94A3B8'),
-    ambientIntensity: 0.5,
+    ambientIntensity: 0.65,
     dirColor: new THREE.Color('#B0C4DE'),
-    dirIntensity: 0.8,
+    dirIntensity: 1.0,
     dirPos: new THREE.Vector3(0, 9, 4),
-    fogColor: new THREE.Color('#161A20'),
+    fogColor: new THREE.Color('#CBD5E1'),
   },
   midnight: {
-    bg: new THREE.Color('#0A0D12'),
-    ambientColor: new THREE.Color('#1B202B'),
-    ambientIntensity: 0.35,
-    dirColor: new THREE.Color('#64B5F6'),
-    dirIntensity: 0.6,
+    bg: new THREE.Color('#1E222B'),
+    ambientColor: new THREE.Color('#2B3242'),
+    ambientIntensity: 0.45,
+    dirColor: new THREE.Color('#78A6D8'),
+    dirIntensity: 0.7,
     dirPos: new THREE.Vector3(-4, 7, 4),
-    fogColor: new THREE.Color('#0A0D12'),
+    fogColor: new THREE.Color('#1E222B'),
   }
 };
 
@@ -72,65 +76,6 @@ function AmbientController() {
   
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
-  
-  // Procedural offline Web Audio API soft rain noise generator (zero external CDN calls)
-  useEffect(() => {
-    if (ambientMode !== 'rainy' || typeof window === 'undefined') return;
-
-    let ctx: AudioContext | null = null;
-    let source: AudioBufferSourceNode | null = null;
-
-    try {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtx) return;
-
-      ctx = new AudioCtx();
-      const bufferSize = ctx.sampleRate * 2;
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = buffer.getChannelData(0);
-      let lastOut = 0;
-      for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        output[i] = (lastOut + 0.02 * white) / 1.02;
-        lastOut = output[i];
-        output[i] *= 2.5;
-      }
-
-      source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true;
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.value = 900;
-      filter.Q.value = 0.6;
-
-      const gain = ctx.createGain();
-      gain.gain.value = 0.05;
-
-      source.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-      source.start(0);
-      ctx.resume().catch(() => {});
-    } catch {
-      // Gracefully no-op when AudioContext is blocked or unavailable
-    }
-
-    return () => {
-      try {
-        source?.stop();
-        source?.disconnect();
-      } catch {
-        // ignore stop errors
-      }
-      if (ctx) {
-        ctx.close().catch(() => {});
-      }
-    };
-  }, [ambientMode]);
 
   /* eslint-disable react-hooks/immutability */
   useFrame((state, delta) => {
@@ -200,10 +145,10 @@ function kelvinToColor(kelvin: number): THREE.Color {
 function ProceduralEnvironment({ ambientMode }: { ambientMode: 'morning' | 'rainy' | 'midnight' }) {
   const palette =
     ambientMode === 'morning'
-      ? { top: '#FFF8EB', topInt: 2.2, key: '#FFE6C2', keyInt: 1.6, fill: '#D9ECFF', fillInt: 0.9, ground: '#C8B29B', groundInt: 0.5 }
+      ? { top: '#FFF8EB', topInt: 1.8, key: '#FFE6C2', keyInt: 1.4, fill: '#D9ECFF', fillInt: 0.7, ground: '#EDEAE4', groundInt: 0.4 }
       : ambientMode === 'rainy'
-        ? { top: '#CBD5E1', topInt: 1.4, key: '#94A3B8', keyInt: 1.0, fill: '#B0C4DE', fillInt: 0.85, ground: '#64748B', groundInt: 0.4 }
-        : { top: '#334155', topInt: 0.7, key: '#FFB966', keyInt: 1.1, fill: '#64B5F6', fillInt: 0.8, ground: '#1E293B', groundInt: 0.35 };
+        ? { top: '#CBD5E1', topInt: 1.3, key: '#94A3B8', keyInt: 1.0, fill: '#B0C4DE', fillInt: 0.7, ground: '#CBD5E1', groundInt: 0.35 }
+        : { top: '#334155', topInt: 0.7, key: '#FFB966', keyInt: 1.0, fill: '#64B5F6', fillInt: 0.6, ground: '#1E222B', groundInt: 0.3 };
 
   return (
     <Environment key={ambientMode} resolution={256} frames={1}>
@@ -211,32 +156,33 @@ function ProceduralEnvironment({ ambientMode }: { ambientMode: 'morning' | 'rain
         form="rect"
         intensity={palette.topInt}
         color={palette.top}
-        scale={[14, 14, 1]}
-        position={[0, 8, 0]}
+        scale={[16, 16, 1]}
+        position={[0, 9, 0]}
         rotation={[Math.PI / 2, 0, 0]}
       />
       <Lightformer
         form="rect"
         intensity={palette.keyInt}
         color={palette.key}
-        scale={[10, 6, 1]}
-        position={[8, 4, 6]}
+        scale={[12, 8, 1]}
+        position={[10, 5, 8]}
         target={[0, 1, 0]}
       />
+      {/* Diffused Rectangular Lightformer - Soft architectural studio fill without glowing circular sphere artifact */}
       <Lightformer
-        form="circle"
+        form="rect"
         intensity={palette.fillInt}
         color={palette.fill}
-        scale={8}
-        position={[-8, 5, -4]}
+        scale={[10, 8, 1]}
+        position={[-12, 6, -6]}
         target={[0, 1, 0]}
       />
       <Lightformer
-        form="ring"
+        form="rect"
         intensity={palette.groundInt}
         color={palette.ground}
-        scale={16}
-        position={[0, -4, 0]}
+        scale={[20, 20, 1]}
+        position={[0, -5, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       />
     </Environment>
@@ -249,20 +195,20 @@ function LightingRig() {
   const spotlightsOn = useSceneStore(s => s.spotlightToggle);
 
   const coveColor = useMemo(() => kelvinToColor(colorK), [colorK]);
-  const covePower = (intensity / 100) * 0.7; 
+  const covePower = (intensity / 100) * 0.4; 
 
   return (
     <group>
       {covePower > 0 && (
-        <pointLight position={[0, 2.7, 0]} intensity={covePower} color={coveColor} distance={7} />
+        <pointLight position={[0, 2.7, 0]} intensity={covePower} color={coveColor} distance={6} decay={2} />
       )}
 
       {spotlightsOn && (
         <spotLight 
           position={[0, 3.2, 0]} 
           angle={0.5} 
-          penumbra={0.5} 
-          intensity={1.8} 
+          penumbra={0.6} 
+          intensity={1.4} 
           color="#ffeedd" 
           target-position={[0, 0, 0]}
         />
@@ -436,11 +382,74 @@ function SnapshotManager() {
     };
 
     const handleGetSnapshotData = (e: Event) => {
+      // 1. Render clean RGB viewport
       gl.render(scene, camera);
-      const dataUrl = gl.domElement.toDataURL('image/png');
+      const rgbDataUrl = gl.domElement.toDataURL('image/png');
+
+      // 2. Render high-contrast normalized grayscale depth pass (ControlNet Depth)
+      let depthDataUrl: string | null = null;
+      try {
+        const prevBackground = scene.background;
+        const prevOverride = scene.overrideMaterial;
+
+        // Dynamic depth normalization range based on camera distance to room center
+        const cameraPos = camera.position;
+        const dist = cameraPos.length();
+        const roomW = useSceneStore.getState().roomWidth || 5;
+        const roomD = useSceneStore.getState().roomDepth || 5;
+
+        // Calibrated near/far boundaries for crisp geometric contrast
+        const isOrbit = dist > 5.0;
+        const uNear = isOrbit ? Math.max(0.5, dist - 6.5) : 0.2;
+        const uFar = isOrbit ? dist + 7.5 : Math.max(7.0, Math.max(roomW, roomD) * 1.5);
+
+        const depthMaterial = new THREE.ShaderMaterial({
+          vertexShader: `
+            varying float vDepth;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              vDepth = -mvPosition.z;
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          fragmentShader: `
+            uniform float uNear;
+            uniform float uFar;
+            varying float vDepth;
+            void main() {
+              float d = clamp((vDepth - uNear) / (uFar - uNear), 0.0, 1.0);
+              // Invert so near = 1.0 (white) and far = 0.0 (black) for ControlNet Depth
+              float depthVal = 1.0 - d;
+              gl_FragColor = vec4(vec3(depthVal), 1.0);
+            }
+          `,
+          uniforms: {
+            uNear: { value: uNear },
+            uFar: { value: uFar },
+          },
+          depthTest: true,
+          depthWrite: true,
+        });
+
+        scene.background = new THREE.Color(0x000000);
+        scene.overrideMaterial = depthMaterial;
+
+        gl.render(scene, camera);
+        depthDataUrl = gl.domElement.toDataURL('image/png');
+
+        // Restore original materials and scene state immediately (zero flicker)
+        scene.overrideMaterial = prevOverride;
+        scene.background = prevBackground;
+        gl.render(scene, camera);
+
+        depthMaterial.dispose();
+      } catch (err) {
+        console.warn("[SnapshotManager] Depth pass capture error:", err);
+      }
+
       const customEvent = e as CustomEvent;
       if (customEvent.detail && typeof customEvent.detail.callback === 'function') {
-        customEvent.detail.callback(dataUrl);
+        customEvent.detail.callback(rgbDataUrl, depthDataUrl);
       }
     };
 
@@ -529,6 +538,7 @@ function FPVControls() {
   return null;
 }
 export default function StudioClient() {
+  const router = useRouter();
   const DEFAULT_GLB = null;
   const [modelUrl, setModelUrl] = useState<string | null>(DEFAULT_GLB);
   const [sceneId, setSceneId]   = useState<string>("default");
@@ -538,8 +548,22 @@ export default function StudioClient() {
   const promptParam = searchParams.get("prompt");
   const imageParam = searchParams.get("image");
   const autoParam = searchParams.get("auto");
+  const shareParam = searchParams.get("share");
+  const projectParam = searchParams.get("project");
   const presetLoadedRef = useRef<string | null>(null);
   const incomingPromptHandledRef = useRef<string | null>(null);
+  const shareLoadedRef = useRef<string | null>(null);
+  const projectLoadedRef = useRef<string | null>(null);
+
+  // ── Project Persistence & Cloud Sharing States ──
+  const [isSharedMode, setIsSharedMode] = useState(false);
+  const [sharedProjectName, setSharedProjectName] = useState("");
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectName, setCurrentProjectName] = useState<string>("مشروعي المعماري");
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [isSharingProject, setIsSharingProject] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveNameInput, setSaveNameInput] = useState("");
 
   const [isToastVisible, setIsToastVisible] = useState(false);
   const [toastMessage, setToastMessage]   = useState("");
@@ -562,9 +586,14 @@ export default function StudioClient() {
   const [isFloorplanModalOpen, setIsFloorplanModalOpen] = useState(false);
   const [isAIRendering, setIsAIRendering] = useState(false);
   const [renderBeforeImage, setRenderBeforeImage] = useState<string | null>(null);
+  const [renderDepthImage, setRenderDepthImage] = useState<string | null>(null);
   const [renderAfterImage, setRenderAfterImage] = useState<string | null>(null);
   const [renderPromptUsed, setRenderPromptUsed] = useState<string>("");
   const [renderSourceNote, setRenderSourceNote] = useState<string>("");
+
+  // ── Executive Architectural Submittal & BOQ PDF Pipeline ──
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [pdfExportData, setPdfExportData] = useState<ExecutivePdfTemplateProps | null>(null);
 
   const exportGroupRef = useRef<THREE.Group>(null);
   const arBlobUrlRef = useRef<string | null>(null);
@@ -597,6 +626,11 @@ export default function StudioClient() {
   const setSelectedAssetId = useSceneStore((s) => s.setSelectedAssetId);
   const updateSceneItem    = useSceneStore((s) => s.updateSceneItem);
   const removeSceneItem    = useSceneStore((s) => s.removeSceneItem);
+  const roomShape          = useSceneStore((s) => s.roomShape);
+
+  // ── Quick-Start Presets & Architectural Inspiration ──
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [isInspirationModalOpen, setIsInspirationModalOpen] = useState(false);
 
   const selectedAsset = useMemo(() => {
     if (!selectedAssetId) return null;
@@ -659,45 +693,164 @@ export default function StudioClient() {
     onSettled,
   });
 
+  // ── Preset & Room Geometry Actions ──
+  const applyMaaradPreset = useCallback((presetId: string) => {
+    const matchedRoom = MAARAD_ROOMS.find((r) => r.id === presetId);
+    if (!matchedRoom) return;
+
+    setModelUrl(null);
+    setSceneId(`maarad_${matchedRoom.id}`);
+    setActivePresetId(presetId);
+
+    const store = useSceneStore.getState();
+    store.clearScene();
+    store.setRoomShape('single');
+    store.setRoomWidth(matchedRoom.dimensions.width);
+    store.setRoomDepth(matchedRoom.dimensions.depth);
+    store.setWallHeight(matchedRoom.dimensions.height);
+    store.setWallColor(matchedRoom.wallColor);
+    store.setFloorColor(matchedRoom.floorColor);
+    store.setAmbientMode(matchedRoom.ambientMode);
+
+    matchedRoom.items.forEach((item) => {
+      store.addSceneItem({
+        ...item,
+        thumbnailUrl: item.thumbnailUrl || "",
+        instanceId: crypto.randomUUID(),
+      });
+    });
+
+    setPrompt(matchedRoom.prompt);
+    showToast(`🛋️ تم تطبيق "${matchedRoom.title}"`);
+  }, [setPrompt, showToast]);
+
+  const handleSelectShape = useCallback((shape: "single" | "corridor_room" | "open_plan" | "l_shape") => {
+    const store = useSceneStore.getState();
+    store.setRoomShape(shape);
+    setActivePresetId(null);
+
+    if (shape === "open_plan") {
+      store.setRoomWidth(6.8);
+      store.setRoomDepth(5.2);
+      showToast("🍽️ تم تفعيل مخطط الصالة والمطبخ المفتوح");
+    } else if (shape === "l_shape") {
+      store.setRoomWidth(6.2);
+      store.setRoomDepth(5.8);
+      showToast("📐 تم تفعيل مخطط غرفة زاوية L");
+    } else {
+      store.setRoomWidth(5.5);
+      store.setRoomDepth(4.8);
+      showToast("🔲 تم تفعيل مخطط الغرفة القياسية");
+    }
+  }, [showToast]);
+
+  const handleResetEmpty = useCallback(() => {
+    setModelUrl(null);
+    setActivePresetId(null);
+    const store = useSceneStore.getState();
+    store.clearScene();
+    showToast("🧹 تم تفريغ الغرفة بالكامل للبدء من الصفر");
+  }, [showToast]);
+
+  const handleApplyArchitecturalStyle = useCallback((style: ArchitecturalStylePreset) => {
+    const store = useSceneStore.getState();
+    store.setWallColor(style.wallColor);
+    store.setFloorColor(style.floorColor);
+    store.setAmbientMode(style.ambientMode);
+    if (!prompt.trim()) {
+      setPrompt(style.recommendedPrompt);
+    }
+    showToast(`✨ تم تطبيق طراز "${style.name}"`);
+  }, [prompt, setPrompt, showToast]);
+
   // Auto-load preset from Maarad showroom (/maarad -> /studio?preset=...)
   useEffect(() => {
     if (!presetParam || presetLoadedRef.current === presetParam) return;
-    const matchedRoom = MAARAD_ROOMS.find((r) => r.id === presetParam);
-    if (!matchedRoom) return;
+    presetLoadedRef.current = presetParam;
+    applyMaaradPreset(presetParam);
+  }, [presetParam, applyMaaradPreset]);
+
+  // Auto-load public shared 3D project (/studio?share=...)
+  useEffect(() => {
+    if (!shareParam || shareLoadedRef.current === shareParam) return;
+    shareLoadedRef.current = shareParam;
 
     let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled || presetLoadedRef.current === presetParam) return;
-      presetLoadedRef.current = presetParam;
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/share/${shareParam}`);
+        if (!res.ok) throw new Error("تعذر تحميل المشروع المشارَك");
+        const data = await res.json();
+        if (cancelled || !data) return;
 
-      setModelUrl(null);
-      setSceneId(`maarad_${matchedRoom.id}`);
-
-      const store = useSceneStore.getState();
-      store.clearScene();
-      store.setRoomWidth(matchedRoom.dimensions.width);
-      store.setRoomDepth(matchedRoom.dimensions.depth);
-      store.setWallHeight(matchedRoom.dimensions.height);
-      store.setWallColor(matchedRoom.wallColor);
-      store.setFloorColor(matchedRoom.floorColor);
-      store.setAmbientMode(matchedRoom.ambientMode);
-
-      matchedRoom.items.forEach((item) => {
-        store.addSceneItem({
-          ...item,
-          thumbnailUrl: item.thumbnailUrl || "",
-          instanceId: crypto.randomUUID(),
+        const room = data.roomSettings || {};
+        useSceneStore.getState().loadProjectScene({
+          sceneItems: data.sceneItems || [],
+          roomWidth: room.roomWidth || 5.5,
+          roomDepth: room.roomDepth || 4.8,
+          wallHeight: room.wallHeight || 3.0,
+          floorColor: room.floorColor || "#C8B29B",
+          wallColor: room.wallColor || "#EDE8E0",
+          ambientMode: room.ambientMode || "morning",
+          windows: room.windows || [],
+          doors: room.doors || [],
+          customMaterials: data.customMaterials || {},
+          activeSceneId: data.sceneId || null,
         });
-      });
 
-      setPrompt(matchedRoom.prompt);
-      showToast(`🏛️ تم استيراد تصميم "${matchedRoom.title}" بنجاح في الاستوديو!`);
-    });
+        setIsSharedMode(true);
+        setSharedProjectName(data.name || "مشروع مشارَك");
+        setCurrentProjectId(data.id);
+        setCurrentProjectName(data.name || "مشروع مشارَك");
+        showToast(`🌐 تم استعراض التصميم المشارَك: "${data.name || "مشروع 3D"}"`);
+      } catch (err: any) {
+        console.error("[StudioClient] Error loading shared project:", err);
+        showToast("⚠️ تعذر تحميل التصميم المشارَك أو انتهت صلاحيته");
+      }
+    })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [presetParam, setPrompt, showToast]);
+    return () => { cancelled = true; };
+  }, [shareParam, showToast]);
+
+  // Auto-load saved project (/studio?project=...)
+  useEffect(() => {
+    if (!projectParam || projectLoadedRef.current === projectParam) return;
+    projectLoadedRef.current = projectParam;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectParam}`);
+        if (!res.ok) throw new Error("تعذر فتح المشروع");
+        const data = await res.json();
+        if (cancelled || !data) return;
+
+        const room = data.roomSettings || {};
+        useSceneStore.getState().loadProjectScene({
+          sceneItems: data.sceneItems || [],
+          roomWidth: room.roomWidth || 5.5,
+          roomDepth: room.roomDepth || 4.8,
+          wallHeight: room.wallHeight || 3.0,
+          floorColor: room.floorColor || "#C8B29B",
+          wallColor: room.wallColor || "#EDE8E0",
+          ambientMode: room.ambientMode || "morning",
+          windows: room.windows || [],
+          doors: room.doors || [],
+          customMaterials: data.customMaterials || {},
+          activeSceneId: data.sceneId || null,
+        });
+
+        setCurrentProjectId(data.id);
+        setCurrentProjectName(data.name || "مشروعي المحفوظ");
+        showToast(`📁 تم فتح مشروع "${data.name}" بنجاح`);
+      } catch (err: any) {
+        console.error("[StudioClient] Error loading project:", err);
+        showToast("⚠️ تعذر فتح المشروع المحدد");
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [projectParam, showToast]);
 
   // Auto-load prompt and concept image from Studio2D (/studio2d -> /studio?prompt=...&image=...)
   useEffect(() => {
@@ -773,8 +926,8 @@ export default function StudioClient() {
     // walkthrough mode is active. Toggling back out of FPV calls it again.
     if (controlsRef.current) {
       controlsRef.current.reset();
-      controlsRef.current.object.position.set(8.5, 6, 8.5);
-      controlsRef.current.target.set(0, 1, 0);
+      controlsRef.current.object.position.set(3.2, 2.1, 3.6);
+      controlsRef.current.target.set(0, 0.9, 0);
       controlsRef.current.update();
     }
   };
@@ -983,20 +1136,23 @@ export default function StudioClient() {
         await new Promise((r) => setTimeout(r, 60));
       }
 
-      // 2. Request clean WebGL snapshot from SnapshotManager
-      const snapshotBase64: string = await new Promise((resolve) => {
+      // 2. Request clean WebGL snapshot and depth pass from SnapshotManager
+      const { rgbSnapshot, depthSnapshot } = await new Promise<{
+        rgbSnapshot: string;
+        depthSnapshot: string | null;
+      }>((resolve) => {
         let done = false;
-        const cb = (dataUrl: string) => {
+        const cb = (dataUrl: string, depthUrl?: string | null) => {
           if (!done) {
             done = true;
-            resolve(dataUrl);
+            resolve({ rgbSnapshot: dataUrl, depthSnapshot: depthUrl || null });
           }
         };
         window.dispatchEvent(new CustomEvent("rwaq-get-snapshot-data", { detail: { callback: cb } }));
         setTimeout(() => {
           if (!done) {
             done = true;
-            resolve("");
+            resolve({ rgbSnapshot: "", depthSnapshot: null });
           }
         }, 2500);
       });
@@ -1005,18 +1161,20 @@ export default function StudioClient() {
         setShowWalkwayHeatmap(true);
       }
 
-      if (!snapshotBase64) {
+      if (!rgbSnapshot) {
         showToast("⚠️ تعذر التقاط إطار الكاميرا بدقة");
         setIsAIRendering(false);
         return;
       }
 
-      setRenderBeforeImage(snapshotBase64);
+      setRenderBeforeImage(rgbSnapshot);
+      setRenderDepthImage(depthSnapshot);
 
-      // 3. Send to structure-preserving backend endpoint
+      // 3. Send to structure-preserving backend endpoint with 1:1 depth conditioning
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const payload = {
-        image_base64: snapshotBase64,
+        image_base64: rgbSnapshot,
+        depth_map_base64: depthSnapshot,
         room_style: activeReference || "مودرن فاخر",
         wall_color: wallColor,
         floor_color: floorColor,
@@ -1052,6 +1210,275 @@ export default function StudioClient() {
       setIsAIRendering(false);
     }
   }, [isAIRendering, showWalkwayHeatmap, activeReference, wallColor, floorColor, ambientMode, sceneItems, showToast]);
+
+  const handleExportExecutivePdf = useCallback(async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    showToast("📑 جاري إعداد المخطط المعماري وجدول الكميات (PDF)...");
+
+    try {
+      const store = useSceneStore.getState();
+
+      // 1. Temporarily hide walkway heatmap during 3D snapshot capture for clean architectural framing
+      const wasHeatmapVisible = showWalkwayHeatmap;
+      if (wasHeatmapVisible) {
+        setShowWalkwayHeatmap(false);
+        await new Promise((r) => setTimeout(r, 60));
+      }
+
+      // 2. Request clean WebGL snapshot from SnapshotManager
+      const snapshotBase64: string = await new Promise((resolve) => {
+        let done = false;
+        const cb = (dataUrl: string) => {
+          if (!done) {
+            done = true;
+            resolve(dataUrl);
+          }
+        };
+        window.dispatchEvent(new CustomEvent("rwaq-get-snapshot-data", { detail: { callback: cb } }));
+        setTimeout(() => {
+          if (!done) {
+            done = true;
+            resolve("");
+          }
+        }, 2500);
+      });
+
+      if (wasHeatmapVisible) {
+        setShowWalkwayHeatmap(true);
+      }
+
+      // 3. Render 2D Top-Down Architectural Blueprint offscreen
+      const bpCanvas = document.createElement("canvas");
+      bpCanvas.width = 1200;
+      bpCanvas.height = 900;
+      const bpCtx = bpCanvas.getContext("2d");
+      if (bpCtx) {
+        drawBlueprintToCanvas(bpCtx, {
+          roomWidth: store.roomWidth || 5,
+          roomDepth: store.roomDepth || 4,
+          windows: store.windows || [],
+          doors: store.doors || [],
+          sceneItems: store.sceneItems || [],
+          canvasWidth: 1200,
+          canvasHeight: 900,
+        });
+      }
+      const blueprintBase64 = bpCanvas.toDataURL("image/png");
+
+      // 4. Group identical scene items into Executive BOQ rows
+      const groupedMap = new Map<string, BOQItemRow>();
+      let idx = 1;
+      for (const item of store.sceneItems) {
+        const key = item.id || item.name;
+        if (!groupedMap.has(key)) {
+          const widthCm = Math.round((item.dimensions?.width || 0.8) * 100);
+          const depthCm = Math.round((item.dimensions?.depth || 0.8) * 100);
+          const heightCm = Math.round((item.dimensions?.height || 0.8) * 100);
+          const unitPrice = item.price || 0;
+          groupedMap.set(key, {
+            index: idx++,
+            id: item.id,
+            sku: item.sku || `IKEA-${item.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toUpperCase() || "703.12"}`,
+            name: item.name,
+            category: item.category,
+            dimensionsCm: `${widthCm} × ${depthCm} × ${heightCm} سم`,
+            quantity: 1,
+            unitPrice: unitPrice,
+            totalPrice: unitPrice,
+            storeUrl: item.store_url || "https://www.ikea.com/sa/ar/",
+            brand: item.brand || "IKEA",
+          });
+        } else {
+          const existing = groupedMap.get(key)!;
+          existing.quantity += 1;
+          existing.totalPrice = existing.quantity * existing.unitPrice;
+        }
+      }
+
+      const boqRows = Array.from(groupedMap.values());
+      const subtotal = boqRows.reduce((sum, r) => sum + r.totalPrice, 0);
+      const vatAmount = Math.round(subtotal * 0.15);
+      const grandTotal = subtotal + vatAmount;
+
+      const exportProps: ExecutivePdfTemplateProps = {
+        projectRef: `RWQ-${Math.floor(100000 + Math.random() * 900000)}`,
+        dateStr: new Date().toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" }),
+        roomName: "غرفة المعيشة والاستقبال",
+        roomWidth: store.roomWidth || 5,
+        roomDepth: store.roomDepth || 4,
+        roomHeight: 2.8,
+        roomStyle: activeReference || "مودرن معاصر",
+        ambientMode: store.ambientMode || "morning",
+        spatialScore: 94,
+        snapshot3DUrl: snapshotBase64,
+        blueprint2DUrl: blueprintBase64,
+        items: boqRows,
+        subtotal,
+        vatAmount,
+        grandTotal,
+      };
+
+      setPdfExportData(exportProps);
+
+      // 5. Allow offscreen DOM to mount and render fonts
+      await new Promise((r) => setTimeout(r, 450));
+
+      const { default: html2canvas } = await import("html2canvas");
+      const { default: jsPDF } = await import("jspdf");
+
+      const rootEl = document.getElementById("rwaq-executive-pdf-root");
+      if (!rootEl) {
+        throw new Error("عنصر تصدير التقرير غير متوفر في الصفحة");
+      }
+
+      const pageElements = rootEl.querySelectorAll<HTMLElement>("[id^='pdf-page-']");
+      if (!pageElements.length) {
+        throw new Error("صفحات التقرير غير جاهزة للتصدير");
+      }
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      for (let i = 0; i < pageElements.length; i++) {
+        const pageEl = pageElements[i];
+        const canvas = await html2canvas(pageEl, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+          windowWidth: 794,
+          windowHeight: 1123,
+        });
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        if (i > 0) {
+          pdf.addPage("a4", "portrait");
+        }
+        pdf.addImage(imgData, "JPEG", 0, 0, 210, 297);
+      }
+
+      pdf.save(`Rwaq-Executive-Architectural-Report-${Date.now()}.pdf`);
+      showToast("✅ تم تصدير المخطط المعماري وجدول الكميات (PDF) بنجاح!");
+    } catch (err) {
+      console.error("[StudioClient] handleExportExecutivePdf error:", err);
+      showToast("⚠️ حدث خطأ أثناء إنشاء ملف PDF التنفيذي");
+    } finally {
+      setIsExportingPdf(false);
+      setPdfExportData(null);
+    }
+  }, [isExportingPdf, showWalkwayHeatmap, activeReference, showToast]);
+
+  const handleSaveProject = useCallback(async (customName?: string) => {
+    const nameToSave = (customName || currentProjectName || "مشروع معماري جديد").trim();
+    setIsSavingProject(true);
+    showToast("💾 جاري حفظ المشروع سحابياً ومحلياً...");
+
+    try {
+      const store = useSceneStore.getState();
+
+      // Attempt to capture a clean viewport snapshot for thumbnail
+      let thumbDataUrl: string | null = null;
+      try {
+        thumbDataUrl = await new Promise<string>((resolve) => {
+          let done = false;
+          const cb = (dataUrl: string) => {
+            if (!done) { done = true; resolve(dataUrl); }
+          };
+          window.dispatchEvent(new CustomEvent("rwaq-get-snapshot-data", { detail: { callback: cb } }));
+          setTimeout(() => { if (!done) { done = true; resolve(""); } }, 1200);
+        });
+      } catch {
+        // Thumbnail capture optional
+      }
+
+      const payload = {
+        id: currentProjectId || undefined,
+        name: nameToSave,
+        sceneId: store.activeSceneId || `scene_${Date.now()}`,
+        glbUrl: null,
+        sceneItems: store.sceneItems,
+        customMaterials: store.customMaterials,
+        totalCost: store.currentTotalCost(),
+        thumbnailUrl: thumbDataUrl || undefined,
+        roomSettings: {
+          roomWidth: store.roomWidth,
+          roomDepth: store.roomDepth,
+          wallHeight: store.wallHeight,
+          floorColor: store.floorColor,
+          wallColor: store.wallColor,
+          ambientMode: store.ambientMode,
+          roomStyle: activeReference || "مودرن فاخر",
+          thumbnailUrl: thumbDataUrl || undefined,
+          windows: store.windows,
+          doors: store.doors,
+        },
+      };
+
+      const res = await fetch("/api/projects/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error("فشل الحفظ في الخادم");
+      const data = await res.json();
+      setCurrentProjectId(data.project_id);
+      setCurrentProjectName(nameToSave);
+      setIsSaveModalOpen(false);
+      showToast(`✅ تم حفظ المشروع "${nameToSave}" بنجاح!`);
+      return data.project_id;
+    } catch (err: any) {
+      console.error("[StudioClient] handleSaveProject error:", err);
+      showToast("⚠️ حدث خطأ أثناء حفظ المشروع");
+      return null;
+    } finally {
+      setIsSavingProject(false);
+    }
+  }, [currentProjectId, currentProjectName, activeReference, showToast]);
+
+  const handleShareProject = useCallback(async () => {
+    setIsSharingProject(true);
+    showToast("🔗 جاري تجهيز رابط المشاركة 3D...");
+
+    try {
+      let prjId = currentProjectId;
+      if (!prjId) {
+        // Auto-save if not yet saved to obtain permanent shareable ID
+        prjId = await handleSaveProject();
+      }
+
+      if (!prjId) {
+        showToast("⚠️ الرجاء حفظ المشروع أولاً قبل المشاركة");
+        return;
+      }
+
+      const shareUrl = `${window.location.origin}/studio?share=${prjId}`;
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("✨ تم نسخ رابط المشاركة 3D إلى الحافظة بنجاح!");
+      } else {
+        showToast(`🔗 رابط المشاركة: ${shareUrl}`);
+      }
+    } catch (err: any) {
+      console.error("[StudioClient] handleShareProject error:", err);
+      showToast("⚠️ تعذر إنشاء رابط المشاركة");
+    } finally {
+      setIsSharingProject(false);
+    }
+  }, [currentProjectId, handleSaveProject, showToast]);
+
+  const handleCloneSharedProject = useCallback(() => {
+    setCurrentProjectId(null);
+    setCurrentProjectName(`نسخة من ${sharedProjectName || "التصميم المشارَك"}`);
+    setIsSharedMode(false);
+    router.replace("/studio");
+    showToast("✨ تم استنساخ التصميم في مساحة عملك، يمكنك الآن تعديله وتخصيصه!");
+  }, [sharedProjectName, router, showToast]);
 
   const handleNewProject = () => {
     clearScene();
@@ -1144,51 +1571,7 @@ export default function StudioClient() {
     setTimeout(() => setIsTransitioning(false), 800);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleSaveProject = async () => {
-    const payload = sceneItems.map(item => ({
-      ...item,
-      instance_id: item.instanceId,
-      asset_id: item.id,
-      position: item.position,
-      rotation: item.rotation
-    }));
-    
-    try {
-      const res = await fetch("/api/v1/projects/proj_123/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomItems: payload })
-      });
-      if (res.ok) {
-        showToast("✅ تم حفظ المشروع بنجاح");
-      }
-    } catch (e) {
-      console.error(e);
-      showToast("حدث خطأ أثناء الحفظ");
-    }
-  };
-
   useEffect(() => {
-    // fetch("/api/v1/projects/proj_123")
-    //   .then(res => {
-    //     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    //     return res.json();
-    //   })
-    //   .then(data => {
-    //     if (data.roomItems && data.roomItems.length > 0) {
-    //       useSceneStore.getState().clearScene();
-    //       data.roomItems.forEach((item: any) => {
-    //         useSceneStore.getState().addSceneItem({
-    //           ...item,
-    //           instanceId: item.instance_id || item.instanceId,
-    //           id: item.asset_id || item.id,
-    //         });
-    //       });
-    //     }
-    //   })
-    //   .catch(console.error);
-
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (
@@ -1220,8 +1603,37 @@ export default function StudioClient() {
         <StudioHeader
           onNewProject={handleNewProject}
           onOpenProjects={() => setIsProjectsModalOpen(true)}
+          onSaveProject={() => {
+            setSaveNameInput(currentProjectName || "غرفة معيشة فاخرة");
+            setIsSaveModalOpen(true);
+          }}
+          isSavingProject={isSavingProject}
+          onShareProject={handleShareProject}
+          isSharingProject={isSharingProject}
           onUploadFloorplan={() => setIsFloorplanModalOpen(true)}
+          onExportPdf={handleExportExecutivePdf}
+          isExportingPdf={isExportingPdf}
         />
+
+        {/* ── وضع استعراض التصميم المشارَك (Shared Read-Only/Preview Banner) ── */}
+        {isSharedMode && (
+          <div className="flex items-center justify-between gap-3 bg-secondary/15 border-b border-secondary/30 px-6 py-2.5 backdrop-blur-md animate-fade-in" dir="rtl">
+            <div className="flex items-center gap-2.5 text-xs text-on-surface">
+              <span className="material-symbols-outlined text-[19px] text-secondary">visibility</span>
+              <span>
+                أنت الآن تستعرض تصميماً ثلاثي الأبعاد مشارَكاً: <strong className="text-secondary">{sharedProjectName}</strong>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCloneSharedProject}
+              className="flex items-center gap-1.5 rounded-xl bg-secondary px-3.5 py-1.5 text-xs font-bold text-on-secondary hover:opacity-95 active:scale-95 transition-all shadow-xs"
+            >
+              <span className="material-symbols-outlined text-[15px]">content_copy</span>
+              نسخ وتعديل في الاستوديو
+            </button>
+          </div>
+        )}
 
         <ConversationPanel
           uiState={viewUiState}
@@ -1257,9 +1669,9 @@ export default function StudioClient() {
                 shadows 
                 dpr={[1, 2]} 
                 gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, outputColorSpace: THREE.SRGBColorSpace, preserveDrawingBuffer: true }}
-                camera={{ position: [8.5, 6, 8.5], fov: 40 }}
+                camera={{ position: [3.2, 2.1, 3.6], fov: 42 }}
               >
-                <color attach="background" args={['#16181F']} />
+                <color attach="background" args={['#EDEAE4']} />
 
                 <SnapshotManager />
                 <AmbientController />
@@ -1267,7 +1679,6 @@ export default function StudioClient() {
                 
                 <Suspense fallback={null}>
                   <ProceduralEnvironment ambientMode={ambientMode} />
-                  <ContactShadows position={[0, 0.01, 0]} opacity={0.5} scale={20} blur={1.5} far={4} />
                   <group ref={exportGroupRef} position={[0, 0, 0]}>
                     <Physics debug={false}>
                       <SceneErrorBoundary>
@@ -1300,7 +1711,7 @@ export default function StudioClient() {
 
                 {/* Cinematic Post-Processing */}
                 <EffectComposer>
-                  <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.5} />
+                  <Bloom luminanceThreshold={1.3} mipmapBlur intensity={0.35} />
                 </EffectComposer>
 
                 {viewMode === 'orbit' ? (
@@ -1311,9 +1722,9 @@ export default function StudioClient() {
                     enablePan={true} 
                     enableZoom={true} 
                     maxPolarAngle={Math.PI / 2.05}
-                    minDistance={2} 
-                    maxDistance={25} 
-                    target={[0, 1, 0]}
+                    minDistance={1.8} 
+                    maxDistance={20} 
+                    target={[0, 0.9, 0]}
                   />
                 ) : (
                   <>
@@ -1325,6 +1736,16 @@ export default function StudioClient() {
             </div>
 
 
+
+            {/* Quick-Start Room Presets & Shapes Bar */}
+            <RoomPresetsBar
+              activePresetId={activePresetId}
+              activeShape={roomShape}
+              onSelectPreset={applyMaaradPreset}
+              onSelectShape={handleSelectShape}
+              onResetEmpty={handleResetEmpty}
+              onOpenInspiration={() => setIsInspirationModalOpen(true)}
+            />
 
             {/* Active Selection Tooltip (Simulated) */}
             {isLoading && (
@@ -1454,6 +1875,8 @@ export default function StudioClient() {
               }}
               onAIRender={handleAIRender}
               isAIRendering={isAIRendering}
+              onExportExecutivePdf={handleExportExecutivePdf}
+              isExportingPdf={isExportingPdf}
               onUploadFloorplan={() => setIsFloorplanModalOpen(true)}
               onOpenFurnitureLibrary={() => setIsModalOpen(true)}
             />
@@ -1464,9 +1887,15 @@ export default function StudioClient() {
                 onClick={() => setIsChatbotOpen(true)}
                 aria-label="فتح المساعد الذكي"
                 title="فتح المساعد الذكي للمحادثة وإضافة الأثاث"
-                className={`absolute bottom-6 left-6 ${Z.sceneToolbar} flex items-center gap-2 rounded-2xl border border-secondary/30 bg-surface/90 px-4 py-2.5 text-xs font-bold text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.16)] backdrop-blur-xl transition-all hover:bg-secondary hover:text-white active:scale-95`}
+                className={`absolute bottom-8 left-8 ${Z.sceneToolbar} z-30 flex items-center gap-2.5 rounded-full border border-secondary/40 bg-surface/90 px-4 py-2.5 text-xs font-bold text-on-surface shadow-[0_10px_28px_rgba(0,0,0,0.2)] backdrop-blur-xl transition-all hover:bg-secondary hover:text-on-secondary active:scale-95 group`}
               >
-                <span className="material-symbols-outlined text-[19px]">smart_toy</span>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary group-hover:bg-on-secondary"></span>
+                </span>
+                <span className="material-symbols-outlined text-[19px] text-secondary group-hover:text-on-secondary transition-colors">
+                  smart_toy
+                </span>
                 <span>المساعد الذكي</span>
               </button>
             )}
@@ -1558,6 +1987,7 @@ export default function StudioClient() {
         onClose={() => setIsAIRenderModalOpen(false)}
         beforeImageUrl={renderBeforeImage}
         afterImageUrl={renderAfterImage}
+        depthMapUrl={renderDepthImage}
         roomStyle={activeReference || "مودرن فاخر"}
         sourceNote={renderSourceNote}
         promptUsed={renderPromptUsed}
@@ -1569,6 +1999,77 @@ export default function StudioClient() {
         onClose={() => setIsFloorplanModalOpen(false)}
         showToast={showToast}
       />
+
+      {/* ── مراجع الإلهام والأنماط المعمارية (Inspiration Modal) ── */}
+      <InspirationModal
+        isOpen={isInspirationModalOpen}
+        onClose={() => setIsInspirationModalOpen(false)}
+        onApplyStyle={handleApplyArchitecturalStyle}
+      />
+
+      {/* ── نافذة حفظ المشروع (Save Project Modal) ── */}
+      {isSaveModalOpen && (
+        <div className="fixed inset-0 z-150 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-fade-in" dir="rtl">
+          <div className="relative w-full max-w-md rounded-3xl border border-outline-variant/60 bg-surface p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-secondary/15 text-secondary">
+                  <span className="material-symbols-outlined text-[22px]">save</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-on-surface">حفظ المشروع في رواق</h3>
+                  <p className="text-xs text-on-surface-variant">حفظ التصميم ثلاثي الأبعاد وجدول الكميات سحابياً ومحلياً</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSaveModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant hover:text-on-surface"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-xs font-bold text-on-surface mb-1.5">اسم المشروع</label>
+              <input
+                type="text"
+                value={saveNameInput}
+                onChange={(e) => setSaveNameInput(e.target.value)}
+                placeholder="مثال: صالة الاستقبال الحديثة"
+                className="w-full rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-2.5 text-sm font-medium text-on-surface focus:border-secondary focus:outline-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && saveNameInput.trim()) {
+                    handleSaveProject(saveNameInput);
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsSaveModalOpen(false)}
+                className="rounded-xl border border-outline-variant px-4 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={isSavingProject || !saveNameInput.trim()}
+                onClick={() => handleSaveProject(saveNameInput)}
+                className="flex items-center gap-1.5 rounded-xl bg-secondary px-5 py-2 text-xs font-bold text-on-secondary hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 shadow-xs"
+              >
+                <span className={`material-symbols-outlined text-[16px] ${isSavingProject ? "animate-spin" : ""}`}>
+                  {isSavingProject ? "sync" : "check"}
+                </span>
+                <span>{isSavingProject ? "جاري الحفظ..." : "حفظ الآن"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
         {/* ── Transition Overlay ── */}
@@ -1610,6 +2111,9 @@ export default function StudioClient() {
 
       {/* ── تقرير الطباعة (مخفي في العرض العادي، يظهر فقط عند الطباعة) ── */}
       <PrintReport />
+
+      {/* ── قالب التصدير التنفيذي لـ PDF المعماري وجدول الكميات ── */}
+      {pdfExportData && <ExecutivePdfTemplate {...pdfExportData} />}
     </>
   );
 }

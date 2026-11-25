@@ -436,8 +436,44 @@ function InnerModel({ modelUrl, onLoaded, color, customMaterial }: InnerModelPro
 
 // ── Procedural Furniture (Beautiful Fallbacks) ─────────────────────────────────
 
-function ProceduralFurniture({ category = 'unknown', fw, fh, fd }: { category: string, fw: number, fh: number, fd: number }) {
+function ProceduralFurniture({
+  category = "unknown",
+  fw,
+  fh,
+  fd,
+  color,
+}: {
+  category: string;
+  fw: number;
+  fh: number;
+  fd: number;
+  color?: string;
+}) {
   const cat = category.toLowerCase();
+
+  if (cat.includes("art") || cat.includes("لوحة") || cat.includes("frame") || cat.includes("canvas")) {
+    const border = Math.min(fw, fh) * 0.08;
+    const frameDepth = Math.max(0.04, fd);
+    return (
+      <group>
+        {/* Outer Frame (Beveled Dark Carbon or Walnut) */}
+        <mesh position={[0, fh / 2, 0]}>
+          <boxGeometry args={[fw, fh, frameDepth]} />
+          <meshStandardMaterial color="#1E2024" roughness={0.4} metalness={0.2} />
+        </mesh>
+        {/* Inner Passe-partout Matting Mount */}
+        <mesh position={[0, fh / 2, frameDepth * 0.25]}>
+          <boxGeometry args={[Math.max(0.1, fw - border * 2), Math.max(0.1, fh - border * 2), frameDepth * 0.6]} />
+          <meshStandardMaterial color="#F7F5F0" roughness={0.9} />
+        </mesh>
+        {/* Artistic Canvas Surface */}
+        <mesh position={[0, fh / 2, frameDepth * 0.52]}>
+          <planeGeometry args={[Math.max(0.1, (fw - border * 2) * 0.85), Math.max(0.1, (fh - border * 2) * 0.85)]} />
+          <meshStandardMaterial color={color || "#2B3A4A"} roughness={0.7} metalness={0.1} />
+        </mesh>
+      </group>
+    );
+  }
   
   if (cat.includes('bed') || cat.includes('سرير')) {
     // A nice looking bed: mattress + pillows + frame
@@ -740,11 +776,20 @@ export default function RealFurnitureLoader({
   const fh = (dimensions?.height || 1000) / 1000;
   const fd = (dimensions?.depth  || 1000) / 1000;
 
+  const isRug = (category?.toLowerCase() === 'rugs') || (resolvedModelUrl.toLowerCase().includes('rug'));
+  const isWallArt =
+    (category?.toLowerCase() === 'decor' &&
+      (resolvedModelUrl.toLowerCase().includes('art') ||
+       String(brandName || '').toLowerCase().includes('art') ||
+       String(brandName || '').toLowerCase().includes('gallery') ||
+       String(category || '').toLowerCase().includes('art')));
+
   const fallbackBox = (
-    <ProceduralFurniture category={category} fw={fw} fh={fh} fd={fd} />
+    <ProceduralFurniture category={category} fw={fw} fh={fh} fd={fd} color={color} />
   );
 
   const isInvalidUrl = !resolvedModelUrl;
+  const isProceduralDirect = isWallArt;
 
   // ── Render ────────────────────────────────────────────────────────────────
   const isActivelyDragging = useSceneStore((s) => s.isDragging) && isSelected;
@@ -753,7 +798,8 @@ export default function RealFurnitureLoader({
     <RigidBody 
       ref={rigidBodyRef} 
       type={isActivelyDragging ? 'kinematicPosition' : 'fixed'} 
-      colliders="cuboid" 
+      colliders={isRug || isWallArt ? false : "cuboid"} 
+      sensor={isRug}
       restitution={0.1} 
       friction={1}
       position={position as [number, number, number]}
@@ -774,11 +820,11 @@ export default function RealFurnitureLoader({
           onSelect?.(meta);
         }}
       >
-        {/* ── Fallback: invalid / loading / error (procedural 3D box, no DOM overhead) ── */}
-        {(isInvalidUrl || loadState === "idle" || loadState === "error") && fallbackBox}
+        {/* ── Direct procedural or fallback box ── */}
+        {(isProceduralDirect || isInvalidUrl || loadState === "idle" || loadState === "error") && fallbackBox}
 
       {/* ── Silent pre-load while idle (invisible until calibration resolves) ── */}
-      {!isInvalidUrl && loadState === "idle" && (
+      {!isProceduralDirect && !isInvalidUrl && loadState === "idle" && (
         <React.Suspense fallback={null}>
           <ModelErrorBoundary
             fallback={null}
@@ -793,7 +839,7 @@ export default function RealFurnitureLoader({
       )}
 
       {/* ── Calibrated model: only rendered once calibration is computed ── */}
-      {!isInvalidUrl && loadState === "ready" && calibration && (
+      {!isProceduralDirect && !isInvalidUrl && loadState === "ready" && calibration && (
         <React.Suspense fallback={fallbackBox}>
           <ModelErrorBoundary
             fallback={fallbackBox}

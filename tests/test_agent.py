@@ -92,9 +92,12 @@ def test_generate_layout(monkeypatch):
     assert res["room_dimensions"]["width"] == 5.0
     assert res["room_dimensions"]["depth"] == 5.0
     assert res["room_dimensions"]["shape"] == "single"
-    assert len(res["objects"]) == 1
+    assert len(res["objects"]) >= 1
     assert res["objects"][0]["asset_id"] == "sofa"
     assert res["objects"][0]["dimensions"] == {"length": 2.2, "width": 0.95, "height": 0.83}
+    # Verify architectural dressing items were added
+    dressing_assets = {o["asset_id"] for o in res["objects"]}
+    assert any("rug" in a for a in dressing_assets)
 
 
 def test_generate_layout_fallback_on_api_error(monkeypatch):

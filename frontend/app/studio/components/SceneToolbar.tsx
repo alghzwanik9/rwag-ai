@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Z } from "../config/regions";
 
 interface SceneToolbarProps {
@@ -13,12 +14,24 @@ interface SceneToolbarProps {
   onToggleWalkwayHeatmap?: () => void;
   onAIRender?: () => void;
   isAIRendering?: boolean;
+  onExportExecutivePdf?: () => void;
+  isExportingPdf?: boolean;
   onUploadFloorplan?: () => void;
   onOpenFurnitureLibrary?: () => void;
 }
 
+interface ActionItem {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  active: boolean;
+  highlight?: boolean;
+  groupEnd?: boolean;
+}
+
 /**
- * Toolbar floating over the bottom-centre of the canvas.
+ * Compact, sleek glassmorphic pill toolbar floating over the bottom-centre of the canvas.
+ * Categorized into logical groups: History (Undo/Redo), Creation (Assets/AI/PDF), and Viewport Controls.
  */
 export default function SceneToolbar({
   onUndo,
@@ -31,12 +44,17 @@ export default function SceneToolbar({
   onToggleWalkwayHeatmap,
   onAIRender,
   isAIRendering = false,
+  onExportExecutivePdf,
+  isExportingPdf = false,
   onUploadFloorplan,
   onOpenFurnitureLibrary,
 }: SceneToolbarProps) {
-  const actions = [
+  const actions: ActionItem[] = [
+    // ── Group 1: Undo / Redo ──
     { icon: 'undo', label: 'تراجع (Ctrl+Z)', onClick: onUndo, active: false },
-    { icon: 'redo', label: 'إعادة (Ctrl+Y)', onClick: onRedo, active: false },
+    { icon: 'redo', label: 'إعادة (Ctrl+Y)', onClick: onRedo, active: false, groupEnd: true },
+
+    // ── Group 2: Scene Building & AI ──
     {
       icon: 'chair',
       label: 'إضافة أثاث من المكتبة',
@@ -49,7 +67,6 @@ export default function SceneToolbar({
       label: 'رفع مخطط 2D إلى 3D',
       onClick: onUploadFloorplan || (() => {}),
       active: false,
-      highlight: true,
     },
     {
       icon: 'auto_awesome',
@@ -59,14 +76,23 @@ export default function SceneToolbar({
       highlight: true,
     },
     {
+      icon: isExportingPdf ? 'sync' : 'receipt_long',
+      label: isExportingPdf ? 'جاري استخراج المخطط والـ BOQ...' : 'تصدير المخطط التنفيذي وجدول الكميات (PDF)',
+      onClick: onExportExecutivePdf || (() => {}),
+      active: isExportingPdf,
+      groupEnd: true,
+    },
+
+    // ── Group 3: Viewport & Inspection ──
+    {
       icon: 'alt_route',
-      label: showWalkwayHeatmap ? 'إخفاء مسارات الحركة' : 'مخطط مسارات الحركة (≥ 0.90م)',
+      label: showWalkwayHeatmap ? 'إخفاء مسارات الحركة' : 'مخطط مسارات الحركة (كود SBC ≥ 0.90م)',
       onClick: onToggleWalkwayHeatmap || (() => {}),
       active: showWalkwayHeatmap,
     },
     {
       icon: viewMode === 'fpv' ? 'cancel' : 'directions_walk',
-      label: viewMode === 'fpv' ? 'إنهاء التجول' : 'وضع التجول',
+      label: viewMode === 'fpv' ? 'إنهاء التجول' : 'وضع التجول (FPV)',
       onClick: onToggleViewMode,
       active: viewMode === 'fpv',
     },
@@ -76,37 +102,40 @@ export default function SceneToolbar({
 
   return (
     <div
-      className={`pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 ${Z.sceneToolbar}`}
+      className={`pointer-events-none absolute bottom-8 left-1/2 flex -translate-x-1/2 ${Z.sceneToolbar} z-30 select-none`}
     >
-      <div className="pointer-events-auto flex items-center gap-1 rounded-2xl border border-outline-variant/50 bg-surface/85 p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.16)] backdrop-blur-xl">
-        {actions.map((action) => (
-          <button
-            key={action.icon}
-            type="button"
-            onClick={action.onClick}
-            aria-label={action.label}
-            title={action.label}
-            className={`group/tool relative flex h-11 w-11 items-center justify-center rounded-xl transition-all active:scale-95 ${
-              action.active
-                ? action.highlight
-                  ? 'bg-rwaq-gold text-black shadow-md animate-pulse'
-                  : 'bg-primary text-on-primary shadow-sm'
-                : action.highlight
-                ? 'text-rwaq-gold hover:bg-rwaq-gold/15'
-                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[21px]">{action.icon}</span>
-            {/*
-              Named group, not a bare one. `group-hover:` compiles to
-              `:is(:where(.group):hover *)`, which matches a descendant of ANY
-              hovered ancestor carrying `group` — so a bare variant here lit all
-              five tooltips at once whenever the pointer was over the canvas.
-            */}
-            <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-inverse-surface px-2.5 py-1 text-[11px] font-bold text-inverse-on-surface opacity-0 shadow-lg transition-opacity group-hover/tool:opacity-100">
-              {action.label}
-            </span>
-          </button>
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-outline-variant/60 dark:border-white/10 bg-surface/90 dark:bg-[#121620]/90 px-2 py-1 shadow-[0_12px_32px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+        {actions.map((action, idx) => (
+          <React.Fragment key={action.icon + idx}>
+            <button
+              type="button"
+              onClick={action.onClick}
+              aria-label={action.label}
+              className={`group/tool relative flex h-9 w-9 items-center justify-center rounded-full transition-all active:scale-95 ${
+                action.active
+                  ? action.highlight
+                    ? 'bg-rwaq-gold text-black shadow-md'
+                    : 'bg-primary text-on-primary shadow-xs'
+                  : action.highlight
+                  ? 'text-rwaq-gold hover:bg-rwaq-gold/15'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+              }`}
+            >
+              <span className={`material-symbols-outlined text-[19px] ${action.active && action.highlight ? 'animate-spin' : ''}`}>
+                {action.icon}
+              </span>
+
+              {/* Sleek Tooltip */}
+              <span className="pointer-events-none absolute bottom-full left-1/2 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-inverse-surface px-2.5 py-1 text-[11px] font-bold text-inverse-on-surface opacity-0 shadow-xl transition-all duration-150 group-hover/tool:opacity-100 group-hover/tool:-translate-y-0.5 z-50 border border-white/10">
+                {action.label}
+              </span>
+            </button>
+
+            {/* Subtle Group Divider */}
+            {action.groupEnd && (
+              <div className="mx-0.5 h-4 w-px bg-outline-variant/40 dark:bg-white/10" />
+            )}
+          </React.Fragment>
         ))}
       </div>
     </div>

@@ -63,10 +63,10 @@ export default function ConversationPanel({
 }: ConversationPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isGenerating = uiState === 'generating';
-  const [isOpen, setIsOpen] = useState(isGenerating);
+  const [isOpen, setIsOpen] = useState(false);
   const [prevIsGenerating, setPrevIsGenerating] = useState(isGenerating);
 
-  // Open popover automatically when generating so user sees progress
+  // Open popover automatically when generating starts so user sees real-time progress
   if (isGenerating !== prevIsGenerating) {
     setPrevIsGenerating(isGenerating);
     if (isGenerating) {

@@ -43,7 +43,7 @@ class Dimensions(BaseModel):
 
 class Transform(BaseModel):
     t_x: float = Field(description="Translation along X axis (in meters)")
-    t_y: float = Field(description="Translation along Y axis (vertical). MUST be strictly 0.0")
+    t_y: float = Field(description="Translation along Y axis (vertical). 0.0 for floor furniture, 0.005 for rugs, 1.45-1.60 for wall art.")
     t_z: float = Field(description="Translation along Z axis (in meters)")
     yaw_y: float = Field(description="Rotation angle around Y axis (in degrees, e.g. 0, 90, 180, -90)")
     scale: float = Field(description="Scale multiplier, MUST be 1.0")
@@ -68,10 +68,16 @@ CANONICAL_ASSET_IDS = [
     "outdoor_set",
     "vase_flowers",
     "plant",
+    "indoor_plant",
+    "potted_plant",
     "bed",
     "desk",
     "rug",
+    "rug_round",
+    "rug_woven",
     "floor_lamp",
+    "lamp_table",
+    "wall_art",
 ]
 
 
@@ -466,7 +472,25 @@ def generate_layout(prompt: str, image_b64: str | None = None) -> dict:
                 room_depth=r_d,
                 shape=r_s
             )
-            logger.info("Spatial clustering solver applied successfully with shape: %s", r_s)
+            # Infer room style for curated architectural dressing layer
+            inferred_style = "modern"
+            prompt_lower = prompt.lower()
+            if any(k in prompt_lower for k in ["japandi", "ياباندي"]):
+                inferred_style = "japandi"
+            elif any(k in prompt_lower for k in ["neoclassic", "classic", "نيو كلاسيك", "نيوكلاسيك", "كلاسيك"]):
+                inferred_style = "neoclassic"
+            elif any(k in prompt_lower for k in ["bohemian", "boho", "بوهيمي", "بوهو"]):
+                inferred_style = "bohemian"
+            elif any(k in prompt_lower for k in ["majlis", "مجلس", "عربي", "شرقي"]):
+                inferred_style = "majlis"
+
+            payload["objects"] = SpatialClusteringSolver.apply_architectural_dressing(
+                payload["objects"],
+                room_width=r_w,
+                room_depth=r_d,
+                style=inferred_style
+            )
+            logger.info("Spatial clustering and architectural dressing (%s) applied successfully with shape: %s", inferred_style, r_s)
 
         # ── Closed-Loop Self-Correction Engine ──
         # Convert objects to audit format to verify SBC & Neufert standards
@@ -669,13 +693,17 @@ def handle_chat_request(
    - حدد 'retheme_style' كأحد القيم التالية: 'japandi', 'neoclassic', 'modern', 'bohemian', 'minimalist', 'wabi_sabi'.
 8. طراز الغرفة البسيط (ROOM_STYLE):
    عند طلب تعديل لون الجدار أو الأرضية أو الإضاءة فقط دون طراز كامل.
-9. الدردشة العامة (CHAT):
+9. تنسيق الديكور والإكسسوارات التكميلية (DRESS_ROOM):
+   عند طلب إضافة لمسات ديكورية، إكسسوارات، ستايلينغ، سجاد ونباتات ولوحات (مثل: 'أضف لمسات ديكور وإكسسوارات للغرفة', 'زين الغرفة', 'أضف إكسسوارات', 'dress the room', 'styling'):
+   - اضبط intent = 'dress_room' و action_type = 'mutate'.
+   - حدد 'retheme_style' المتوافق إن وجد (مثل 'japandi', 'neoclassic', 'modern', 'bohemian', 'majlis').
+10. الدردشة العامة (CHAT):
    إذا كان سؤالاً أو استشارة تصميمية عامة.
 
 أخرج النتيجة بصيغة JSON فقط:
 {{
   "action_type": "mutate" | "clarify" | "chat",
-  "intent": "modify" | "remove" | "add" | "room_style" | "retheme" | "clarify" | "chat",
+  "intent": "modify" | "remove" | "add" | "room_style" | "retheme" | "dress_room" | "clarify" | "chat",
   "retheme_style": "japandi" | "neoclassic" | "modern" | "bohemian" | "minimalist" | "wabi_sabi" | null,
   "text": "الرد النصي بالعربية للمستخدم",
   "target_instance_id": "..." | null,
@@ -811,6 +839,50 @@ def handle_chat_request(
         })
         action_type = "mutate"
         reply_text = f"تم تحويل طراز وتشطيبات الغرفة بنجاح إلى طراز {preset['title']} مع تناغم الألوان والحفاظ على التوزيع الهندسي للأثاث."
+
+    elif intent == "dress_room" or any(k in user_message.lower() for k in ("لمسات ديكور", "إكسسوارات", "اكسسوارات", "ستايلينغ", "تزيين", "زين الغرفة", "dress the room", "add decor", "styling layer", "إكسسوار")):
+        # Infer style from scene or request
+        inferred_style = "modern"
+        msg_l = user_message.lower()
+        if "ياباندي" in msg_l or "japandi" in msg_l:
+            inferred_style = "japandi"
+        elif "نيو" in msg_l or "classic" in msg_l or "كلاسيك" in msg_l:
+            inferred_style = "neoclassic"
+        elif "بوهيمي" in msg_l or "bohemian" in msg_l:
+            inferred_style = "bohemian"
+        elif "مجلس" in msg_l or "majlis" in msg_l or "عربي" in msg_l:
+            inferred_style = "majlis"
+        elif "مودرن" in msg_l or "modern" in msg_l:
+            inferred_style = "modern"
+
+        from backend.app.services.spatial_solver import SpatialClusteringSolver
+        missing_decor = SpatialClusteringSolver.get_missing_dressing_items(
+            existing_items=scene_items or [],
+            room_width=room_width,
+            room_depth=room_depth,
+            style=inferred_style,
+            windows=windows
+        )
+
+        palette_info = SpatialClusteringSolver.DRESSING_PALETTES.get(inferred_style, SpatialClusteringSolver.DRESSING_PALETTES["modern"])
+        style_title = palette_info["title"]
+
+        if missing_decor:
+            for d_item in missing_decor:
+                mutations.append({
+                    "op": "ADD",
+                    "item": d_item
+                })
+                response_items.append(d_item)
+            action_type = "mutate"
+            item_names = "، ".join([it.get("name", "") for it in missing_decor])
+            reply_text = (
+                f"تم استكمال طبقة الديكور والتنسيق المعماري (Layering & Dressing) للغرفة بطراز {style_title}: "
+                f"تمت إضافة ({item_names}) مع ضمان خلو مسارات الحركة الأساسية (≥ 0.90م) ومطابقة كود البناء السعودي (SBC 201)."
+            )
+        else:
+            action_type = "chat"
+            reply_text = f"الغرفة مجهزة بكافة عناصر التنسيق الديكوري (سجاد، نباتات، إضاءة محيطية، ولوحات جدارية) وفق طراز {style_title} مع الحفاظ على سعة الفراغ ومسارات الحركة."
 
     elif intent == "add":
         add_meta = data.get("add_item") or {}
@@ -984,7 +1056,7 @@ def audit_spatial_layout(items: list, room_width: float = 5.0, room_depth: float
         w, d = _extract_xz_dimensions(item.get("dimensions"))
         asset = str(item.get("asset_id") or item.get("name") or "").lower()
 
-        if not any(k in asset for k in ["rug", "carpet", "floor", "سجادة", "أرضية"]):
+        if not any(k in asset for k in ["rug", "carpet", "floor", "سجادة", "أرضية", "wall_art", "لوحة", "art_frame", "frame_art"]):
             furniture_footprint += (w * d)
 
         if "sofa" in asset:
@@ -1039,7 +1111,10 @@ def audit_spatial_layout(items: list, room_width: float = 5.0, room_depth: float
         if not isinstance(item, dict):
             continue
         asset_id = str(item.get("asset_id") or item.get("name") or "").lower()
-        if any(keyword in asset_id for keyword in ["rug", "carpet", "floor", "سجادة", "أرضية"]):
+        pos_y = _safe_float(item.get("position", [0, 0, 0])[1] if isinstance(item.get("position"), list) and len(item.get("position")) > 1 else 0.0)
+        if pos_y > 0.5:
+            continue
+        if any(keyword in asset_id for keyword in ["rug", "carpet", "floor", "سجادة", "أرضية", "wall_art", "لوحة", "art_frame", "frame_art"]):
             continue
         pos_x, pos_z = _extract_xz_position(item.get("position"))
         w, d = _extract_xz_dimensions(item.get("dimensions"))

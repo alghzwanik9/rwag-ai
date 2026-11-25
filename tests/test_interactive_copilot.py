@@ -264,3 +264,56 @@ def test_api_chat_endpoint_add_item_mutation(client):
     # Ensure position was calculated and not overlapping sofa
     assert isinstance(mut["item"]["position"], list)
     assert len(mut["item"]["position"]) == 3
+
+
+def test_copilot_dress_room_styling_intent(client):
+    """Test co-pilot styling prompt adds matching decor layer without moving furniture."""
+    request_body = {
+        "message": "أضف لمسات ديكور وإكسسوارات للغرفة",
+        "scene_items": [
+            {
+                "instance_id": "sofa_01",
+                "asset_id": "sofa",
+                "name": "Kivik Sofa",
+                "position": [0, 0, -1.8],
+                "rotation": [0, 0, 0],
+                "dimensions": {"width": 2200, "height": 850, "depth": 900},
+                "color": "#334155"
+            }
+        ],
+        "room_width": 5.5,
+        "room_depth": 5.0,
+        "windows": [{"wall": "back", "positionOffset": 0.5}]
+    }
+
+    mock_llm_dress = {
+        "action_type": "mutate",
+        "intent": "dress_room",
+        "text": "تم استكمال طبقة الديكور والتنسيق المعماري للغرفة.",
+        "retheme_style": "modern"
+    }
+
+    with patch("ai_agent._call_gemini_with_retry") as mock_gemini:
+        mock_resp = MagicMock()
+        import json
+        mock_resp.text = json.dumps(mock_llm_dress)
+        mock_gemini.return_value = mock_resp
+
+        response = client.post("/api/v1/chat", json=request_body)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["action_type"] == "mutate"
+    assert len(data["mutations"]) >= 2
+    # Ensure added items contain rug and plant/lamp/art
+    asset_ids = [m["item"]["asset_id"] for m in data["mutations"]]
+    assert any("rug" in a for a in asset_ids)
+    assert any("plant" in a for a in asset_ids)
+    # Check rug y = 0.005 and wall art y = 1.50
+    for m in data["mutations"]:
+        item = m["item"]
+        if "rug" in item["asset_id"]:
+            assert item["position"][1] == 0.005
+        elif "wall_art" in item["asset_id"]:
+            assert item["position"][1] == 1.50

@@ -1,32 +1,40 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { supabase } from '@/lib/supabase';
+import { saveLocalProject } from '@/lib/localProjectsStore';
 import { Json } from '@/types/supabase';
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await auth();
-    
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    let userId: string | null = null;
+    try {
+      const authObj = await auth();
+      userId = authObj.userId;
+    } catch {
+      // Local dev or guest session
     }
 
+    const effectiveUserId = userId || "local_user";
     const body = await req.json();
     const {
+      id: existingId,
       name,
       sceneId,
       glbUrl,
       sceneItems,
       customMaterials,
       totalCost,
+      thumbnailUrl,
       roomSettings,
     } = body as {
+      id?: string;
       name: string;
-      sceneId: string;
-      glbUrl: string | null;
-      sceneItems: Json[];
-      customMaterials: { [key: string]: Json | undefined };
-      totalCost: number;
+      sceneId?: string;
+      glbUrl?: string | null;
+      sceneItems: any[];
+      customMaterials?: { [key: string]: any };
+      totalCost?: number;
+      thumbnailUrl?: string | null;
       roomSettings?: {
         roomWidth?: number;
         roomDepth?: number;
@@ -34,44 +42,81 @@ export async function POST(req: Request) {
         floorColor?: string;
         wallColor?: string;
         ambientMode?: 'morning' | 'rainy' | 'midnight';
-        windows?: Json[];
+        roomStyle?: string;
+        thumbnailUrl?: string | null;
+        windows?: any[];
+        doors?: any[];
       };
     };
 
-    if (!name) {
-      return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    if (!name || !name.trim()) {
+      return NextResponse.json({ error: "اسم المشروع مطلوب" }, { status: 400 });
     }
 
-    // Store room settings inside the existing JSON custom_materials column under a reserved
-    // metadata key to stay 100% compatible with the Supabase `projects` schema & legacy rows.
-    const cleanMaterials: { [key: string]: Json | undefined } = { ...(customMaterials || {}) };
-    if (roomSettings && typeof roomSettings === 'object') {
-      cleanMaterials.__roomSettings = roomSettings as unknown as Json;
-    }
+    // Merge thumbnail and doors into roomSettings
+    const cleanRoomSettings = {
+      ...(roomSettings || {}),
+      thumbnailUrl: thumbnailUrl || roomSettings?.thumbnailUrl || null,
+    };
 
-    // Insert or update project
-    const { data, error } = await supabase
-      .from('projects')
-      .insert([
-        {
+    const cleanMaterials: { [key: string]: any } = { ...(customMaterials || {}) };
+    cleanMaterials.__roomSettings = cleanRoomSettings;
+
+    let savedId = existingId;
+
+    // 1. Always write to local resilient storage first
+    const localRecord = await saveLocalProject({
+      id: existingId,
+      user_id: effectiveUserId,
+      name: name.trim(),
+      scene_id: sceneId || `scene_${Date.now()}`,
+      glb_url: glbUrl ?? null,
+      scene_items: sceneItems || [],
+      custom_materials: cleanMaterials,
+      total_cost: totalCost || 0,
+      thumbnail_url: cleanRoomSettings.thumbnailUrl,
+    });
+    savedId = localRecord.id;
+
+    // 2. Attempt to save to Supabase if authenticated and online
+    if (userId) {
+      try {
+        const payloadToInsert: any = {
           user_id: userId,
-          name,
-          scene_id: sceneId,
-          glb_url: glbUrl,
-          scene_items: sceneItems || [],
-          custom_materials: cleanMaterials,
+          name: name.trim(),
+          scene_id: sceneId || `scene_${Date.now()}`,
+          glb_url: glbUrl ?? null,
+          scene_items: (sceneItems || []) as unknown as Json[],
+          custom_materials: cleanMaterials as unknown as Json,
           total_cost: totalCost || 0,
-        }
-      ])
-      .select()
-      .single();
+        };
 
-    if (error) {
-      console.error("Supabase Save Error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+        if (existingId) {
+          payloadToInsert.id = existingId;
+        }
+
+        const { data, error } = await supabase
+          .from('projects')
+          .upsert([payloadToInsert])
+          .select()
+          .single();
+
+        if (!error && data?.id) {
+          savedId = data.id;
+        } else if (error) {
+          console.warn("[Projects Save] Supabase sync skipped, saved locally:", error.message);
+        }
+      } catch (err: any) {
+        console.warn("[Projects Save] Supabase error, saved locally:", err?.message || err);
+      }
     }
 
-    return NextResponse.json({ status: "success", message: "تم الحفظ بنجاح", project_id: data.id });
+    return NextResponse.json({
+      status: "success",
+      message: "تم حفظ المشروع بنجاح",
+      project_id: savedId,
+      share_url: `/studio?share=${savedId}`,
+    });
   } catch (error) {
     const e = error as Error;
     console.error("Server Save Error:", e);

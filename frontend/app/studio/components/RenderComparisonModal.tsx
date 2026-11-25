@@ -8,6 +8,7 @@ interface RenderComparisonModalProps {
   onClose: () => void;
   beforeImageUrl: string | null;
   afterImageUrl: string | null;
+  depthMapUrl?: string | null;
   roomStyle?: string;
   sourceNote?: string;
   promptUsed?: string;
@@ -18,15 +19,21 @@ export function RenderComparisonModal({
   onClose,
   beforeImageUrl,
   afterImageUrl,
+  depthMapUrl,
   roomStyle = "مودرن فاخر",
   sourceNote,
   promptUsed,
 }: RenderComparisonModalProps) {
   const [sliderPosition, setSliderPosition] = useState(50);
-  const [activeTab, setActiveTab] = useState<"slider" | "side_by_side">("slider");
+  const [activeTab, setActiveTab] = useState<"slider" | "side_by_side" | "depth_pass">("slider");
   const [isCopied, setIsCopied] = useState(false);
+  const [isEnvCopied, setIsEnvCopied] = useState(false);
 
   if (!isOpen || !afterImageUrl) return null;
+
+  const isPreviewFallback = Boolean(
+    sourceNote && (sourceNote.includes("FAL_KEY") || sourceNote.includes("معاينة تجريبية"))
+  );
 
   const downloadImage = (url: string, filename: string) => {
     const a = document.createElement("a");
@@ -45,6 +52,12 @@ export function RenderComparisonModal({
     }
   };
 
+  const copyEnvLine = () => {
+    navigator.clipboard.writeText("FAL_KEY=your_fal_api_key_here");
+    setIsEnvCopied(true);
+    setTimeout(() => setIsEnvCopied(false), 2500);
+  };
+
   return (
     <div
       className="fixed inset-0 z-150 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-fade-in"
@@ -54,18 +67,38 @@ export function RenderComparisonModal({
         {/* Modal Top Header */}
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 bg-white/[0.02]">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rwaq-gold/15 text-rwaq-gold border border-rwaq-gold/30">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${
+              isPreviewFallback
+                ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                : "bg-rwaq-gold/15 text-rwaq-gold border-rwaq-gold/30"
+            }`}>
               <span className="material-symbols-outlined text-[22px]">auto_awesome</span>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">الرندرة الواقعية فائقة الجودة</h3>
-                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
-                  8K Neural Render
-                </span>
+                <h3 className="text-base font-bold text-white">
+                  {isPreviewFallback ? "معاينة إضاءة الاستوديو للمنظور" : "الرندرة الواقعية فائقة الجودة"}
+                </h3>
+                {isPreviewFallback ? (
+                  <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">
+                    معاينة تجريبية (Studio Lighting)
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                    8K Neural Render
+                  </span>
+                )}
+                {depthMapUrl && (
+                  <span className="rounded-full bg-cyan-500/15 border border-cyan-500/30 px-2.5 py-0.5 text-[10px] font-bold text-cyan-400 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[13px]">layers</span>
+                    Depth-Guided 1:1
+                  </span>
+                )}
               </div>
               <p className="text-xs text-white/50 mt-0.5">
-                مقارنة بين مسقط المنظور ثلاثي الأبعاد 3D والرندرة السينمائية الواقعية
+                {isPreviewFallback
+                  ? "معاينة مطابقة هندسياً لأبعاد وأثاث المشهد 1:1 مع تطبيق مرشح إضاءة سينمائي عالي التباين"
+                  : "مقارنة بين مسقط المنظور ثلاثي الأبعاد 3D وخريطة العمق الفراغي والرندرة السينمائية الواقعية"}
               </p>
             </div>
           </div>
@@ -74,6 +107,7 @@ export function RenderComparisonModal({
             {/* View Mode Toggle */}
             <div className="flex rounded-xl bg-white/5 p-1 border border-white/10 text-xs">
               <button
+                type="button"
                 onClick={() => setActiveTab("slider")}
                 className={`rounded-lg px-3 py-1 font-bold transition-all ${
                   activeTab === "slider"
@@ -84,6 +118,7 @@ export function RenderComparisonModal({
                 شريط المقارنة
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab("side_by_side")}
                 className={`rounded-lg px-3 py-1 font-bold transition-all ${
                   activeTab === "side_by_side"
@@ -93,9 +128,24 @@ export function RenderComparisonModal({
               >
                 جنباً إلى جنب
               </button>
+              {depthMapUrl && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("depth_pass")}
+                  className={`rounded-lg px-3 py-1 font-bold transition-all flex items-center gap-1 ${
+                    activeTab === "depth_pass"
+                      ? "bg-cyan-500 text-black shadow-sm"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">layers</span>
+                  خريطة العمق (Depth)
+                </button>
+              )}
             </div>
 
             <button
+              type="button"
               onClick={onClose}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
               title="إغلاق"
@@ -104,6 +154,29 @@ export function RenderComparisonModal({
             </button>
           </div>
         </div>
+
+        {/* ── Banner: Honest AI Fallback Notice & One-Click Copy ── */}
+        {isPreviewFallback && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 text-xs text-amber-200">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-amber-400">info</span>
+              <span>
+                <strong>معاينة تجريبية:</strong> تم تطبيق مرشح إضاءة استوديو متقدم على لقطة المنظور الفعلية مع الحفاظ على الأثاث والأبعاد 1:1. لتفعيل الرندرة العصبية 8K، أضف مفتاح Fal.ai في ملف <code className="bg-amber-500/20 px-1.5 py-0.5 rounded font-mono text-amber-300">.env</code>.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={copyEnvLine}
+              className="flex items-center gap-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1 text-[11px] font-bold text-amber-300 transition-all active:scale-95 shrink-0"
+              title="نسخ سطر الإعداد إلى الحافظة"
+            >
+              <span className="material-symbols-outlined text-[15px]">
+                {isEnvCopied ? "check" : "content_copy"}
+              </span>
+              <span>{isEnvCopied ? "تم النسخ!" : "نسخ: FAL_KEY=..."}</span>
+            </button>
+          </div>
+        )}
 
         {/* Comparison Viewer Body */}
         <div className="relative flex-1 overflow-hidden bg-black/60 p-4 sm:p-6 flex items-center justify-center min-h-[420px]">
@@ -124,17 +197,17 @@ export function RenderComparisonModal({
                 setSliderPosition(Math.max(0, Math.min(100, pos)));
               }}
             >
-              {/* After (Photorealistic Render) - Full Width Background */}
+              {/* After (Render or Enhanced Preview) - Full Width Background */}
               <div className="absolute inset-0">
                 <Image
                   src={afterImageUrl}
-                  alt="الرندرة الواقعية"
+                  alt={isPreviewFallback ? "معاينة تجريبية للإضاءة" : "الرندرة الواقعية"}
                   fill
                   className="object-cover"
                   unoptimized
                 />
                 <span className="absolute bottom-4 left-4 rounded-xl bg-black/75 px-3 py-1 text-xs font-bold text-rwaq-gold backdrop-blur-md border border-white/10">
-                  ✨ الرندرة الواقعية (After)
+                  {isPreviewFallback ? "✨ معاينة تجريبية (Lighting Pass)" : "✨ الرندرة الواقعية (After)"}
                 </span>
               </div>
 
@@ -170,6 +243,69 @@ export function RenderComparisonModal({
                 </div>
               </div>
             </div>
+          ) : activeTab === "depth_pass" && depthMapUrl ? (
+            /* 3-Column Depth Pass Structural Inspection */
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full max-w-5xl">
+              {/* Column 1: 3D Viewport RGB */}
+              {beforeImageUrl && (
+                <div className="relative aspect-4/3 overflow-hidden rounded-2xl border border-white/10 bg-black/40 flex flex-col">
+                  <div className="relative flex-1">
+                    <Image
+                      src={beforeImageUrl}
+                      alt="منظور 3D الأصلي"
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  </div>
+                  <div className="flex items-center justify-between bg-black/80 px-3 py-1.5 text-[11px] text-white/80 border-t border-white/10">
+                    <span className="font-bold">📐 1. منظور 3D (RGB)</span>
+                    <span className="text-[10px] text-white/40">الكاميرا الأصلية</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Column 2: Grayscale Depth Map Pass */}
+              <div className="relative aspect-4/3 overflow-hidden rounded-2xl border border-cyan-500/40 bg-black flex flex-col shadow-lg shadow-cyan-500/10">
+                <div className="relative flex-1">
+                  <Image
+                    src={depthMapUrl}
+                    alt="خريطة العمق الفراغية Depth Map"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
+                </div>
+                <div className="flex items-center justify-between bg-cyan-950/80 px-3 py-1.5 text-[11px] text-cyan-300 border-t border-cyan-500/30">
+                  <span className="font-bold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[13px]">layers</span>
+                    2. خريطة العمق (Depth Pass)
+                  </span>
+                  <span className="text-[10px] bg-cyan-500/20 px-1.5 py-0.5 rounded font-mono font-bold">1:1 ControlNet</span>
+                </div>
+              </div>
+
+              {/* Column 3: Photorealistic AI Render or Enhanced Pass */}
+              <div className="relative aspect-4/3 overflow-hidden rounded-2xl border border-rwaq-gold/40 bg-black/40 flex flex-col shadow-lg shadow-rwaq-gold/10">
+                <div className="relative flex-1">
+                  <Image
+                    src={afterImageUrl}
+                    alt="الرندرة الواقعية فائقة الجودة"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                </div>
+                <div className="flex items-center justify-between bg-rwaq-gold/15 px-3 py-1.5 text-[11px] text-rwaq-gold border-t border-rwaq-gold/30">
+                  <span className="font-bold">
+                    {isPreviewFallback ? "✨ 3. معاينة الإضاءة (Studio)" : "✨ 3. الرندرة الواقعية (8K)"}
+                  </span>
+                  <span className="text-[10px] font-bold bg-rwaq-gold/20 px-1.5 py-0.5 rounded">
+                    {isPreviewFallback ? "Lighting Pass" : "Neural Render"}
+                  </span>
+                </div>
+              </div>
+            </div>
           ) : (
             /* Side-by-Side View */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl">
@@ -196,7 +332,7 @@ export function RenderComparisonModal({
                   unoptimized
                 />
                 <span className="absolute bottom-3 right-3 rounded-lg bg-rwaq-gold px-2.5 py-1 text-[11px] font-bold text-black shadow-md">
-                  ✨ الرندرة الواقعية
+                  {isPreviewFallback ? "✨ معاينة تجريبية للإضاءة" : "✨ الرندرة الواقعية"}
                 </span>
               </div>
             </div>
@@ -224,8 +360,23 @@ export function RenderComparisonModal({
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+            {isPreviewFallback && (
+              <button
+                type="button"
+                onClick={copyEnvLine}
+                className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-colors"
+                title="نسخ سطر إعداد FAL_KEY في ملف .env"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {isEnvCopied ? "check" : "key"}
+                </span>
+                <span>{isEnvCopied ? "تم النسخ!" : "FAL_KEY نسخ"}</span>
+              </button>
+            )}
+
             {promptUsed && (
               <button
+                type="button"
                 onClick={copyPrompt}
                 className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/10 transition-colors"
                 title="نسخ البرومبت المعماري"
@@ -233,16 +384,17 @@ export function RenderComparisonModal({
                 <span className="material-symbols-outlined text-[16px]">
                   {isCopied ? "check" : "content_copy"}
                 </span>
-                {isCopied ? "تم النسخ" : "نسخ البرومبت"}
+                <span>{isCopied ? "تم النسخ" : "نسخ البرومبت"}</span>
               </button>
             )}
 
             <button
+              type="button"
               onClick={() => downloadImage(afterImageUrl, `rwaq-photorealistic-${Date.now()}.png`)}
               className="flex items-center gap-2 rounded-xl bg-rwaq-gold px-5 py-2.5 text-xs font-bold text-black hover:bg-rwaq-gold/90 transition-all shadow-lg shadow-rwaq-gold/20 active:scale-95"
             >
               <span className="material-symbols-outlined text-[18px]">download</span>
-              تنزيل الرندرة الواقعية (PNG)
+              <span>{isPreviewFallback ? "تنزيل المعاينة (PNG)" : "تنزيل الرندرة الواقعية (PNG)"}</span>
             </button>
           </div>
         </div>

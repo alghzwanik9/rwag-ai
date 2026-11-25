@@ -546,4 +546,48 @@ export const IKEA_TEMPLATES: IProductTemplate[] = [
     dimensions: { width: 250, height: 350, depth: 250 },
     thumbnailUrl: ""
   },
+  {
+    id: "wall_art",
+    name: "لوحة جدارية فاخرة بإطار معماري",
+    brand: "Rwaq Gallery",
+    price: 380,
+    currency: "SAR",
+    category: "decor",
+    modelUrl: "/assets/wall_art.glb",
+    dimensions: { width: 1200, height: 800, depth: 40 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "rug_woven",
+    name: "سجادة فاخرة منسوجة يدوياً",
+    brand: "Rwaq",
+    price: 1350,
+    currency: "SAR",
+    category: "rugs",
+    modelUrl: LOCAL_GLB.rug_woven,
+    dimensions: { width: 2400, height: 16, depth: 1700 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "indoor_plant",
+    name: "نبتة داخلية معمارية بوعاء خزفي",
+    brand: "IKEA",
+    price: 245,
+    currency: "SAR",
+    category: "decor",
+    modelUrl: LOCAL_GLB.indoor_plant,
+    dimensions: { width: 550, height: 1200, depth: 550 },
+    thumbnailUrl: ""
+  },
+  {
+    id: "lamp_floor",
+    name: "مصباح أرضي دائري معاصر",
+    brand: "IKEA",
+    price: 495,
+    currency: "SAR",
+    category: "lighting",
+    modelUrl: KENNEY_GLB.lamp_floor,
+    dimensions: { width: 450, height: 1550, depth: 450 },
+    thumbnailUrl: ""
+  },
 ];

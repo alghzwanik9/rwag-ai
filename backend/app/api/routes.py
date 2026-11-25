@@ -362,6 +362,7 @@ async def studio_render_from_3d(request: StudioRenderFrom3DRequest):
     """
     Neural Render Bridge:
     Captures 3D Studio viewport and synthesizes a high-fidelity photorealistic render.
+    Supports optional depth_map_base64 for 1:1 architectural ControlNet depth conditioning.
     """
     try:
         metadata = {
@@ -373,6 +374,7 @@ async def studio_render_from_3d(request: StudioRenderFrom3DRequest):
         }
         result = await render_photorealistic_from_3d(
             image_base64=request.image_base64,
+            depth_map_base64=request.depth_map_base64,
             metadata=metadata
         )
         return result
